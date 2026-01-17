@@ -1,0 +1,1072 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Control de Loterías</title>
+  <link rel="stylesheet" href="css/styles.css">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+</head>
+<body>
+  
+  <!-- LOGIN -->
+  <div id="login-view" class="login-container">
+    <!-- Panel izquierdo con logo y fondo geométrico -->
+    <div class="login-left-panel">
+      <div class="login-brand">
+        <img src="assets/logo.svg" alt="Logo" class="login-logo">
+        <h2 class="brand-name">SIMBA</h2>
+        <p class="brand-tagline">Sistema de Control de Loterías</p>
+        <span class="brand-version">v2.0</span>
+      </div>
+      <!-- Decoración geométrica -->
+      <div class="geometric-shapes">
+        <div class="shape shape-1"></div>
+        <div class="shape shape-2"></div>
+        <div class="shape shape-3"></div>
+        <div class="shape shape-4"></div>
+      </div>
+    </div>
+    
+    <!-- Panel derecho con formulario -->
+    <div class="login-right-panel">
+      <div class="login-card">
+        <div class="login-header">
+          <div class="login-user-icon">
+            <i class="fas fa-users"></i>
+          </div>
+        </div>
+        
+        <form id="login-form">
+          <div class="form-group">
+            <div class="input-with-icon">
+              <i class="fas fa-user"></i>
+              <input type="text" id="login-username" placeholder="Usuario" required>
+            </div>
+          </div>
+          
+          <div class="form-group">
+            <div class="input-with-icon">
+              <i class="fas fa-lock"></i>
+              <input type="password" id="login-password" placeholder="Contraseña" required>
+            </div>
+          </div>
+          
+          <div id="login-error" class="alert alert-error hidden"></div>
+          
+          <button type="submit" class="btn btn-login">
+            LOGIN
+          </button>
+        </form>
+      </div>
+    </div>
+  </div>
+
+  <!-- APP -->
+  <div id="app-view" class="app-container hidden">
+    
+    <!-- Sidebar -->
+    <aside class="sidebar" id="sidebar">
+      <div class="sidebar-header">
+        <button class="sidebar-toggle" id="sidebar-toggle" title="Abrir/Cerrar menú">
+          <img src="assets/logo.svg" alt="Logo" class="sidebar-logo">
+        </button>
+      </div>
+      
+      <nav class="nav-menu">
+        <a class="nav-item active" data-view="dashboard">
+          <i class="fas fa-home"></i> Dashboard
+        </a>
+        
+        <div class="nav-section">Carga de Datos</div>
+        <a class="nav-item" data-view="archivos">
+          <i class="fas fa-file-upload"></i> Cargar Archivos
+        </a>
+        <a class="nav-item" data-view="extractos">
+          <i class="fas fa-list-ol"></i> Extractos
+        </a>
+        <a class="nav-item" data-view="agencias">
+          <i class="fas fa-building"></i> Agencias
+        </a>
+        
+        <div class="nav-section">Control</div>
+        <a class="nav-item" data-view="control-previo">
+          <i class="fas fa-clipboard-check"></i> Control Previo
+        </a>
+        <a class="nav-item" data-view="control-posterior">
+          <i class="fas fa-calculator"></i> Control Posterior
+        </a>
+        
+        <div class="nav-section">Documentos</div>
+        <a class="nav-item" data-view="actas">
+          <i class="fas fa-file-alt"></i> Actas
+        </a>
+        <a class="nav-item" data-view="reportes">
+          <i class="fas fa-chart-bar"></i> Reportes
+        </a>
+        
+        <div class="nav-section admin-only">Administración</div>
+        <a class="nav-item admin-only" data-view="usuarios">
+          <i class="fas fa-users"></i> Usuarios
+        </a>
+        <a class="nav-item admin-only" data-view="auditoria">
+          <i class="fas fa-history"></i> Auditoría
+        </a>
+      </nav>
+      
+      <div class="sidebar-footer">
+        <div class="user-info">
+          <div class="user-name" id="user-name">Usuario</div>
+          <div class="user-role" id="user-role">Rol</div>
+        </div>
+        <button class="btn btn-sm btn-secondary" id="btn-logout">
+          <i class="fas fa-sign-out-alt"></i> Salir
+        </button>
+      </div>
+    </aside>
+
+    <!-- Main Content -->
+    <main class="main-content">
+      
+      <!-- Dashboard -->
+      <section id="view-dashboard" class="view">
+        <div class="page-header">
+          <h1>Dashboard</h1>
+          <p>Resumen del sistema</p>
+        </div>
+        
+        <div class="stats-grid">
+          <div class="stat-card">
+            <div class="stat-icon blue"><i class="fas fa-file-upload"></i></div>
+            <div class="stat-value" id="stat-archivos">0</div>
+            <div class="stat-label">Archivos Hoy</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-icon green"><i class="fas fa-list-ol"></i></div>
+            <div class="stat-value" id="stat-extractos">0</div>
+            <div class="stat-label">Extractos Cargados</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-icon orange"><i class="fas fa-clipboard-check"></i></div>
+            <div class="stat-value" id="stat-previo">0</div>
+            <div class="stat-label">Control Previo</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-icon purple"><i class="fas fa-calculator"></i></div>
+            <div class="stat-value" id="stat-posterior">0</div>
+            <div class="stat-label">Control Posterior</div>
+          </div>
+        </div>
+        
+        <div class="card">
+          <div class="card-header">
+            <h3>Actividad Reciente</h3>
+          </div>
+          <div class="card-body">
+            <p class="text-muted">Sistema listo para operar. Seleccione una opción del menú.</p>
+          </div>
+        </div>
+      </section>
+
+      <!-- Archivos -->
+      <section id="view-archivos" class="view hidden">
+        <div class="page-header">
+          <h1>Cargar Archivos</h1>
+          <p>Cargue archivos NTF, ZIP, XML o JSON</p>
+        </div>
+        
+        <div class="card">
+          <div class="form-row">
+            <div class="form-group">
+              <label>Juego</label>
+              <select id="archivo-juego" class="form-control">
+                <option value="">Seleccione juego</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label>Sorteo</label>
+              <select id="archivo-sorteo" class="form-control">
+                <option value="">Seleccione sorteo</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label>Fecha</label>
+              <input type="date" id="archivo-fecha" class="form-control">
+            </div>
+          </div>
+          
+          <div class="upload-area" id="upload-area">
+            <i class="fas fa-cloud-upload-alt"></i>
+            <p>Arrastre archivos aquí o haga clic para seleccionar</p>
+            <span>NTF, ZIP, XML, JSON, PDF, Imágenes</span>
+            <input type="file" id="archivo-input" multiple accept=".ntf,.zip,.xml,.json,.pdf,.jpg,.jpeg,.png" hidden>
+          </div>
+          
+          <div id="archivos-lista" class="files-list"></div>
+          
+          <div class="form-actions">
+            <button class="btn btn-primary" onclick="procesarArchivos()">
+              <i class="fas fa-upload"></i> Procesar Archivos
+            </button>
+          </div>
+        </div>
+      </section>
+
+      <!-- Extractos -->
+      <section id="view-extractos" class="view hidden">
+        <div class="page-header">
+          <h1>Extractos</h1>
+          <p>Carga y gestión de extractos oficiales</p>
+        </div>
+        
+        <div class="card">
+          <div class="tabs">
+            <button class="tab active" data-tab="cargar">Cargar Extracto</button>
+            <button class="tab" data-tab="ver">Ver Extractos</button>
+          </div>
+          
+          <div class="tab-content" id="tab-cargar">
+            <div class="form-row">
+              <div class="form-group">
+                <label>Juego</label>
+                <select id="extracto-juego" class="form-control">
+                  <option value="">Seleccione juego</option>
+                </select>
+              </div>
+              <div class="form-group">
+                <label>Sorteo</label>
+                <select id="extracto-sorteo" class="form-control">
+                  <option value="">Seleccione sorteo</option>
+                </select>
+              </div>
+              <div class="form-group">
+                <label>Fecha</label>
+                <input type="date" id="extracto-fecha" class="form-control">
+              </div>
+              <div class="form-group">
+                <label>Provincia</label>
+                <select id="extracto-provincia" class="form-control">
+                  <option value="">Seleccione provincia</option>
+                </select>
+              </div>
+            </div>
+            
+            <h4>Números (20 posiciones)</h4>
+            <div class="numeros-grid" id="extracto-numeros"></div>
+            
+            <h4>Letras</h4>
+            <div class="letras-grid" id="extracto-letras"></div>
+            
+            <div class="form-actions">
+              <button class="btn btn-secondary" onclick="limpiarExtracto()">Limpiar</button>
+              <button class="btn btn-primary" onclick="guardarExtracto()">
+                <i class="fas fa-save"></i> Guardar Extracto
+              </button>
+            </div>
+          </div>
+          
+          <div class="tab-content hidden" id="tab-ver">
+            <p class="text-muted">Seleccione fecha y juego para ver extractos cargados.</p>
+          </div>
+        </div>
+      </section>
+
+      <!-- Agencias -->
+      <section id="view-agencias" class="view hidden">
+        <div class="page-header">
+          <div>
+            <h1>Agencias</h1>
+            <p>Gestión de cuentas corrientes y agencias</p>
+          </div>
+        </div>
+        
+        <div class="card">
+          <div class="card-header">
+            <h3>Cargar Excel de Agencias</h3>
+          </div>
+          <div class="card-body">
+            <div class="form-group">
+              <label>Archivo Excel (.xlsx, .xls)</label>
+              <div class="file-upload-area" id="agencias-upload-area">
+                <input type="file" id="agencias-excel-input" accept=".xlsx,.xls" class="hidden" onchange="cargarExcelAgencias()">
+                <div class="file-upload-content">
+                  <i class="fas fa-file-excel fa-3x"></i>
+                  <p>Arrastrá el archivo Excel aquí o hacé click para seleccionar</p>
+                  <p class="text-muted">Formato: Columna A = Número completo, Columna C = Nombre, etc.</p>
+                </div>
+              </div>
+              
+              <div class="form-check mt-3" style="margin-top: 1rem;">
+                <label style="display: flex; align-items: center; gap: 0.5rem; cursor: pointer;">
+                  <input type="checkbox" id="agencias-reemplazar" checked> 
+                  <span class="text-danger"><i class="fas fa-trash-alt"></i> Borrar agencias actuales y reemplazar con este Excel</span>
+                </label>
+              </div>
+            </div>
+            
+            <div id="agencias-carga-resultado" class="hidden"></div>
+            
+            <div class="form-actions">
+              <button class="btn btn-primary" onclick="document.getElementById('agencias-excel-input').click()">
+                <i class="fas fa-upload"></i> Seleccionar Excel
+              </button>
+            </div>
+          </div>
+        </div>
+        
+        <div class="card" style="margin-top: 1.5rem;">
+          <div class="card-header" style="display: flex; justify-content: space-between; align-items: center;">
+            <h3>Listado de Agencias</h3>
+            <div style="display: flex; gap: 1rem; align-items: center;">
+              <input type="text" id="agencias-buscar" class="form-control" placeholder="Buscar por nombre, barrio, cuenta..." style="width: 300px;" onkeyup="filtrarAgencias()">
+              <button class="btn btn-secondary" onclick="cargarListaAgencias()">
+                <i class="fas fa-sync-alt"></i> Actualizar
+              </button>
+            </div>
+          </div>
+          <div class="card-body">
+            <div id="agencias-loading" class="text-center hidden">
+              <i class="fas fa-spinner fa-spin"></i> Cargando agencias...
+            </div>
+            
+            <div id="agencias-tabla-container">
+              <table class="table" id="agencias-tabla">
+                <thead>
+                  <tr>
+                    <th>Prov</th>
+                    <th>Cta Cte</th>
+                    <th>DV</th>
+                    <th>Titular</th>
+                    <th>Dirección</th>
+                    <th>Barrio / Localidad</th>
+                    <th>Email</th>
+                    <th>Estado</th>
+                  </tr>
+                </thead>
+                <tbody id="agencias-tabla-body">
+                  <tr>
+                    <td colspan="8" class="text-center text-muted">
+                      <i class="fas fa-info-circle"></i> Hacé click en "Actualizar" para cargar las agencias
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+            
+            <div id="agencias-paginacion" class="pagination-container hidden"></div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Control Previo -->
+      <section id="view-control-previo" class="view hidden">
+        <div class="page-header">
+          <div>
+            <h1>Control Previo - Quiniela</h1>
+            <p>Procesamiento y validación de archivos NTF</p>
+          </div>
+        </div>
+        
+        <!-- Carga de archivo -->
+        <div class="card">
+          <div class="card-header">
+            <h3>Cargar Archivo ZIP</h3>
+          </div>
+          
+          <div class="upload-area" id="cp-upload-area">
+            <i class="fas fa-file-archive"></i>
+            <p>Arrastre el archivo ZIP aquí o haga clic para seleccionar</p>
+            <span>Archivos: QNLxxxxxx.zip (contiene TXT, XML, hash, PDF)</span>
+            <input type="file" id="cp-archivo-input" accept=".zip" hidden>
+          </div>
+          
+          <div id="cp-archivo-seleccionado" class="hidden" style="margin: 1rem 0; padding: 1rem; background: var(--bg-input); border-radius: 8px;">
+            <div class="d-flex" style="justify-content: space-between; align-items: center;">
+              <div>
+                <i class="fas fa-file-archive" style="color: var(--primary); margin-right: 0.5rem;"></i>
+                <span id="cp-archivo-nombre"></span>
+              </div>
+              <button class="btn btn-primary" onclick="procesarControlPrevio()">
+                <i class="fas fa-cogs"></i> Procesar
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Resultados -->
+        <div id="cp-resultados" class="hidden">
+          
+          <!-- Resumen -->
+          <div class="stats-grid">
+            <div class="stat-card">
+              <div class="stat-icon blue"><i class="fas fa-file-alt"></i></div>
+              <div class="stat-value" id="cp-registros">0</div>
+              <div class="stat-label">Registros Válidos</div>
+            </div>
+            <div class="stat-card">
+              <div class="stat-icon green"><i class="fas fa-ticket-alt"></i></div>
+              <div class="stat-value" id="cp-apuestas">0</div>
+              <div class="stat-label">Apuestas Totales</div>
+            </div>
+            <div class="stat-card" style="grid-column: span 1;">
+              <div class="stat-icon orange"><i class="fas fa-dollar-sign"></i></div>
+              <div class="stat-value" id="cp-recaudacion" style="font-size: 2rem;">$0</div>
+              <div class="stat-label">Recaudación Válida</div>
+            </div>
+            <div class="stat-card" style="padding: 1rem;">
+              <div class="stat-icon" style="background: rgba(239, 68, 68, 0.2); color: var(--danger);"><i class="fas fa-ban"></i></div>
+              <div class="stat-value" id="cp-anulados" style="font-size: 1.5rem;">0</div>
+              <div class="stat-label">Registros Anulados</div>
+            </div>
+            <div class="stat-card">
+              <div class="stat-icon" style="background: rgba(239, 68, 68, 0.1); color: var(--danger);"><i class="fas fa-times-circle"></i></div>
+              <div class="stat-value" id="cp-recaudacion-anulada">$0</div>
+              <div class="stat-label">Recaudación Anulada</div>
+            </div>
+          </div>
+
+          <!-- Desglose por tipo de sorteo y provincia -->
+          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem;">
+            <div class="card">
+              <div class="card-header">
+                <h3>Recaudación por Provincia</h3>
+                <span class="badge badge-info" id="cp-sorteo-badge">Sorteo: -</span>
+              </div>
+              <table class="table" id="cp-tabla-recaudacion-prov">
+                <thead>
+                  <tr>
+                    <th>Provincia</th>
+                    <th>Recaudación</th>
+                    <th>% del Total</th>
+                  </tr>
+                </thead>
+                <tbody></tbody>
+              </table>
+            </div>
+            
+            <div class="card">
+              <div class="card-header">
+                <h3>Por Provincia (Loterías)</h3>
+              </div>
+              <table class="table" id="cp-tabla-provincias">
+                <thead>
+                  <tr>
+                    <th>Provincia</th>
+                    <th>Apuestas</th>
+                    <th>% del Total</th>
+                  </tr>
+                </thead>
+                <tbody></tbody>
+              </table>
+            </div>
+          </div>
+
+          <!-- Comparación con XML -->
+          <div class="card">
+            <div class="card-header">
+              <h3>Comparación con Datos Oficiales (UTE)</h3>
+              <span id="cp-verificacion-badge"></span>
+            </div>
+            <div class="table-container">
+              <table class="table">
+                <thead>
+                  <tr>
+                    <th>Concepto</th>
+                    <th>Calculado (TXT)</th>
+                    <th>Oficial (XML)</th>
+                    <th>Diferencia</th>
+                  </tr>
+                </thead>
+                <tbody id="cp-tabla-comparacion"></tbody>
+              </table>
+            </div>
+          </div>
+
+          <!-- Verificación de Seguridad -->
+          <div class="card">
+            <div class="card-header">
+              <h3>Verificación de Seguridad</h3>
+            </div>
+            <div id="cp-seguridad-content"></div>
+          </div>
+
+          <!-- Resumen de Agencias Amigas -->
+          <div class="card hidden" id="cp-agencias-amigas-resumen">
+            <div class="card-body">
+              <!-- Se llena dinámicamente -->
+            </div>
+          </div>
+
+          <!-- Errores de Agencias Amigas -->
+          <div class="card hidden" id="cp-errores-agencias-amigas">
+            <div class="card-header">
+              <h3>Errores de Agencias Amigas</h3>
+            </div>
+            <div class="card-body">
+              <!-- Se llena dinámicamente -->
+            </div>
+          </div>
+
+          <!-- Online -->
+          <div class="card">
+            <div class="card-header">
+              <h3>Quiniela Online (Agencia 88880)</h3>
+            </div>
+            <div class="stats-grid" style="margin-bottom: 0;">
+              <div class="stat-card">
+                <div class="stat-value" id="cp-online-registros">0</div>
+                <div class="stat-label">Registros</div>
+              </div>
+              <div class="stat-card">
+                <div class="stat-value" id="cp-online-apuestas">0</div>
+                <div class="stat-label">Apuestas</div>
+              </div>
+              <div class="stat-card">
+                <div class="stat-value" id="cp-online-recaudacion">$0</div>
+                <div class="stat-label">Recaudación</div>
+              </div>
+              <div class="stat-card">
+                <div class="stat-value" id="cp-online-anulados">0</div>
+                <div class="stat-label">Anulados</div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Acciones -->
+          <div class="card">
+            <div class="form-actions" style="border: none; padding: 0; margin: 0;">
+              <button class="btn btn-secondary" onclick="limpiarControlPrevio()">
+                <i class="fas fa-trash"></i> Limpiar
+              </button>
+              <button class="btn btn-success" onclick="guardarControlPrevio()">
+                <i class="fas fa-save"></i> Guardar en BD
+              </button>
+              <button class="btn btn-info" onclick="imprimirReporteCP()">
+                <i class="fas fa-print"></i> Imprimir Reporte
+              </button>
+              <button class="btn btn-primary" onclick="generarActaControlPrevio()">
+                <i class="fas fa-file-signature"></i> Generar Acta Notarial
+              </button>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Control Posterior -->
+      <section id="view-control-posterior" class="view hidden">
+        <div class="page-header">
+          <h1>Control Posterior - Quiniela</h1>
+          <p>Análisis de ganadores post-sorteo</p>
+        </div>
+        
+        <!-- Paso 1: Cargar datos -->
+        <div class="card">
+          <div class="card-header">
+            <h3>1. Datos del Sorteo</h3>
+          </div>
+          
+          <div class="form-row">
+            <div class="form-group">
+              <label>Usar datos de Control Previo</label>
+              <button class="btn btn-secondary" onclick="cargarDatosControlPrevio()" id="btn-cargar-cp">
+                <i class="fas fa-download"></i> Cargar desde Control Previo
+              </button>
+            </div>
+            <div class="form-group">
+              <label>O subir archivo ZIP</label>
+              <input type="file" id="cpst-archivo-zip" accept=".zip" class="form-control" onchange="cargarZipPosterior(this)">
+            </div>
+          </div>
+          
+          <div id="cpst-datos-cargados" class="hidden" style="margin-top: 1rem; padding: 1rem; background: var(--bg-input); border-radius: 8px;">
+            <div style="display: flex; gap: 2rem; flex-wrap: wrap;">
+              <span><strong>Sorteo:</strong> <span id="cpst-sorteo">-</span></span>
+              <span><strong>Modalidad:</strong> <span id="cpst-modalidad" class="badge badge-primary">-</span></span>
+              <span><strong>Registros:</strong> <span id="cpst-registros">0</span></span>
+              <span><strong>Recaudación:</strong> <span id="cpst-recaudacion">$0</span></span>
+            </div>
+            <small class="text-muted" style="display: block; margin-top: 0.5rem;">
+              💡 Al cargar XMLs, solo se procesarán los de la modalidad detectada
+            </small>
+          </div>
+        </div>
+
+        <!-- Paso 2: Cargar Extracto -->
+        <div class="card">
+          <div class="card-header">
+            <h3>2. Extracto (Números Ganadores)</h3>
+          </div>
+          
+          <div class="form-row">
+            <div class="form-group">
+              <label for="cpst-extracto-provincia">Provincia/Extracto</label>
+              <select id="cpst-extracto-provincia" class="form-control">
+                <option value="0">CABA</option>
+                <option value="1">Buenos Aires</option>
+                <option value="2">Córdoba</option>
+                <option value="3">Santa Fe</option>
+                <option value="4">Montevideo</option>
+                <option value="5">Mendoza</option>
+                <option value="6">Entre Ríos</option>
+              </select>
+            </div>
+          </div>
+
+          <!-- Tabs de carga -->
+          <div class="tabs-container" style="margin-top: 1rem;">
+            <div class="tabs" style="display: flex; gap: 0; border-bottom: 2px solid var(--border-color);">
+              <button class="tab active" data-tab="ext-xml" onclick="cambiarTabExtracto('xml')">
+                <i class="fas fa-file-code"></i> XML
+              </button>
+              <button class="tab" data-tab="ext-imagen" onclick="cambiarTabExtracto('imagen')">
+                <i class="fas fa-image"></i> Imagen/OCR
+              </button>
+              <button class="tab" data-tab="ext-pdf" onclick="cambiarTabExtracto('pdf')">
+                <i class="fas fa-file-pdf"></i> PDF
+              </button>
+              <button class="tab" data-tab="ext-manual" onclick="cambiarTabExtracto('manual')">
+                <i class="fas fa-keyboard"></i> Manual
+              </button>
+            </div>
+            
+            <!-- Tab XML (por defecto) -->
+            <div class="tab-content" id="tab-ext-xml">
+              <div style="margin-top: 1rem;">
+                <label>Cargar archivo(s) XML</label>
+                <input type="file" id="cpst-extracto-xml" accept=".xml" class="form-control" multiple onchange="cargarExtractoXML(this)">
+                <small class="text-muted">
+                  Seleccioná uno o varios XMLs. Nomenclatura: <code>QNL + Prov(51/53/55/59/64/72/00) + Modal(R/P/M/V/N) + Fecha</code><br>
+                  Ej: <code>QNL51M20260116.xml</code> = CABA Matutina | Podés cargar todos los de una modalidad juntos
+                </small>
+              </div>
+              <div style="margin-top: 1rem;">
+                <label>O pegar XML directamente</label>
+                <textarea id="cpst-xml-texto" class="form-control" rows="4" placeholder="<extracto>...</extracto>"></textarea>
+                <button class="btn btn-secondary" style="margin-top: 0.5rem;" onclick="cargarExtractoDesdeTextoXML()">
+                  <i class="fas fa-check"></i> Cargar XML
+                </button>
+              </div>
+            </div>
+            
+            <!-- Tab Imagen/OCR -->
+            <div class="tab-content hidden" id="tab-ext-imagen">
+              <div style="margin-top: 1rem;">
+                <label>Cargar imagen del extracto</label>
+                <input type="file" id="cpst-extracto-imagen" accept="image/*" class="form-control" onchange="cargarExtractoImagen(this)">
+                <small class="text-muted">Formatos: JPG, PNG, GIF, WEBP</small>
+              </div>
+              <div id="cpst-imagen-preview" style="margin-top: 1rem; display: none;">
+                <img id="cpst-imagen-img" style="max-width: 100%; max-height: 300px; border-radius: 8px;">
+              </div>
+              <div id="cpst-ocr-status" class="hidden" style="margin-top: 1rem; padding: 1rem; background: var(--bg-input); border-radius: 8px;">
+                <div style="display: flex; align-items: center; gap: 1rem;">
+                  <i class="fas fa-spinner fa-spin"></i>
+                  <span id="cpst-ocr-mensaje">Procesando imagen con OCR...</span>
+                </div>
+                <div class="progress-bar" style="margin-top: 0.5rem; height: 4px; background: var(--border-color); border-radius: 2px;">
+                  <div id="cpst-ocr-progress" style="height: 100%; width: 0%; background: var(--primary); border-radius: 2px; transition: width 0.3s;"></div>
+                </div>
+              </div>
+            </div>
+            
+            <!-- Tab PDF -->
+            <div class="tab-content hidden" id="tab-ext-pdf">
+              <div style="margin-top: 1rem;">
+                <label>Cargar PDF del extracto</label>
+                <input type="file" id="cpst-extracto-pdf" accept=".pdf" class="form-control" onchange="cargarExtractoPDF(this)">
+                <small class="text-muted">Se extraerán los números automáticamente</small>
+              </div>
+              <div id="cpst-pdf-status" class="hidden" style="margin-top: 1rem; padding: 1rem; background: var(--bg-input); border-radius: 8px;">
+                <i class="fas fa-spinner fa-spin"></i>
+                <span>Procesando PDF...</span>
+              </div>
+            </div>
+            
+            <!-- Tab Manual -->
+            <div class="tab-content hidden" id="tab-ext-manual">
+              <div style="margin-top: 1rem;">
+                <label>Números (20 posiciones) - Ingrese los 4 dígitos</label>
+                <div class="numeros-grid" id="cpst-numeros-grid"></div>
+              </div>
+              
+              <div style="margin-top: 1rem;">
+                <label>Letras (4)</label>
+                <div class="letras-grid" id="cpst-letras-grid"></div>
+              </div>
+            </div>
+          </div>
+          
+          <div style="margin-top: 1.5rem; display: flex; gap: 1rem;">
+            <button class="btn btn-primary" onclick="agregarExtracto()">
+              <i class="fas fa-plus"></i> Agregar Extracto
+            </button>
+            <button class="btn btn-secondary" onclick="limpiarExtractoPosterior()">
+              <i class="fas fa-eraser"></i> Limpiar
+            </button>
+          </div>
+          
+          <div id="cpst-extractos-lista" style="margin-top: 1rem;"></div>
+        </div>
+
+        <!-- Paso 3: Ejecutar Escrutinio -->
+        <div class="card">
+          <div class="card-header">
+            <h3>3. Ejecutar Escrutinio</h3>
+          </div>
+          
+          <button class="btn btn-primary btn-lg" onclick="ejecutarEscrutinio()" style="width: 100%;">
+            <i class="fas fa-calculator"></i> Ejecutar Escrutinio
+          </button>
+        </div>
+
+        <!-- Resultados -->
+        <div id="cpst-resultados" class="hidden">
+          <!-- Comparación con Control Previo -->
+          <div class="card">
+            <div class="card-header">
+              <h3>Comparación con Control Previo</h3>
+            </div>
+            <table class="table" id="cpst-tabla-comparacion">
+              <thead>
+                <tr>
+                  <th>Concepto</th>
+                  <th>Control Previo</th>
+                  <th>Control Posterior</th>
+                  <th>Estado</th>
+                </tr>
+              </thead>
+              <tbody></tbody>
+            </table>
+          </div>
+
+          <!-- Resumen -->
+          <div class="stats-grid">
+            <div class="stat-card">
+              <div class="stat-icon green"><i class="fas fa-trophy"></i></div>
+              <div class="stat-value" id="cpst-total-ganadores">0</div>
+              <div class="stat-label">Total Ganadores</div>
+            </div>
+            <div class="stat-card">
+              <div class="stat-icon orange"><i class="fas fa-coins"></i></div>
+              <div class="stat-value" id="cpst-total-premios">$0</div>
+              <div class="stat-label">Total Premios</div>
+            </div>
+            <div class="stat-card">
+              <div class="stat-icon blue"><i class="fas fa-percentage"></i></div>
+              <div class="stat-value" id="cpst-tasa-devolucion">0%</div>
+              <div class="stat-label">Tasa Devolución</div>
+            </div>
+          </div>
+
+          <!-- Detalle por Extracto -->
+          <div class="card">
+            <div class="card-header">
+              <h3>Detalle por Extracto</h3>
+            </div>
+            <div class="table-container">
+              <table class="table" id="cpst-tabla-extractos">
+                <thead>
+                  <tr>
+                    <th rowspan="2">Extracto</th>
+                    <th rowspan="2">Total Pagado</th>
+                    <th rowspan="2">Ganadores</th>
+                    <th colspan="2" class="text-center" style="border-bottom: 1px solid var(--border);">1 Cifra</th>
+                    <th colspan="2" class="text-center" style="border-bottom: 1px solid var(--border);">2 Cifras</th>
+                    <th colspan="2" class="text-center" style="border-bottom: 1px solid var(--border);">3 Cifras</th>
+                    <th colspan="2" class="text-center" style="border-bottom: 1px solid var(--border);">4 Cifras</th>
+                    <th colspan="2" class="text-center" style="border-bottom: 1px solid var(--border);">Redoblona</th>
+                    <th colspan="2" class="text-center" style="border-bottom: 1px solid var(--border);">Letras</th>
+                  </tr>
+                  <tr>
+                    <th>Gan</th><th>Prem.</th>
+                    <th>Gan</th><th>Prem.</th>
+                    <th>Gan</th><th>Prem.</th>
+                    <th>Gan</th><th>Prem.</th>
+                    <th>Gan</th><th>Prem.</th>
+                    <th>Gan</th><th>Prem.</th>
+                  </tr>
+                </thead>
+                <tbody></tbody>
+              </table>
+              <small class="text-muted">Gan = cantidad de registros ganadores | Prem. = monto total premiado</small>
+            </div>
+          </div>
+
+          <!-- Detalle por Tipo -->
+          <div class="card">
+            <div class="card-header">
+              <h3>Premios por Tipo de Apuesta</h3>
+            </div>
+            <div id="cpst-detalle-tipos"></div>
+          </div>
+
+          <!-- Acciones -->
+          <div class="card">
+            <div class="form-actions" style="border: none; padding: 0; margin: 0;">
+              <button class="btn btn-success" onclick="descargarExcel()">
+                <i class="fas fa-file-excel"></i> Descargar Excel
+              </button>
+              <button class="btn btn-primary" onclick="generarPDFControlPosterior()">
+                <i class="fas fa-file-pdf"></i> Generar Reporte PDF
+              </button>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Actas -->
+      <section id="view-actas" class="view hidden">
+        <div class="page-header">
+          <h1>Actas Notariales</h1>
+          <p>Generación de actas de sorteo</p>
+        </div>
+        
+        <div class="card">
+          <div class="card-header">
+            <h3>Datos del Sorteo</h3>
+          </div>
+          
+          <div class="form-row">
+            <div class="form-group">
+              <label for="acta-juego">Juego</label>
+              <select id="acta-juego" class="form-control">
+                <option value="QUINIELA">Quiniela</option>
+                <option value="POCEADA">Poceada</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label for="acta-modalidad">Modalidad</label>
+              <select id="acta-modalidad" class="form-control">
+                <option value="LA PREVIA">La Previa</option>
+                <option value="LA PRIMERA">La Primera</option>
+                <option value="MATUTINA">Matutina</option>
+                <option value="VESPERTINA">Vespertina</option>
+                <option value="NOCTURNA">Nocturna</option>
+                <option value="MONTEVIDEO">Montevideo</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label for="acta-numero-sorteo">N° Sorteo</label>
+              <input type="text" id="acta-numero-sorteo" class="form-control" placeholder="051676">
+            </div>
+            <div class="form-group">
+              <label for="acta-fecha">Fecha</label>
+              <input type="date" id="acta-fecha" class="form-control">
+            </div>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-header">
+            <h3>Personal del Sorteo</h3>
+          </div>
+          
+          <div class="form-row">
+            <div class="form-group">
+              <label for="acta-jefe">Jefe de Sorteo</label>
+              <input type="text" id="acta-jefe" list="dl-jefes" class="form-control" placeholder="Seleccione...">
+              <datalist id="dl-jefes">
+                <option value="BRUNO LUCAS MATIAS">
+                <option value="CAPRISTO FACUNDO JAVIER">
+                <option value="BAISCH SANDRA MABEL">
+                <option value="CASAMAYU DANIEL OMAR">
+                <option value="CELIZ DIEGO MARIANO">
+                <option value="CLAVIJO DANIELA JORGELINA">
+                <option value="COLLOCA MANUEL JAVIER">
+                <option value="CORDOBA LUCIANO MARTIN LUIS">
+                <option value="CUCKOVICH ERNESTO">
+                <option value="FRASCAROLI RODOLFO OSCAR">
+                <option value="GONZALEZ MARIA CECILIA">
+                <option value="GONZALEZ OMAR ALEJANDRO">
+                <option value="GONZALO MASSA">
+                <option value="LEVANTINI HERNAN ALEJANDRO">
+                <option value="MALLET SERGIO RICARDO">
+                <option value="MARTUCCI SEBASTIAN ARIEL">
+                <option value="NOVOA MARCELO ESTEBAN">
+                <option value="SANTOIANNI ALFREDO">
+                <option value="SUAREZ RODRIGO JOEL">
+              </datalist>
+            </div>
+            <div class="form-group">
+              <label for="acta-estado-civil">Estado Civil</label>
+              <select id="acta-estado-civil" class="form-control">
+                <option value="CASADO">Casado</option>
+                <option value="SOLTERO">Soltero</option>
+                <option value="VIUDO">Viudo</option>
+                <option value="DIVORCIADO">Divorciado</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label for="acta-escribano">Escribano</label>
+              <input type="text" id="acta-escribano" list="dl-escribanos" class="form-control" placeholder="Seleccione...">
+              <datalist id="dl-escribanos">
+                <option value="MITJANS FERNANDO">
+                <option value="AGUILAR FLORENCIA">
+                <option value="DAMS DOLORES">
+                <option value="ALLENDE CARLOS">
+                <option value="KORNIUSZA CECILIA CELESTE">
+                <option value="MAIDANA FERNANDO">
+                <option value="TABORDA NADIA">
+                <option value="REYES MARCELA">
+                <option value="SCHLENEW ELENA">
+                <option value="SOARES ALFREDO">
+                <option value="VAZQUEZ LUCIA">
+                <option value="GILDA SALTARELLI">
+                <option value="BUEZAS MARIA EUGENIA">
+              </datalist>
+            </div>
+          </div>
+          
+          <div class="form-row">
+            <div class="form-group">
+              <label for="acta-operador-sorteo">Operador de Sorteo</label>
+              <input type="text" id="acta-operador-sorteo" list="dl-jefes" class="form-control" placeholder="Seleccione...">
+            </div>
+            <div class="form-group">
+              <label for="acta-operador-tecnica">Operador Área Técnica</label>
+              <input type="text" id="acta-operador-tecnica" list="dl-jefes" class="form-control" placeholder="Seleccione...">
+            </div>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-header">
+            <h3>Tipo de Acta</h3>
+          </div>
+          
+          <div class="radio-group" style="display: flex; gap: 2rem; margin-bottom: 1rem;">
+            <label class="radio-label">
+              <input type="radio" name="tipo-acta" value="RNG" checked> Acta con RNG
+            </label>
+            <label class="radio-label">
+              <input type="radio" name="tipo-acta" value="BOLILLEROS"> Acta Bolilleros Manuales
+            </label>
+            <label class="radio-label">
+              <input type="radio" name="tipo-acta" value="SUSTITUTO"> Acta Sustituto
+            </label>
+          </div>
+          
+          <div class="form-row">
+            <div class="form-group">
+              <label for="acta-hora-inicio">Hora de Inicio</label>
+              <input type="time" id="acta-hora-inicio" class="form-control">
+            </div>
+            <div class="form-group">
+              <label for="acta-hora-programada">Hora Programada</label>
+              <input type="time" id="acta-hora-programada" class="form-control">
+            </div>
+            <div class="form-group">
+              <label for="acta-numero-rng">Número RNG</label>
+              <input type="text" id="acta-numero-rng" class="form-control" placeholder="123456">
+            </div>
+            <div class="form-group">
+              <label for="acta-ultimo-rng">Último N° RNG</label>
+              <input type="text" id="acta-ultimo-rng" class="form-control" placeholder="123455">
+            </div>
+          </div>
+          
+          <div class="form-row" id="acta-sustituto-row" style="display: none;">
+            <div class="form-group">
+              <label for="acta-sorteo-sustituto">N° Sorteo Sustituto</label>
+              <input type="text" id="acta-sorteo-sustituto" class="form-control" placeholder="051675">
+            </div>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-header">
+            <h3>Jurisdicciones y Observaciones</h3>
+          </div>
+          
+          <div class="form-group">
+            <label>Jurisdicciones con Apuestas</label>
+            <div style="display: flex; flex-wrap: wrap; gap: 1rem; margin-top: 0.5rem;">
+              <label><input type="checkbox" id="jur-caba" checked> Ciudad Autónoma</label>
+              <label><input type="checkbox" id="jur-bsas" checked> Buenos Aires</label>
+              <label><input type="checkbox" id="jur-cordoba" checked> Córdoba</label>
+              <label><input type="checkbox" id="jur-santafe" checked> Santa Fe</label>
+              <label><input type="checkbox" id="jur-montevideo"> Montevideo</label>
+              <label><input type="checkbox" id="jur-mendoza" checked> Mendoza</label>
+              <label><input type="checkbox" id="jur-entrerios" checked> Entre Ríos</label>
+            </div>
+          </div>
+          
+          <div class="form-group">
+            <label for="acta-observaciones">Observaciones</label>
+            <textarea id="acta-observaciones" class="form-control" rows="3" placeholder="Observaciones adicionales..."></textarea>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="form-actions" style="border: none; padding: 0; margin: 0;">
+            <button class="btn btn-secondary" onclick="limpiarActa()">
+              <i class="fas fa-trash"></i> Limpiar
+            </button>
+            <button class="btn btn-primary" onclick="generarActaNotarial()">
+              <i class="fas fa-file-pdf"></i> Generar Acta PDF
+            </button>
+          </div>
+        </div>
+      </section>
+
+      <!-- Reportes -->
+      <section id="view-reportes" class="view hidden">
+        <div class="page-header">
+          <h1>Reportes</h1>
+          <p>Estadísticas y exportación</p>
+        </div>
+        <div class="card">
+          <p class="text-muted">Módulo de reportes - En desarrollo</p>
+        </div>
+      </section>
+
+      <!-- Usuarios -->
+      <section id="view-usuarios" class="view hidden">
+        <div class="page-header">
+          <div>
+            <h1>Usuarios</h1>
+            <p>Gestión de usuarios del sistema</p>
+          </div>
+          <button class="btn btn-primary" onclick="mostrarModalUsuario()">
+            <i class="fas fa-plus"></i> Nuevo Usuario
+          </button>
+        </div>
+        
+        <div class="card">
+          <table class="table" id="table-usuarios">
+            <thead>
+              <tr>
+                <th>Usuario</th>
+                <th>Nombre</th>
+                <th>Rol</th>
+                <th>Estado</th>
+                <th>Último Login</th>
+                <th>Acciones</th>
+              </tr>
+            </thead>
+            <tbody></tbody>
+          </table>
+        </div>
+      </section>
+
+      <!-- Auditoría -->
+      <section id="view-auditoria" class="view hidden">
+        <div class="page-header">
+          <h1>Auditoría</h1>
+          <p>Historial de acciones del sistema</p>
+        </div>
+        <div class="card">
+          <p class="text-muted">Módulo de auditoría - En desarrollo</p>
+        </div>
+      </section>
+
+    </main>
+  </div>
+
+  <!-- Toast Container -->
+  <div id="toast-container"></div>
+
+  <script src="js/api.js"></script>
+  <script src="js/app.js"></script>
+</body>
+</html>

@@ -1,0 +1,13 @@
+# Proxy reverso para simbaV2 - Redirige al servidor Node.js en puerto 3000
+<IfModule mod_rewrite.c>
+    RewriteEngine On
+    
+    # Servir archivos estáticos directamente si existen
+    RewriteCond %{REQUEST_FILENAME} -f
+    RewriteRule ^ - [L]
+    
+    # Proxy para rutas de API y SPA (la bandera [P] hace proxy)
+    RewriteCond %{REQUEST_FILENAME} !-f
+    RewriteCond %{REQUEST_FILENAME} !-d
+    RewriteRule ^(.*)$ http://localhost:3000/$1 [P,L]
+</IfModule>
