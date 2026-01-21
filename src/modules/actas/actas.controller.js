@@ -1025,45 +1025,65 @@ const generarActaControlPosterior = async (req, res) => {
       // ========== GANADORES POR EXTRACTO ==========
       doc.rect(50, y, 495, 20).fill('#1e3a5f');
       doc.fillColor('#ffffff').fontSize(9).font('Helvetica-Bold')
-         .text('GANADORES POR EXTRACTO (PROVINCIA)', 60, y + 5);
+         .text('DETALLE POR EXTRACTO (PROVINCIA)', 60, y + 5);
       y += 25;
       
       // Header tabla extractos
       doc.rect(50, y, 495, 16).fill('#e2e8f0');
       doc.fillColor('#475569').fontSize(7).font('Helvetica-Bold');
       doc.text('EXTRACTO', 55, y + 5);
-      doc.text('GANADORES', 150, y + 5, { width: 55, align: 'right' });
-      doc.text('TOTAL PREMIOS', 210, y + 5, { width: 80, align: 'right' });
-      doc.text('1 CIFRA', 295, y + 5, { width: 40, align: 'right' });
-      doc.text('2 CIFRAS', 340, y + 5, { width: 40, align: 'right' });
-      doc.text('3 CIFRAS', 385, y + 5, { width: 40, align: 'right' });
-      doc.text('4 CIFRAS', 430, y + 5, { width: 40, align: 'right' });
-      doc.text('REDOB.', 475, y + 5, { width: 35, align: 'right' });
-      doc.text('LETRAS', 510, y + 5, { width: 30, align: 'right' });
+      doc.text('TOTAL', 140, y + 5, { width: 50, align: 'right' });
+      doc.text('1 CIFRA', 200, y + 5, { width: 50, align: 'right' });
+      doc.text('2 CIFRAS', 255, y + 5, { width: 50, align: 'right' });
+      doc.text('3 CIFRAS', 310, y + 5, { width: 50, align: 'right' });
+      doc.text('4 CIFRAS', 365, y + 5, { width: 50, align: 'right' });
+      doc.text('REDOB.', 420, y + 5, { width: 50, align: 'right' });
+      doc.text('LETRAS', 475, y + 5, { width: 50, align: 'right' });
       y += 18;
       
-      // Filas por extracto
+      // Filas por extracto (2 filas por extracto: ganadores + importes)
       let totGan = 0, totPrem = 0;
       let tot1c = 0, tot2c = 0, tot3c = 0, tot4c = 0, totRed = 0, totLet = 0;
+      let prem1c = 0, prem2c = 0, prem3c = 0, prem4c = 0, premRed = 0, premLet = 0;
+      
+      const fmtPremioCorto = (p) => {
+        if (!p || p === 0) return '-';
+        if (p >= 1000000) return '$' + (p/1000000).toFixed(1) + 'M';
+        if (p >= 1000) return '$' + (p/1000).toFixed(0) + 'k';
+        return '$' + p.toFixed(0);
+      };
       
       doc.font('Helvetica').fontSize(7);
       extractosCargados.forEach((rep, i) => {
-        if (i % 2 === 0) doc.rect(50, y - 2, 495, 14).fill('#f8fafc');
+        // Fondo alternado para cada extracto (cubre las 2 filas)
+        if (i % 2 === 0) doc.rect(50, y - 2, 495, 24).fill('#f8fafc');
         
+        // Primera fila: Nombre del extracto + cantidad de ganadores
         doc.fillColor('#1e293b').font('Helvetica-Bold');
         doc.text(rep.nombre.substring(0, 14), 55, y);
         doc.font('Helvetica').fillColor('#333');
-        doc.text(formatearNumero(rep.totalGanadores), 150, y, { width: 55, align: 'right' });
-        doc.fillColor('#16a34a').font('Helvetica-Bold');
-        doc.text(formatearMoneda(rep.totalPagado), 210, y, { width: 80, align: 'right' });
-        doc.font('Helvetica').fillColor('#333');
-        doc.text(rep.porCifras[1].ganadores || '-', 295, y, { width: 40, align: 'right' });
-        doc.text(rep.porCifras[2].ganadores || '-', 340, y, { width: 40, align: 'right' });
-        doc.text(rep.porCifras[3].ganadores || '-', 385, y, { width: 40, align: 'right' });
-        doc.text(rep.porCifras[4].ganadores || '-', 430, y, { width: 40, align: 'right' });
-        doc.text(rep.redoblona.ganadores || '-', 475, y, { width: 35, align: 'right' });
-        doc.text(rep.letras.ganadores || '-', 510, y, { width: 30, align: 'right' });
+        doc.text(rep.totalGanadores || '-', 140, y, { width: 50, align: 'right' });
+        doc.text(rep.porCifras[1].ganadores || '-', 200, y, { width: 50, align: 'right' });
+        doc.text(rep.porCifras[2].ganadores || '-', 255, y, { width: 50, align: 'right' });
+        doc.text(rep.porCifras[3].ganadores || '-', 310, y, { width: 50, align: 'right' });
+        doc.text(rep.porCifras[4].ganadores || '-', 365, y, { width: 50, align: 'right' });
+        doc.text(rep.redoblona.ganadores || '-', 420, y, { width: 50, align: 'right' });
+        doc.text(rep.letras.ganadores || '-', 475, y, { width: 50, align: 'right' });
         
+        y += 10;
+        
+        // Segunda fila: Importes pagados (en verde, más pequeño)
+        doc.fillColor('#16a34a').fontSize(6).font('Helvetica-Bold');
+        doc.text('', 55, y); // espacio vacío para alinear
+        doc.text(fmtPremioCorto(rep.totalPagado), 140, y, { width: 50, align: 'right' });
+        doc.text(fmtPremioCorto(rep.porCifras[1].pagado), 200, y, { width: 50, align: 'right' });
+        doc.text(fmtPremioCorto(rep.porCifras[2].pagado), 255, y, { width: 50, align: 'right' });
+        doc.text(fmtPremioCorto(rep.porCifras[3].pagado), 310, y, { width: 50, align: 'right' });
+        doc.text(fmtPremioCorto(rep.porCifras[4].pagado), 365, y, { width: 50, align: 'right' });
+        doc.text(fmtPremioCorto(rep.redoblona.pagado), 420, y, { width: 50, align: 'right' });
+        doc.text(fmtPremioCorto(rep.letras.pagado), 475, y, { width: 50, align: 'right' });
+        
+        // Acumular totales
         totGan += rep.totalGanadores;
         totPrem += rep.totalPagado;
         tot1c += rep.porCifras[1].ganadores;
@@ -1072,24 +1092,43 @@ const generarActaControlPosterior = async (req, res) => {
         tot4c += rep.porCifras[4].ganadores;
         totRed += rep.redoblona.ganadores;
         totLet += rep.letras.ganadores;
+        prem1c += rep.porCifras[1].pagado;
+        prem2c += rep.porCifras[2].pagado;
+        prem3c += rep.porCifras[3].pagado;
+        prem4c += rep.porCifras[4].pagado;
+        premRed += rep.redoblona.pagado;
+        premLet += rep.letras.pagado;
         
         y += 14;
+        doc.fontSize(7);
       });
       
-      // Fila de totales
-      doc.rect(50, y, 495, 16).fill('#1e3a5f');
+      // Fila de totales - GANADORES
+      doc.rect(50, y, 495, 12).fill('#1e3a5f');
       doc.fillColor('#ffffff').fontSize(7).font('Helvetica-Bold');
-      doc.text('TOTAL', 55, y + 4);
-      doc.text(formatearNumero(totGan), 150, y + 4, { width: 55, align: 'right' });
-      doc.text(formatearMoneda(totPrem), 210, y + 4, { width: 80, align: 'right' });
-      doc.text(tot1c, 295, y + 4, { width: 40, align: 'right' });
-      doc.text(tot2c, 340, y + 4, { width: 40, align: 'right' });
-      doc.text(tot3c, 385, y + 4, { width: 40, align: 'right' });
-      doc.text(tot4c, 430, y + 4, { width: 40, align: 'right' });
-      doc.text(totRed, 475, y + 4, { width: 35, align: 'right' });
-      doc.text(totLet, 510, y + 4, { width: 30, align: 'right' });
+      doc.text('TOTAL GAN.', 55, y + 3);
+      doc.text(totGan, 140, y + 3, { width: 50, align: 'right' });
+      doc.text(tot1c, 200, y + 3, { width: 50, align: 'right' });
+      doc.text(tot2c, 255, y + 3, { width: 50, align: 'right' });
+      doc.text(tot3c, 310, y + 3, { width: 50, align: 'right' });
+      doc.text(tot4c, 365, y + 3, { width: 50, align: 'right' });
+      doc.text(totRed, 420, y + 3, { width: 50, align: 'right' });
+      doc.text(totLet, 475, y + 3, { width: 50, align: 'right' });
+      y += 12;
       
-      y += 25;
+      // Fila de totales - IMPORTES
+      doc.rect(50, y, 495, 12).fill('#334155');
+      doc.fillColor('#ffffff').fontSize(6).font('Helvetica-Bold');
+      doc.text('TOTAL $', 55, y + 3);
+      doc.text(fmtPremioCorto(totPrem), 140, y + 3, { width: 50, align: 'right' });
+      doc.text(fmtPremioCorto(prem1c), 200, y + 3, { width: 50, align: 'right' });
+      doc.text(fmtPremioCorto(prem2c), 255, y + 3, { width: 50, align: 'right' });
+      doc.text(fmtPremioCorto(prem3c), 310, y + 3, { width: 50, align: 'right' });
+      doc.text(fmtPremioCorto(prem4c), 365, y + 3, { width: 50, align: 'right' });
+      doc.text(fmtPremioCorto(premRed), 420, y + 3, { width: 50, align: 'right' });
+      doc.text(fmtPremioCorto(premLet), 475, y + 3, { width: 50, align: 'right' });
+      
+      y += 20;
 
       // ========== DETALLE POR TIPO DE APUESTA (si hay espacio) ==========
       if (y < 580) {
@@ -1097,17 +1136,6 @@ const generarActaControlPosterior = async (req, res) => {
         doc.fillColor('#ffffff').fontSize(9).font('Helvetica-Bold')
            .text('RESUMEN POR TIPO DE APUESTA', 60, y + 5);
         y += 25;
-        
-        // Calcular totales por tipo
-        let prem1c = 0, prem2c = 0, prem3c = 0, prem4c = 0, premRed = 0, premLet = 0;
-        extractosCargados.forEach(rep => {
-          prem1c += rep.porCifras[1].pagado;
-          prem2c += rep.porCifras[2].pagado;
-          prem3c += rep.porCifras[3].pagado;
-          prem4c += rep.porCifras[4].pagado;
-          premRed += rep.redoblona.pagado;
-          premLet += rep.letras.pagado;
-        });
         
         const tipos = [
           { nombre: '1 Cifra', indice: 'x7', tickets: tot1c, premio: prem1c },
