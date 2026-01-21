@@ -4,6 +4,9 @@ const { query } = require('../../config/database');
 const { successResponse, errorResponse } = require('../../shared/helpers');
 const { registrarAuditoria } = require('../../shared/middleware');
 
+const JWT_SECRET = process.env.JWT_SECRET || 'control_loterias_secret_key_2024_muy_segura_HARDCODED_BACKUP';
+const JWT_EXPIRES_IN = process.env.JWT_EXPIRES_IN || '24h';
+
 // Login
 const login = async (req, res) => {
   try {
@@ -69,16 +72,15 @@ const login = async (req, res) => {
     );
 
     // Generar token
-    const jwtSecret = process.env.JWT_SECRET;
-    if (!jwtSecret) {
-      console.error('❌ JWT_SECRET no está definido en las variables de entorno');
+    if (!JWT_SECRET) {
+      console.error('❌ JWT_SECRET no está definido');
       return errorResponse(res, 'Error de configuración del servidor', 500);
     }
     
     const token = jwt.sign(
       { userId: user.id, username: user.username, rol: user.rol },
-      jwtSecret,
-      { expiresIn: process.env.JWT_EXPIRES_IN || '24h' }
+      JWT_SECRET,
+      { expiresIn: JWT_EXPIRES_IN }
     );
 
     // Auditoría
