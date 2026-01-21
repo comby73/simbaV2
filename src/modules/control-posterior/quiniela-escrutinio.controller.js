@@ -419,20 +419,33 @@ function ejecutarEscrutinio(registros, extractos) {
       ticketsConPremioNumeros.add(reg.numeroTicket);
     }
     
-    // Guardar info de letras para segunda pasada (solo CABA = índice 0)
+    // Guardar info de letras para segunda pasada
+    // Las letras se buscan en TODOS los extractos donde jugó el ticket
+    // pero las letras ganadoras son siempre las de CABA
     if (reg.letras && reg.letras.length === 4) {
       const letrasApuesta = reg.letras.toUpperCase();
       const ticketKey = `${reg.numeroTicket}_${reg.ordinal || '01'}`;
       if (!ticketsConLetras.has(ticketKey)) {
-        ticketsConLetras.set(ticketKey, { letras: letrasApuesta, reg });
+        // Guardar las loterías jugadas para saber en qué extractos buscar
+        ticketsConLetras.set(ticketKey, { 
+          letras: letrasApuesta, 
+          reg,
+          loteriasJugadas: reg.loteriasJugadas || ''
+        });
       }
     }
   }
   
-  // SEGUNDA PASADA: Letras (solo CABA = índice 0, solo si NO ganó por números)
+  // SEGUNDA PASADA: Letras
+  // - Las letras ganadoras son SIEMPRE las de CABA (extracto índice 0)
+  // - Pero se buscan ganadores en TODOS los extractos donde el ticket jugó
+  // - Un ticket solo puede ganar UNA vez por letras (no importa cuántos extractos)
   const cabaReporte = reportePorExtracto[0];
   if (cabaReporte.cargado && cabaReporte.letras && cabaReporte.letras.length >= 4) {
     const letrasSorteo = cabaReporte.letras.map(l => l.toUpperCase()).join('');
+    
+    // Set para evitar que un ticket gane múltiples veces por letras
+    const ticketsYaGanaronLetras = new Set();
     
     for (const [ticketKey, data] of ticketsConLetras) {
       const ticketNum = ticketKey.split('_')[0];
@@ -440,20 +453,39 @@ function ejecutarEscrutinio(registros, extractos) {
       // Solo dar letras si NO ganó por números
       if (ticketsConPremioNumeros.has(ticketNum)) continue;
       
+      // Solo una vez por ticket
+      if (ticketsYaGanaronLetras.has(ticketNum)) continue;
+      
+      // Verificar si las letras coinciden con las de CABA
       if (data.letras === letrasSorteo) {
+        // Buscar en qué extracto asignar el premio (el primero donde jugó)
+        const loteriasJugadas = data.loteriasJugadas || '';
+        let extractoAsignado = 0; // Por defecto CABA
+        
+        // Buscar el primer extracto cargado donde jugó
+        for (let i = 0; i < Math.min(7, loteriasJugadas.length); i++) {
+          const cantEnLoteria = parseInt(loteriasJugadas[i]) || 0;
+          if (cantEnLoteria > 0 && reportePorExtracto[i].cargado) {
+            extractoAsignado = i;
+            break;
+          }
+        }
+        
+        ticketsYaGanaronLetras.add(ticketNum);
         totalGanadores++;
         totalPremios += PREMIO_LETRAS;
-        reportePorExtracto[0].totalPagado += PREMIO_LETRAS;
-        reportePorExtracto[0].totalGanadores++;
-        reportePorExtracto[0].letras.pagado += PREMIO_LETRAS;
-        reportePorExtracto[0].letras.ganadores++;
-        reportePorExtracto[0].letras.aciertos++;
+        
+        reportePorExtracto[extractoAsignado].totalPagado += PREMIO_LETRAS;
+        reportePorExtracto[extractoAsignado].totalGanadores++;
+        reportePorExtracto[extractoAsignado].letras.pagado += PREMIO_LETRAS;
+        reportePorExtracto[extractoAsignado].letras.ganadores++;
+        reportePorExtracto[extractoAsignado].letras.aciertos++;
         
         ganadoresDetalle.push({
           ticket: ticketNum,
           tipo: 'LETRAS',
           cifras: 4,
-          extracto: reportePorExtracto[0].nombre,
+          extracto: reportePorExtracto[extractoAsignado].nombre,
           posicion: '-',
           numeroApostado: data.letras,
           numeroSorteado: letrasSorteo,

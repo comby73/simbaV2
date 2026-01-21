@@ -2429,6 +2429,8 @@ function cargarExtractoXML(input) {
   if (!input.files.length) return;
   
   const files = Array.from(input.files);
+  console.log(`📂 Intentando cargar ${files.length} archivos XML`);
+  console.log(`🎯 Modalidad del sorteo actual: "${cpstModalidadSorteo}" (${MODALIDADES_NOMBRE[cpstModalidadSorteo] || 'no definida'})`);
   
   // SIEMPRE usar procesarMultiplesXML para filtrar por modalidad
   procesarMultiplesXML(files);
@@ -2451,12 +2453,15 @@ async function procesarMultiplesXML(files) {
       }
       modalidades[info.modalidad].push({ file, info });
     } else {
-      console.warn(`Archivo no reconocido: ${file.name}`);
+      console.warn(`⚠️ Archivo no reconocido (formato esperado QNLxxY...): ${file.name}`);
     }
   }
   
+  console.log(`📊 Archivos reconocidos: ${archivosInfo.length}/${files.length}`);
+  console.log(`📊 Modalidades encontradas:`, Object.keys(modalidades).map(m => `${m}=${modalidades[m].length}`).join(', '));
+  
   if (archivosInfo.length === 0) {
-    showToast('No se reconocieron archivos XML válidos', 'warning');
+    showToast('No se reconocieron archivos XML válidos. Formato esperado: QNL51M20260116.xml', 'warning');
     return;
   }
   
