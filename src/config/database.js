@@ -1,5 +1,6 @@
 const mysql = require('mysql2/promise');
 const path = require('path');
+const os = require('os');
 require('dotenv').config({ path: path.join(__dirname, '../../.env') });
 
 let pool;
@@ -8,17 +9,46 @@ function isBlank(value) {
   return value === undefined || value === null || String(value).trim() === '';
 }
 
+// Detectar si estamos en producción (Hostinger) o local (XAMPP/desarrollo)
+function isProduction() {
+  // Si existe variable de entorno NODE_ENV=production, es producción
+  if (process.env.NODE_ENV === 'production') return true;
+  
+  // Si el hostname no es tu PC local, es producción
+  const hostname = os.hostname().toLowerCase();
+  const localHostnames = ['desktop', 'laptop', 'comby', 'pc', 'localhost'];
+  const isLocal = localHostnames.some(h => hostname.includes(h));
+  
+  // Si no parece local y no es Windows, probablemente es servidor
+  if (!isLocal && process.platform === 'linux') return true;
+  
+  return false;
+}
+
 function getDbConfig() {
-  // HARDCODE TOTAL PARA HOSTINGER (TEMPORAL)
-  // Forzamos uso de estas credenciales siempre
-  return {
-    isProduction: true,
-    host: '127.0.0.1', 
-    port: 3306,
-    user: 'u870508525_simba',
-    password: 'Machu1733*',
-    database: 'u870508525_control_loteri'
-  };
+  const isProd = isProduction();
+  
+  console.log(`🔧 Entorno detectado: ${isProd ? 'PRODUCCIÓN (Hostinger)' : 'LOCAL (XAMPP)'}`);
+  
+  if (isProd) {
+    // PRODUCCIÓN: Credenciales de Hostinger
+    return {
+      host: process.env.DB_HOST || '127.0.0.1',
+      port: parseInt(process.env.DB_PORT) || 3306,
+      user: process.env.DB_USER || 'u870508525_simba',
+      password: process.env.DB_PASSWORD || 'Machu1733*',
+      database: process.env.DB_NAME || 'u870508525_control_loteri'
+    };
+  } else {
+    // LOCAL: Credenciales de XAMPP
+    return {
+      host: process.env.DB_HOST || 'localhost',
+      port: parseInt(process.env.DB_PORT) || 3306,
+      user: process.env.DB_USER || 'root',
+      password: process.env.DB_PASSWORD || '',
+      database: process.env.DB_NAME || 'control_loterias'
+    };
+  }
 }
 
 function assertDbConfig(config) {
