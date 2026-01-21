@@ -3150,6 +3150,13 @@ async function ejecutarEscrutinio() {
       
     } else {
       // Ejecutar escrutinio de Quiniela (código existente)
+      console.log('[ESCRUTINIO] Extractos a enviar:', cpstExtractos.map(e => ({
+        index: e.index,
+        nombre: e.nombre,
+        numerosCount: e.numeros?.length,
+        letras: e.letras
+      })));
+      
       const response = await fetch(`${API_BASE}/control-posterior/quiniela/escrutinio`, {
         method: 'POST',
         headers: {

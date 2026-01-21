@@ -122,7 +122,7 @@ function ejecutarEscrutinio(registros, extractos) {
       index: idx,
       nombre: extractoCargado?.nombre || nombre,
       numeros: extractoCargado?.numeros || [],
-      letras: extractoCargado?.letras || [],
+      letrasSorteo: extractoCargado?.letras || [],  // Letras del sorteo (del XML)
       cargado: !!extractoCargado,
       totalPagado: 0,
       totalGanadores: 0,
@@ -133,7 +133,7 @@ function ejecutarEscrutinio(registros, extractos) {
         4: { pagado: 0, ganadores: 0, aciertos: 0 }
       },
       redoblona: { pagado: 0, ganadores: 0, aciertos: 0 },
-      letras: { pagado: 0, ganadores: 0, aciertos: 0 }
+      letras: { pagado: 0, ganadores: 0, aciertos: 0 }  // Contadores de premios por letras
     };
   });
 
@@ -445,11 +445,11 @@ function ejecutarEscrutinio(registros, extractos) {
   
   // Normalizar letras del sorteo: pueden venir como array ['M','M','Q','Q'] o string
   let letrasSorteo = '';
-  if (cabaReporte.cargado && cabaReporte.letras) {
-    if (Array.isArray(cabaReporte.letras)) {
-      letrasSorteo = cabaReporte.letras.map(l => l.toUpperCase()).join('');
-    } else if (typeof cabaReporte.letras === 'string') {
-      letrasSorteo = cabaReporte.letras.replace(/\s+/g, '').toUpperCase();
+  if (cabaReporte.cargado && cabaReporte.letrasSorteo) {
+    if (Array.isArray(cabaReporte.letrasSorteo)) {
+      letrasSorteo = cabaReporte.letrasSorteo.map(l => l.toUpperCase()).join('');
+    } else if (typeof cabaReporte.letrasSorteo === 'string') {
+      letrasSorteo = cabaReporte.letrasSorteo.replace(/\s+/g, '').toUpperCase();
     }
   }
   
