@@ -9,54 +9,21 @@ function isBlank(value) {
 }
 
 function getDbConfig() {
-  const isProduction = process.env.NODE_ENV === 'production';
-
-  // HARDCODE TEMPORAL PARA HOSTINGER
-  // Usamos estos valores si estamos en producción y faltan las variables
-  if (isProduction) {
-    return {
-      isProduction: true,
-      host: '127.0.0.1', // Probamos 127.0.0.1 en vez de localhost
-      port: 3306,
-      user: 'u870508525_simba',
-      password: 'CasioIvI0',
-      database: 'u870508525_control_loteri'
-    };
-  }
-
-  const host = process.env.DB_HOST || 'localhost';
-  const portRaw = process.env.DB_PORT || 3306;
-  const port = isBlank(portRaw) ? undefined : Number(portRaw);
-  const user = process.env.DB_USER || 'root';
-  const password = process.env.DB_PASSWORD || '';
-  const database = process.env.DB_NAME || 'control_loterias';
-
+  // HARDCODE TOTAL PARA HOSTINGER (TEMPORAL)
+  // Forzamos uso de estas credenciales siempre
   return {
-    isProduction: false,
-    host,
-    port,
-    user,
-    password,
-    database,
+    isProduction: true,
+    host: '127.0.0.1', 
+    port: 3306,
+    user: 'u870508525_simba',
+    password: 'CasioIvI0',
+    database: 'u870508525_control_loteri'
   };
 }
 
 function assertDbConfig(config) {
-  if (!config.isProduction) return;
-
-  const missing = [];
-  if (isBlank(config.host)) missing.push('DB_HOST');
-  if (isBlank(config.port) || Number.isNaN(config.port)) missing.push('DB_PORT');
-  if (isBlank(config.user)) missing.push('DB_USER');
-  if (isBlank(config.password)) missing.push('DB_PASSWORD');
-  if (isBlank(config.database)) missing.push('DB_NAME');
-
-  if (missing.length > 0) {
-    throw new Error(
-      `Error de configuración de BD: faltan variables de entorno (${missing.join(', ')}). ` +
-      'Revisá las Environment Variables de la app Node.js en Hostinger y reiniciá la app.'
-    );
-  }
+  // Desactivamos validación temporalmente
+  return;
 }
 
 function getPool() {
