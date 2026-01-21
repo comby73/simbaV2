@@ -2590,10 +2590,23 @@ function extraerDatosXML(xmlString) {
         }
       }
       
-      const letrasNode = suerteNode.querySelector('Letras');
+      // Buscar letras en varios formatos posibles
+      let letrasNode = suerteNode.querySelector('Letras');
+      if (!letrasNode) letrasNode = suerteNode.querySelector('letras');
+      if (!letrasNode) letrasNode = suerteNode.querySelector('LETRAS');
+      
       if (letrasNode) {
         const letrasTexto = letrasNode.textContent.trim();
-        letras = letrasTexto.split(/\s+/).filter(l => l.length === 1);
+        console.log(`[XML] Letras encontradas en XML: "${letrasTexto}"`);
+        // Puede venir como "M M Q Q" o "MMQQ"
+        if (letrasTexto.includes(' ')) {
+          letras = letrasTexto.split(/\s+/).filter(l => l.length === 1);
+        } else {
+          letras = letrasTexto.split('').filter(l => /[A-Za-z]/.test(l));
+        }
+        console.log(`[XML] Letras parseadas: ${JSON.stringify(letras)}`);
+      } else {
+        console.log(`[XML] No se encontró tag de Letras en Suerte`);
       }
     }
     
