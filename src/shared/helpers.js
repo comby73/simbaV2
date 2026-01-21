@@ -44,12 +44,29 @@ const formatearNumero = (numero, digitos = 2) => {
 const PROVINCIAS = {
   '51': { codigo: 'CABA', nombre: 'Ciudad Autónoma' },
   '53': { codigo: 'PBA', nombre: 'Buenos Aires' },
+  '54': { codigo: 'CAT', nombre: 'Catamarca' },
   '55': { codigo: 'CBA', nombre: 'Córdoba' },
-  '72': { codigo: 'SFE', nombre: 'Santa Fe' },
-  '64': { codigo: 'MZA', nombre: 'Mendoza' },
+  '56': { codigo: 'COR', nombre: 'Corrientes' },
+  '57': { codigo: 'CHA', nombre: 'Chaco' },
+  '58': { codigo: 'CHU', nombre: 'Chubut' },
   '59': { codigo: 'ENR', nombre: 'Entre Ríos' },
-  '0': { codigo: 'URU', nombre: 'Uruguay' },
-  '63': { codigo: 'SGO', nombre: 'Santiago' }
+  '60': { codigo: 'FOR', nombre: 'Formosa' },
+  '61': { codigo: 'JUJ', nombre: 'Jujuy' },
+  '62': { codigo: 'PAM', nombre: 'La Pampa' },
+  '63': { codigo: 'RIO', nombre: 'La Rioja' },
+  '64': { codigo: 'MZA', nombre: 'Mendoza' },
+  '65': { codigo: 'MIS', nombre: 'Misiones' },
+  '66': { codigo: 'NEU', nombre: 'Neuquén' },
+  '67': { codigo: 'RNE', nombre: 'Río Negro' },
+  '68': { codigo: 'SAL', nombre: 'Salta' },
+  '69': { codigo: 'SJU', nombre: 'San Juan' },
+  '70': { codigo: 'SLU', nombre: 'San Luis' },
+  '71': { codigo: 'SCR', nombre: 'Santa Cruz' },
+  '72': { codigo: 'SFE', nombre: 'Santa Fe' },
+  '73': { codigo: 'SDE', nombre: 'Santiago del Estero' },
+  '74': { codigo: 'TUC', nombre: 'Tucumán' },
+  '75': { codigo: 'TDF', nombre: 'Tierra del Fuego' },
+  '0': { codigo: 'URU', nombre: 'Uruguay' }
 };
 
 // Multiplicadores de quiniela por posición

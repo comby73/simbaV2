@@ -1,7 +1,11 @@
 // API Client
-// Detectar si estamos en Apache (puerto 80) o Node.js directo (puerto 3000)
-const isApache = window.location.port === '' || window.location.port === '80';
-const API_BASE = isApache ? '/simbaV2/public/api' : '/api';
+// Detectar si estamos en Apache (puerto 80), Node.js (3000) o abriendo el archivo directamente
+const isFile = window.location.protocol === 'file:' || window.location.protocol === 'null:';
+const isApache = (window.location.port === '' || window.location.port === '80') && !isFile;
+
+// Si es file://, apuntamos al puerto de Node.js por defecto 
+// Usar la IP local o localhost para evitar problemas de CORS con 'null' origin si es posible
+const API_BASE = isFile ? 'http://localhost:3000/api' : (isApache ? '/simbaV2/public/api' : '/api');
 
 const getToken = () => localStorage.getItem('cl_token');
 const setToken = (token) => localStorage.setItem('cl_token', token);
@@ -118,15 +122,67 @@ const controlPrevioAPI = {
     }
     return data;
   },
+
+  procesarPoceada: async (file) => {
+    const formData = new FormData();
+    formData.append('archivo', file);
+    
+    const token = getToken();
+    const response = await fetch(`${API_BASE}/control-previo/poceada/procesar-zip`, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${token}`
+      },
+      body: formData
+    });
+    
+    const data = await response.json();
+    if (!response.ok) {
+      throw new Error(data.message || 'Error procesando Poceada');
+    }
+    return data;
+  },
   
   guardarQuiniela: (datos) => apiRequest('/control-previo/quiniela/guardar', {
     method: 'POST',
     body: JSON.stringify(datos)
   }),
+
+  guardarPoceada: (datos) => apiRequest('/control-previo/poceada/guardar-resultado', {
+    method: 'POST',
+    body: JSON.stringify({ data: datos })
+  }),
+
+  buscarPozoPoceada: (sorteo) => apiRequest(`/control-previo/poceada/buscar-pozo/${sorteo}`),
   
   getHistorial: (params = {}) => {
     const query = new URLSearchParams(params).toString();
     return apiRequest(`/control-previo/historial${query ? `?${query}` : ''}`);
+  }
+};
+
+// Control Posterior API
+const controlPosteriorAPI = {
+  escrutinioQuiniela: (datos) => apiRequest('/control-posterior/quiniela/escrutinio', {
+    method: 'POST',
+    body: JSON.stringify(datos)
+  }),
+
+  escrutinioPoceada: (datos) => apiRequest('/control-posterior/poceada/escrutinio', {
+    method: 'POST',
+    body: JSON.stringify(datos)
+  }),
+
+  procesarXmlExtracto: async (file) => {
+    const formData = new FormData();
+    formData.append('archivo', file);
+    const token = getToken();
+    const response = await fetch(`${API_BASE}/control-posterior/quiniela/procesar-xml`, {
+      method: 'POST',
+      headers: { 'Authorization': `Bearer ${token}` },
+      body: formData
+    });
+    return await response.json();
   }
 };
 

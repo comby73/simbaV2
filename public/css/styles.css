@@ -504,7 +504,8 @@ body {
 /* Panel izquierdo - Fondo geométrico azul */
 .login-left-panel {
   flex: 1;
-  background: linear-gradient(135deg, #1e88e5 0%, #1565c0 50%, #0d47a1 100%);
+  background: url('../assets/loginFondo.png') no-repeat center center;
+  background-size: cover;
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -791,7 +792,24 @@ body {
 .badge-success { background: rgba(16, 185, 129, 0.2); color: var(--success); }
 .badge-warning { background: rgba(245, 158, 11, 0.2); color: var(--warning); }
 .badge-danger { background: rgba(239, 68, 68, 0.2); color: var(--danger); }
-.badge-info { background: rgba(37, 99, 235, 0.2); color: var(--primary); }
+.badge-info { background: rgba(37, 99, 235, 0.2); color: #60a5fa; } /* Azul más claro para mejor visibilidad */
+
+/* Security Grid */
+.security-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
+  gap: 0.5rem;
+  padding-bottom: 0.5rem; /* Ensure bottom margin for shadow/overflow */
+}
+
+.security-grid .file-item {
+  font-size: 0.8rem;
+  padding: 0.5rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  border: 1px solid var(--border-color); /* Add border for visibility */
+}
 
 /* Utilities */
 .hidden { display: none !important; }
@@ -962,10 +980,59 @@ body {
   .hidden-desktop { display: none !important; }
 }
 
-/* Tabs para extractos */
-.tabs-container .tabs {
-  display: flex;
-  flex-wrap: wrap;
+/* Table container responsive */
+.table-container {
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+/* Tabla de comparación de premios */
+#cp-tabla-premios td:last-child span {
+  white-space: nowrap;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+}
+
+/* Mobile: ajustar tabla de premios */
+@media (max-width: 768px) {
+  #cp-tabla-premios td:nth-child(2) { /* Porcentaje */
+    display: none;
+  }
+  #cp-tabla-premios th:nth-child(2) {
+    display: none;
+  }
+  
+  #cp-tabla-premios td:last-child span {
+    font-size: 0.75rem;
+  }
+  
+  /* Solo mostrar icono en estado */
+  .table .text-success,
+  .table .text-warning,
+  .table .text-danger {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.15rem;
+  }
+}
+
+/* Extra pequeño: solo iconos */
+@media (max-width: 480px) {
+  #cp-tabla-premios td:nth-child(5) { /* Diferencia */
+    display: none;
+  }
+  #cp-tabla-premios th:nth-child(5) {
+    display: none;
+  }
+  
+  #cp-tabla-premios td,
+  #cp-tabla-premios th {
+    padding: 0.4rem 0.3rem;
+    font-size: 0.7rem;
+  }
+}
+
   gap: 0;
 }
 
@@ -1012,4 +1079,30 @@ body {
   background: var(--primary);
   border-radius: 2px;
   transition: width 0.3s;
+}
+
+/* Radio card selector (para selección de juego) */
+.radio-card {
+  transition: all 0.2s ease;
+}
+
+.radio-card:hover {
+  border-color: var(--primary) !important;
+  background: rgba(37, 99, 235, 0.05) !important;
+}
+
+.radio-card input[type="radio"]:checked + div strong {
+  color: var(--primary);
+}
+
+/* Estilos para tabla de Poceada */
+.nivel-8 td { background: rgba(255, 215, 0, 0.1); }
+.nivel-7 td { background: rgba(37, 99, 235, 0.1); }
+.nivel-6 td { background: rgba(100, 116, 139, 0.1); }
+
+/* Input de números para Poceada */
+.poceada-numero, .poceada-letra {
+  text-align: center;
+  font-weight: bold;
+  font-size: 1.1rem;
 }

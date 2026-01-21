@@ -3,6 +3,7 @@ const router = express.Router();
 const multer = require('multer');
 const path = require('path');
 const quinielaController = require('./quiniela.controller');
+const poceadaController = require('./poceada.controller');
 const { authenticate, requirePermission } = require('../../shared/middleware');
 
 // Configurar multer para subida de archivos
@@ -42,6 +43,40 @@ router.post('/quiniela/procesar',
 router.post('/quiniela/guardar',
   requirePermission('control_previo.ejecutar'),
   quinielaController.guardarControlPrevio
+);
+
+// Poceada
+router.post('/poceada/procesar', 
+  requirePermission('control_previo.ejecutar'),
+  upload.single('archivo'),
+  poceadaController.procesarZip
+);
+
+// Ruta alternativa (legacy)
+router.post('/poceada/procesar-zip', 
+  upload.single('archivo'),
+  poceadaController.procesarZip
+);
+
+router.get('/poceada/buscar-pozo/:sorteo',
+  requirePermission('control_previo.ver'),
+  poceadaController.buscarPozo
+);
+
+router.post('/poceada/guardar-resultado',
+  requirePermission('control_previo.ejecutar'),
+  poceadaController.guardarResultado
+);
+
+// Configuración de juegos
+router.get('/config/distribucion',
+  requirePermission('control_previo.ver'),
+  poceadaController.obtenerConfiguracion
+);
+
+router.post('/config/recargar',
+  requirePermission('control_previo.ejecutar'),
+  poceadaController.recargarConfiguracion
 );
 
 // Historial

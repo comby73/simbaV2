@@ -1,0 +1,185 @@
+{
+  "version": "2026-01",
+  "vigencia": {
+    "desde": "2026-01-01",
+    "hasta": "2026-01-31"
+  },
+  "fuente": "IF-2025-55768962-GCABA-LOTBA",
+  "juegos": {
+    "poceada": {
+      "nombre": "QUINIELA POCEADA DE LA CIUDAD",
+      "porcentajePozoTotal": 45,
+      "distribucionPremios": {
+        "primerPremio": {
+          "porcentaje": 62,
+          "aciertos": 8,
+          "descripcion": "8 aciertos"
+        },
+        "segundoPremio": {
+          "porcentaje": 23.5,
+          "aciertos": 7,
+          "descripcion": "7 aciertos"
+        },
+        "tercerPremio": {
+          "porcentaje": 10,
+          "aciertos": 6,
+          "descripcion": "6 aciertos"
+        },
+        "agenteVendedor": {
+          "porcentaje": 0.5,
+          "descripcion": "Premio al agente vendedor del ticket ganador"
+        },
+        "fondoReserva": {
+          "porcentaje": 4,
+          "descripcion": "Fondo General de Reserva"
+        }
+      },
+      "pozoAsegurado": {
+        "primerPremio": 60000000,
+        "descripcion": "Pozo mínimo asegurado para Primer Premio"
+      },
+      "valorApuesta": {
+        "simple": 1100,
+        "cantidadNumeros": 8,
+        "descripcion": "8 números del 00 al 99"
+      },
+      "apuestasMultiples": {
+        "9": { "pronosticos": 9 },
+        "10": { "pronosticos": 45 },
+        "11": { "pronosticos": 165 },
+        "12": { "pronosticos": 495 },
+        "13": { "pronosticos": 1287 },
+        "14": { "pronosticos": 3003 },
+        "15": { "pronosticos": 6435 }
+      },
+      "reglasPozoVacante": {
+        "primerPremio": {
+          "accion": "arrastre",
+          "deduccionFondoReserva": 10,
+          "descripcion": "Si vacante, arrastra al siguiente sorteo menos 10% a Fondo Reserva"
+        },
+        "segundoPremio": {
+          "accion": "arrastre",
+          "deduccionFondoReserva": 0,
+          "descripcion": "Si vacante, arrastra al siguiente sorteo sin deducción"
+        },
+        "tercerPremio": {
+          "accion": "arrastre",
+          "deduccionFondoReserva": 0,
+          "descripcion": "Si vacante, arrastra al siguiente sorteo sin deducción"
+        },
+        "agenteVendedor": {
+          "accion": "arrastre",
+          "deduccionFondoReserva": 0,
+          "descripcion": "Si vacante, arrastra al siguiente sorteo"
+        }
+      },
+      "reglaTercerPremioMinimo": {
+        "montoMinimo": "valorApuestaSimple",
+        "descripcion": "El premio unitario mínimo del 3er premio es igual al valor de apuesta simple. Si es menor, se complementa del Fondo de Reserva"
+      },
+      "resolucion": "Se resuelve por el extracto de QUINIELA DE LA CIUDAD modalidad NOCTURNA",
+      "agenciaVentaWeb": "5188880"
+    },
+    "quiniela": {
+      "nombre": "QUINIELA DE LA CIUDAD",
+      "valorApuestaMinima": 100,
+      "aciertos": {
+        "unaCifra": { "multiplicador": 7, "descripcion": "1 número de una cifra" },
+        "dosCifras": { "multiplicador": 70, "descripcion": "1 número de dos cifras" },
+        "tresCifras": { "multiplicador": 600, "descripcion": "1 número de tres cifras" },
+        "cuatroCifras": { "multiplicador": 3500, "descripcion": "1 número de cuatro cifras" }
+      },
+      "redoblonas": {
+        "exacta": { "multiplicador": 3500, "descripcion": "Por cada peso apostado" },
+        "normal": { "multiplicador": 70, "descripcion": "Veces el cociente de cada apuesta" }
+      },
+      "topeBanca": {
+        "multiplicador": 5,
+        "descripcion": "Cuando aciertos superan 5 veces lo recaudado"
+      },
+      "modalidades": ["LA PREVIA", "LA PRIMERA", "MATUTINA", "VESPERTINA", "NOCTURNA"],
+      "agenciaVentaWeb": "5188880"
+    },
+    "tombolina": {
+      "nombre": "TOMBOLINA DE LA CIUDAD",
+      "valorApuesta": {
+        "minimo": 100,
+        "maximo": 800
+      },
+      "aciertos": {
+        "3de3": { "multiplicador": 50 },
+        "4de4": { "multiplicador": 140 },
+        "3de4": { "multiplicador": 7 },
+        "5de5": { "multiplicador": 700 },
+        "4de5": { "multiplicador": 20 },
+        "3de5": { "multiplicador": 2.5 },
+        "6de6": { "multiplicador": 3500 },
+        "5de6": { "multiplicador": 70 },
+        "4de6": { "multiplicador": 7 },
+        "3de6": { "multiplicador": 1.5 },
+        "7de7": { "multiplicador": 8000 },
+        "6de7": { "multiplicador": 500 },
+        "5de7": { "multiplicador": 25 },
+        "4de7": { "multiplicador": 2.5 },
+        "3de7": { "multiplicador": 1 }
+      },
+      "topeBanca": {
+        "multiplicador": 5,
+        "descripcion": "Cuando aciertos superan 5 veces lo recaudado"
+      },
+      "resolucion": "Se resuelve por el extracto de QUINIELA DE LA CIUDAD modalidad MATUTINA",
+      "agenciaVentaWeb": "5188880"
+    },
+    "quinielaYa": {
+      "nombre": "QUINIELA YA DE LA CIUDAD",
+      "valorApuesta": {
+        "minimo": 100,
+        "maximo": 1400
+      },
+      "aciertosDirectos": {
+        "dosCifras": { "multiplicador": 50 },
+        "tresCifras": { "multiplicador": 500 }
+      },
+      "aciertosIndirectos": {
+        "permutacion2cifras": { "multiplicador": 5 },
+        "aproximacion3cifras": { "multiplicador": 25 },
+        "permutacion3cifras": { "multiplicador": 10 },
+        "terminacion3cifras": { "multiplicador": 5 }
+      },
+      "resolucion": "Random por sistema computarizado al momento de la apuesta",
+      "agenciaVentaWeb": "5188880"
+    },
+    "otraChance": {
+      "nombre": "SORTEO DE TICKETS-RECIBOS NO GANADORES",
+      "premios": {
+        "primero": {
+          "apostador": 250000,
+          "puntoVenta": 50000
+        },
+        "segundo": {
+          "apostador": 150000,
+          "puntoVenta": 30000
+        },
+        "tercero": {
+          "apostador": 100000,
+          "puntoVenta": 20000
+        }
+      },
+      "premioPuntoVentaPorcentaje": 20
+    }
+  },
+  "entesParticipantes": {
+    "1": { "codigo": "LOTBA", "nombre": "Lotería de la Ciudad de Buenos Aires" },
+    "2": { "codigo": "BUENOS_AIRES", "nombre": "Instituto Provincial de Lotería y Casinos de la Provincia de Buenos Aires" },
+    "3": { "codigo": "CORDOBA", "nombre": "Lotería de la Provincia de Córdoba" },
+    "4": { "codigo": "SANTA_FE", "nombre": "Caja de Asistencia Social de la Provincia de Santa Fe" },
+    "5": { "codigo": "URUGUAY", "nombre": "Dirección Nacional de Loterías y Quinielas de la República Oriental del Uruguay" },
+    "6": { "codigo": "MENDOZA", "nombre": "Instituto Provincial de Juegos y Casinos de Mendoza" },
+    "7": { "codigo": "ENTRE_RIOS", "nombre": "Instituto de Ayuda Financiera a la Acción Social de Entre Ríos" }
+  },
+  "limitesPago": {
+    "pagoEnPuntoVenta": 1400000,
+    "descripcion": "Premios mayores a $1,400,000 se pagan en sede LOTBA (Av. Santa Fe 4362)"
+  }
+}

@@ -5,6 +5,19 @@ let juegos = [];
 let sorteos = [];
 let provincias = [];
 
+const PREFIJOS_JUEGOS = {
+  'QNL': { nombre: 'Quiniela', api: 'procesarQuiniela' },
+  'PCD': { nombre: 'Poceada', api: 'procesarPoceada' }
+};
+
+function detectarTipoJuego(fileName) {
+  const upper = fileName.toUpperCase();
+  for (const [prefijo, config] of Object.entries(PREFIJOS_JUEGOS)) {
+    if (upper.startsWith(prefijo) || upper.includes(prefijo)) return config;
+  }
+  return null;
+}
+
 // Inicialización
 document.addEventListener('DOMContentLoaded', async () => {
   await checkAuth();
@@ -390,15 +403,21 @@ async function procesarControlPrevio() {
     return;
   }
   
-  showToast('Procesando archivo...', 'info');
+  const juegoConfig = detectarTipoJuego(cpArchivoSeleccionado.name);
+  if (!juegoConfig) {
+    showToast('No se pudo detectar el tipo de juego (Prefijos: QNL, PCD)', 'error');
+    return;
+  }
+
+  showToast(`Procesando ${juegoConfig.nombre}...`, 'info');
   
   try {
-    const response = await controlPrevioAPI.procesarQuiniela(cpArchivoSeleccionado);
+    const response = await controlPrevioAPI[juegoConfig.api](cpArchivoSeleccionado);
     cpResultadosActuales = response.data;
+    cpResultadosActuales.tipoJuego = juegoConfig.nombre; // Guardar tipo detectado
     
-    // NUEVO: Guardar los registros parseados del TXT para Control Posterior
-    cpRegistrosNTF = response.data.registrosNTF || [];
-    console.log(`Control Previo: ${cpRegistrosNTF.length} registros parseados del TXT`);
+    cpRegistrosNTF = response.data.registros || response.data.registrosNTF || [];
+    console.log(`Control Previo (${juegoConfig.nombre}): ${cpRegistrosNTF.length} registros parseados`);
     
     mostrarResultadosCP(response.data);
     showToast('Archivo procesado correctamente', 'success');
@@ -409,18 +428,44 @@ async function procesarControlPrevio() {
 }
 
 function mostrarResultadosCP(data) {
-  const calc = data.datosCalculados;
+  console.log('📊 Datos recibidos en mostrarResultadosCP:', data);
+  
+  // Normalizar datos según el juego
+  const isPoceada = data.tipoJuego === 'Poceada';
+  const calc = isPoceada ? data.resumen : data.datosCalculados;
   const oficial = data.datosOficiales;
+  
+  console.log('🔍 calc.online:', calc.online);
+  console.log('🔍 data.comparacion:', data.comparacion);
+  
+  // Título y badges
+  document.getElementById('cp-titulo').textContent = `Control Previo - ${data.tipoJuego || 'Quiniela'}`;
+  const gameBadge = document.getElementById('cp-juego-detectado');
+  if (gameBadge) {
+    gameBadge.textContent = data.tipoJuego;
+    gameBadge.className = `badge badge-${isPoceada ? 'primary' : 'success'}`;
+  }
   
   // Mostrar sección de resultados
   document.getElementById('cp-resultados').classList.remove('hidden');
   
+  // Mostrar sección específica de Poceada
+  const pcdEspecífico = document.getElementById('cp-poceada-especifico');
+  if (pcdEspecífico) {
+    if (isPoceada) {
+      pcdEspecífico.classList.remove('hidden');
+      document.getElementById('cp-pozo-arrastre').textContent = '$' + formatNumber(data.pozoArrastre || 0);
+    } else {
+      pcdEspecífico.classList.add('hidden');
+    }
+  }
+
   // Resumen principal
   document.getElementById('cp-registros').textContent = formatNumber(calc.registros);
-  document.getElementById('cp-apuestas').textContent = formatNumber(calc.apuestasTotal);
+  document.getElementById('cp-apuestas').textContent = formatNumber(calc.apuestasTotal || calc.apuestas);
   // Recaudación sin decimales
   document.getElementById('cp-recaudacion').textContent = '$' + formatNumber(Math.round(calc.recaudacion));
-  document.getElementById('cp-anulados').textContent = formatNumber(calc.registrosAnulados);
+  document.getElementById('cp-anulados').textContent = formatNumber(calc.anulados || calc.registrosAnulados);
   
   // Recaudación anulada (si existe el elemento)
   const recAnuladaEl = document.getElementById('cp-recaudacion-anulada');
@@ -429,103 +474,135 @@ function mostrarResultadosCP(data) {
   }
   
   // Badge de sorteo
-  document.getElementById('cp-sorteo-badge').textContent = `Sorteo: ${calc.numeroSorteo}`;
+  document.getElementById('cp-sorteo-badge').textContent = `Sorteo: ${data.sorteo || calc.numeroSorteo}`;
   
-  // Tabla de recaudación por provincia
-  const tbodyRecProv = document.querySelector('#cp-tabla-recaudacion-prov tbody');
-  if (tbodyRecProv && calc.provincias) {
-    tbodyRecProv.innerHTML = '';
-    const totalRecaudacion = calc.recaudacion || 1;
+  // Tablas
+  if (isPoceada) {
+    renderTablasPoceada(data);
+  } else {
+    renderTablasQuiniela(data);
+  }
+
+  // Comparación con XML
+  const tbodyComp = document.getElementById('cp-tabla-comparacion');
+  if (tbodyComp) {
+    tbodyComp.innerHTML = '';
     
-    for (const [codigo, prov] of Object.entries(calc.provincias)) {
-      if (prov.recaudacion > 0) {
-        const porcentaje = ((prov.recaudacion / totalRecaudacion) * 100).toFixed(2);
-        tbodyRecProv.innerHTML += `
+    console.log('🔍 Verificando comparación...');
+    console.log('   data.comparacion:', data.comparacion);
+    console.log('   data.datosOficiales:', data.datosOficiales);
+    console.log('   oficial:', oficial);
+    
+    // Usar data.comparacion si está disponible (viene del backend), sino calcular manualmente
+    if (data.comparacion) {
+      console.log('✅ Usando comparación del backend');
+      // Usar la comparación pre-calculada del backend
+      const comp = data.comparacion;
+      const comparaciones = [
+        { concepto: 'Registros Válidos', calc: comp.registros?.calculado || 0, oficial: comp.registros?.oficial || 0, diff: comp.registros?.diferencia || 0 },
+        { concepto: 'Registros Anulados', calc: comp.anulados?.calculado || 0, oficial: comp.anulados?.oficial || 0, diff: comp.anulados?.diferencia || 0 },
+        { concepto: 'Apuestas en Sorteo', calc: comp.apuestas?.calculado || 0, oficial: comp.apuestas?.oficial || 0, diff: comp.apuestas?.diferencia || 0 },
+        { concepto: 'Recaudación Bruta', calc: comp.recaudacion?.calculado || 0, oficial: comp.recaudacion?.oficial || 0, diff: comp.recaudacion?.diferencia || 0, esMonto: true }
+      ];
+      
+      // Agregar venta web si hay datos (solo para Poceada)
+      if (calc.ventaWeb !== undefined) {
+        comparaciones.push({
+          concepto: '🌐 Venta Web',
+          calc: calc.ventaWeb || 0,
+          oficial: '-',
+          diff: null,
+          esVentaWeb: true
+        });
+      }
+      
+      for (const item of comparaciones) {
+        let diffCell;
+        if (item.esVentaWeb) {
+          diffCell = '<span class="badge badge-info">Solo TXT</span>';
+        } else {
+          const diffClass = item.diff === 0 ? 'text-success' : 'text-warning';
+          diffCell = `<span class="${diffClass}">${item.diff === 0 ? '✓ OK' : (item.diff > 0 ? '+' : '') + formatNumber(item.diff)}</span>`;
+        }
+        
+        tbodyComp.innerHTML += `
           <tr>
-            <td><strong>${prov.nombre}</strong> (${codigo})</td>
-            <td>$${formatNumber(Math.round(prov.recaudacion))}</td>
-            <td>${porcentaje}%</td>
+            <td>${item.concepto}</td>
+            <td>${item.esMonto ? '$' : ''}${formatNumber(item.calc)}</td>
+            <td>${item.esVentaWeb ? item.oficial : (item.esMonto ? '$' : '') + formatNumber(item.oficial)}</td>
+            <td>${diffCell}</td>
           </tr>
         `;
       }
+      
+      document.getElementById('cp-verificacion-badge').innerHTML = 
+        '<span class="badge badge-success">XML Cargado</span>';
+    } else if (oficial) {
+      // Fallback: calcular manualmente si no viene del backend
+      const comparaciones = isPoceada ? [
+        { concepto: 'Registros Válidos', calc: calc.registros || 0, oficial: oficial.registrosValidos || 0 },
+        { concepto: 'Registros Anulados', calc: calc.anulados || 0, oficial: oficial.registrosAnulados || 0 },
+        { concepto: 'Apuestas en Sorteo', calc: calc.apuestasTotal || 0, oficial: oficial.apuestas || 0 },
+        { concepto: 'Recaudación Bruta', calc: calc.recaudacion || 0, oficial: oficial.recaudacion || 0, esMonto: true }
+      ] : [
+        { concepto: 'Registros Válidos', calc: calc.registros || 0, oficial: oficial.registrosValidos || 0 },
+        { concepto: 'Registros Anulados', calc: calc.registrosAnulados || 0, oficial: oficial.registrosAnulados || 0 },
+        { concepto: 'Apuestas en Sorteo', calc: calc.apuestasTotal || 0, oficial: oficial.apuestasEnSorteo || 0 },
+        { concepto: 'Recaudación Bruta', calc: calc.recaudacion || 0, oficial: oficial.recaudacionBruta || 0, esMonto: true }
+      ];
+      
+      for (const item of comparaciones) {
+        const diff = item.calc - item.oficial;
+        const diffClass = diff === 0 ? 'text-success' : 'text-warning';
+        tbodyComp.innerHTML += `
+          <tr>
+            <td>${item.concepto}</td>
+            <td>${item.esMonto ? '$' : ''}${formatNumber(item.calc)}</td>
+            <td>${item.esMonto ? '$' : ''}${formatNumber(item.oficial)}</td>
+            <td class="${diffClass}">${diff === 0 ? '✓ OK' : (diff > 0 ? '+' : '') + formatNumber(diff)}</td>
+          </tr>
+        `;
+      }
+      
+      document.getElementById('cp-verificacion-badge').innerHTML = 
+        '<span class="badge badge-success">XML Cargado</span>';
+    } else {
+      tbodyComp.innerHTML = '<tr><td colspan="4" class="text-muted text-center">No se encontró archivo XML oficial para comparar</td></tr>';
+      document.getElementById('cp-verificacion-badge').innerHTML = 
+        '<span class="badge badge-warning">Sin XML</span>';
     }
   }
   
-  // Tabla de provincias
-  const tbody = document.querySelector('#cp-tabla-provincias tbody');
-  tbody.innerHTML = '';
-  
-  const totalApuestas = calc.apuestasTotal || 1;
-  for (const [codigo, prov] of Object.entries(calc.provincias)) {
-    if (prov.apuestas > 0) {
-      const porcentaje = ((prov.apuestas / totalApuestas) * 100).toFixed(2);
-      tbody.innerHTML += `
-        <tr>
-          <td><strong>${prov.nombre}</strong> (${codigo})</td>
-          <td>${formatNumber(prov.apuestas)}</td>
-          <td>${porcentaje}%</td>
-        </tr>
-      `;
-    }
-  }
-  
-  // Comparación con XML
-  const tbodyComp = document.getElementById('cp-tabla-comparacion');
-  tbodyComp.innerHTML = '';
-  
-  if (oficial) {
-    const comparaciones = [
-      { concepto: 'Registros Válidos', calc: calc.registros, oficial: oficial.registrosValidos },
-      { concepto: 'Registros Anulados', calc: calc.registrosAnulados, oficial: oficial.registrosAnulados },
-      { concepto: 'Apuestas en Sorteo', calc: calc.apuestasTotal, oficial: oficial.apuestasEnSorteo },
-      { concepto: 'Recaudación Bruta', calc: calc.recaudacion, oficial: oficial.recaudacionBruta, esMonto: true }
-    ];
-    
-    for (const item of comparaciones) {
-      const diff = item.calc - item.oficial;
-      const diffClass = diff === 0 ? 'text-success' : 'text-warning';
-      tbodyComp.innerHTML += `
-        <tr>
-          <td>${item.concepto}</td>
-          <td>${item.esMonto ? '$' : ''}${formatNumber(item.calc)}</td>
-          <td>${item.esMonto ? '$' : ''}${formatNumber(item.oficial)}</td>
-          <td class="${diffClass}">${diff === 0 ? '✓ OK' : (diff > 0 ? '+' : '') + formatNumber(diff)}</td>
-        </tr>
-      `;
-    }
-    
-    document.getElementById('cp-verificacion-badge').innerHTML = 
-      '<span class="badge badge-success">XML Cargado</span>';
-  } else {
-    tbodyComp.innerHTML = '<tr><td colspan="4" class="text-muted">No se encontró archivo XML de control previo</td></tr>';
-    document.getElementById('cp-verificacion-badge').innerHTML = 
-      '<span class="badge badge-warning">Sin XML</span>';
-  }
-  
-  // Verificación de seguridad
+  // Verificación de seguridad...
   const seg = data.seguridad;
   const segContent = document.getElementById('cp-seguridad-content');
   segContent.innerHTML = `
-    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1rem;">
-      <div class="file-item">
+    <div class="security-grid">
+      <div class="file-item" title="Archivo TXT">
         <span><i class="fas ${seg.archivos.txt ? 'fa-check-circle text-success' : 'fa-times-circle text-danger'}"></i> Archivo TXT</span>
       </div>
-      <div class="file-item">
+      <div class="file-item" title="Archivo XML">
         <span><i class="fas ${seg.archivos.xml ? 'fa-check-circle text-success' : 'fa-times-circle text-danger'}"></i> Archivo XML</span>
       </div>
-      <div class="file-item">
+      <div class="file-item" title="Hash TXT">
         <span><i class="fas ${seg.archivos.hash ? 'fa-check-circle text-success' : 'fa-times-circle text-danger'}"></i> Hash TXT</span>
       </div>
-      <div class="file-item">
+      <div class="file-item" title="Hash CP">
         <span><i class="fas ${seg.archivos.hashCP ? 'fa-check-circle text-success' : 'fa-times-circle text-danger'}"></i> Hash CP</span>
       </div>
-      <div class="file-item">
+      <div class="file-item" title="PDF Seguridad">
         <span><i class="fas ${seg.archivos.pdf ? 'fa-check-circle text-success' : 'fa-times-circle text-danger'}"></i> PDF Seguridad</span>
       </div>
-      <div class="file-item">
+      <div class="file-item" title="Verificación Hash TXT">
         <span><i class="fas ${seg.verificado ? 'fa-check-circle text-success' : (seg.verificado === false ? 'fa-times-circle text-danger' : 'fa-question-circle text-warning')}"></i> 
-        Hash ${seg.verificado ? 'Verificado' : (seg.verificado === false ? 'NO Coincide' : 'No verificable')}</span>
+        Hash TXT ${seg.verificado ? 'Verificado' : (seg.verificado === false ? 'NO Coincide' : 'No verificable')}</span>
       </div>
+      ${seg.verificadoXml !== undefined ? `
+      <div class="file-item" title="Verificación Hash XML">
+        <span><i class="fas ${seg.verificadoXml ? 'fa-check-circle text-success' : (seg.verificadoXml === false ? 'fa-times-circle text-danger' : 'fa-question-circle text-warning')}"></i> 
+        Hash XML ${seg.verificadoXml ? 'Verificado' : (seg.verificadoXml === false ? 'NO Coincide' : 'No verificable')}</span>
+      </div>
+      ` : ''}
     </div>
   `;
   
@@ -603,11 +680,42 @@ function mostrarResultadosCP(data) {
     }
   }
   
-  // Online
-  document.getElementById('cp-online-registros').textContent = formatNumber(calc.online.registros);
-  document.getElementById('cp-online-apuestas').textContent = formatNumber(calc.online.apuestas);
-  document.getElementById('cp-online-recaudacion').textContent = '$' + formatNumber(calc.online.recaudacion);
-  document.getElementById('cp-online-anulados').textContent = formatNumber(calc.online.anulados);
+  // Online (solo para Quiniela, Poceada no tiene esta sección)
+  const onlineSection = document.getElementById('cp-online-registros')?.closest('.stat-card')?.parentElement;
+  const onlineTitulo = document.getElementById('cp-online-titulo');
+  
+  if (isPoceada) {
+    // Ocultar sección Online para Poceada
+    if (onlineSection) onlineSection.style.display = 'none';
+  } else {
+    // Mostrar sección Online para Quiniela
+    if (onlineSection) onlineSection.style.display = '';
+    
+    // Actualizar título dinámicamente según el juego
+    if (onlineTitulo) {
+      const juegoNombre = data.tipoJuego || 'Quiniela';
+      onlineTitulo.textContent = `${juegoNombre} Online (Agencia 88880)`;
+    }
+    
+    console.log('🌐 Verificando sección Online...');
+    console.log('   calc.online existe?', !!calc.online);
+    console.log('   calc.online valor:', calc.online);
+    
+    if (calc && calc.online && (calc.online.registros > 0 || calc.online.apuestas > 0 || calc.online.recaudacion > 0)) {
+      console.log('✅ Mostrando datos Online:', calc.online);
+      document.getElementById('cp-online-registros').textContent = formatNumber(calc.online.registros || 0);
+      document.getElementById('cp-online-apuestas').textContent = formatNumber(calc.online.apuestas || 0);
+      document.getElementById('cp-online-recaudacion').textContent = '$' + formatNumber(calc.online.recaudacion || 0);
+      document.getElementById('cp-online-anulados').textContent = formatNumber(calc.online.anulados || 0);
+    } else {
+      console.log('⚠️ No hay datos Online');
+      // Poner en 0 si no hay datos
+      document.getElementById('cp-online-registros').textContent = '0';
+      document.getElementById('cp-online-apuestas').textContent = '0';
+      document.getElementById('cp-online-recaudacion').textContent = '$0';
+      document.getElementById('cp-online-anulados').textContent = '0';
+    }
+  }
 }
 
 function limpiarControlPrevio() {
@@ -625,17 +733,23 @@ async function guardarControlPrevio() {
     return;
   }
   
+  const isPoceada = cpResultadosActuales.tipoJuego === 'Poceada';
+  
   try {
-    const calc = cpResultadosActuales.datosCalculados;
-    await controlPrevioAPI.guardarQuiniela({
-      numeroSorteo: calc.numeroSorteo,
-      registros: calc.registros,
-      apuestas: calc.apuestasTotal,
-      recaudacion: calc.recaudacion,
-      provincias: calc.provincias,
-      datosXml: cpResultadosActuales.datosOficiales
-    });
-    showToast('Datos guardados correctamente', 'success');
+    if (isPoceada) {
+      await controlPrevioAPI.guardarPoceada(cpResultadosActuales);
+    } else {
+      const calc = cpResultadosActuales.datosCalculados;
+      await controlPrevioAPI.guardarQuiniela({
+        numeroSorteo: calc.numeroSorteo,
+        registros: calc.registros,
+        apuestas: calc.apuestasTotal,
+        recaudacion: calc.recaudacion,
+        provincias: calc.provincias,
+        datosXml: cpResultadosActuales.datosOficiales
+      });
+    }
+    showToast('Datos guardados en la base de datos', 'success');
   } catch (error) {
     showToast(error.message || 'Error guardando datos', 'error');
   }
@@ -688,8 +802,483 @@ function generarActaControlPrevio() {
   }, 100);
 }
 
+function renderTablasPoceada(data) {
+  const tbodyRecProv = document.querySelector('#cp-tabla-recaudacion-prov tbody');
+  const tbodyProv = document.querySelector('#cp-tabla-provincias tbody');
+  
+  if (tbodyRecProv && data.provincias) {
+    tbodyRecProv.innerHTML = '';
+    tbodyProv.innerHTML = '';
+    
+    // En Poceada, data.provincias ya tiene el formato { 'Nombre Provincia': { recaudacion, apuestas, registros } }
+    const totalRec = data.resumen?.recaudacion || 1;
+    const totalApuestas = data.resumen?.apuestasTotal || 1;
+
+    for (const [nombre, prov] of Object.entries(data.provincias)) {
+      // Validar que prov existe y tiene las propiedades necesarias
+      if (!prov || typeof prov !== 'object') {
+        console.warn(`Provincia ${nombre} no tiene datos válidos:`, prov);
+        continue;
+      }
+      
+      // Asegurar que las propiedades existan con valores por defecto
+      const recaudacion = prov.recaudacion || 0;
+      const apuestas = prov.apuestas || 0;
+      const ventaWeb = prov.ventaWeb || 0;
+      
+      // Solo mostrar provincias con datos
+      if (recaudacion > 0 || apuestas > 0) {
+        const pRec = totalRec > 0 ? ((recaudacion / totalRec) * 100).toFixed(2) : '0.00';
+        const pAp = totalApuestas > 0 ? ((apuestas / totalApuestas) * 100).toFixed(2) : '0.00';
+        
+        // Indicador de ventas web
+        const webIndicator = ventaWeb > 0 ? ` <span class="badge badge-info" title="${ventaWeb} ventas web">🌐 ${ventaWeb}</span>` : '';
+        
+        if (recaudacion > 0) {
+          tbodyRecProv.innerHTML += `
+            <tr>
+              <td><strong>${nombre}</strong>${webIndicator}</td>
+              <td>$${formatNumber(Math.round(recaudacion))}</td>
+              <td>${pRec}%</td>
+            </tr>
+          `;
+        }
+        
+        if (apuestas > 0) {
+          tbodyProv.innerHTML += `
+            <tr>
+              <td><strong>${nombre}</strong></td>
+              <td>${formatNumber(apuestas)}</td>
+              <td>${pAp}%</td>
+            </tr>
+          `;
+        }
+      }
+    }
+  }
+  
+  // Renderizar comparación de premios si existe
+  renderComparacionPremiosPoceada(data);
+  
+  // Renderizar distribución de premios calculada
+  renderDistribucionPremiosPoceada(data);
+}
+
+/**
+ * Renderiza la tabla de comparación de premios (calculados vs XML oficial)
+ */
+function renderComparacionPremiosPoceada(data) {
+  const tableBody = document.getElementById('cp-tabla-premios');
+  const card = document.getElementById('cp-comparacion-premios-card');
+  
+  if (!tableBody || !card) return;
+  
+  // Validar si es Poceada. Si no lo es, ocultar la tarjeta y salir.
+  if (data.tipoJuego !== 'Poceada') {
+     card.classList.add('hidden');
+     card.style.display = 'none'; 
+     return;
+  }
+
+  // Si es Poceada, mostrar la tarjeta
+  card.classList.remove('hidden');
+  card.style.display = 'block';
+  
+  // Limpiar tabla antes de renderizar
+  tableBody.innerHTML = '';
+
+  // DEBUG: Ver estructura de datos
+  console.log('📊 DEBUG renderComparacionPremiosPoceada:');
+  console.log('   data.comparacion:', data.comparacion);
+  console.log('   data.comparacion?.premios:', data.comparacion?.premios);
+  console.log('   data.distribucionPremios:', data.distribucionPremios);
+
+  const p = data.comparacion?.premios;
+  if (!p) {
+    if (!data.comparacion) {
+      // Si no tenemos estructura de comparación, ocultar la card
+      card.classList.add('hidden');
+    } else {
+      tableBody.innerHTML = '<tr><td colspan="6" class="text-center text-muted">No hay datos de premios del XML para comparar</td></tr>';
+    }
+    return;
+  }
+  
+  console.log('   p.primerPremio:', p.primerPremio);
+  console.log('   p.fondoReserva:', p.fondoReserva);
+  console.log('   p.importeTotalPremios:', p.importeTotalPremios);
+  
+  try {
+    const dist = data.distribucionPremios || {};
+
+    // Mostrar versión de configuración con pozo asegurado
+    const versionBadge = document.getElementById('cp-config-version');
+    if (versionBadge) {
+      const configVer = dist.configVersion || 'Unknown';
+      const pozoAsegurado = p.primerPremio?.pozoAsegurado || dist?.primerPremio?.pozoAsegurado || 60000000;
+      versionBadge.textContent = `Config: ${configVer} | Pozo Asegurado: $${formatNumber(pozoAsegurado)}`;
+    }
+    
+    // Helper para estado
+    const getStatus = (diff) => {
+      if (typeof diff !== 'number') return '<span class="text-muted">-</span>';
+      if (Math.abs(diff) < 1) return '<span class="text-success"><i class="fas fa-check-circle"></i> OK</span>';
+      return '<span class="text-danger"><i class="fas fa-times-circle"></i> Error</span>';
+    };
+    
+    const getDiffClass = (diff) => {
+      if (typeof diff !== 'number') return '';
+      return Math.abs(diff) < 1 ? 'text-success' : 'text-danger';
+    };
+
+    const getDiffText = (diff) => {
+      if (typeof diff !== 'number') return '$0';
+      return Math.abs(diff) < 1 ? '$0' : (diff > 0 ? '+' : '') + '$' + formatNumber(diff);
+    };
+
+    const fmt = (val) => formatNumber(val || 0);
+    
+    // Helpers de acceso seguro - manejar tanto estructuras anidadas como valores directos
+    const getVal = (obj, path, sub) => {
+      try {
+        if (!obj) return 0;
+        const val = obj[path]?.[sub];
+        // Si el valor es un objeto, intentar obtener .monto o devolver 0
+        if (val && typeof val === 'object') {
+          console.warn(`⚠️ getVal: ${path}.${sub} es un objeto, no un número:`, val);
+          return val.monto || val.valor || 0;
+        }
+        return val || 0;
+      } catch (e) { 
+        console.error(`Error en getVal(${path}, ${sub}):`, e);
+        return 0; 
+      }
+    };
+
+    // Helper específico para valores directos (fondoReserva, importeTotalPremios)
+    const getDirectVal = (obj, prop) => {
+      try {
+        if (!obj) return 0;
+        const val = obj[prop];
+        if (val && typeof val === 'object') {
+          console.warn(`⚠️ getDirectVal: ${prop} es un objeto:`, val);
+          return val.monto || val.valor || 0;
+        }
+        return val || 0;
+      } catch (e) { return 0; }
+    };
+
+    const p1 = p.primerPremio || {};
+    const p2 = p.segundoPremio || {};
+    const p3 = p.terceroPremio || {};
+    const pag = p.agenciero || {};
+    const pfr = p.fondoReserva || {};
+    const ptot = p.importeTotalPremios || {};
+    
+    // DEBUG: Loguear estructura
+    console.log('📊 Estructura de premios:');
+    console.log('   p1 (primerPremio):', p1);
+    console.log('   p1.recaudacion:', p1.recaudacion);
+    console.log('   pfr (fondoReserva):', pfr);
+    console.log('   ptot (importeTotalPremios):', ptot);
+
+    // Renderizar filas
+    let html = `
+      <!-- PRIMER PREMIO -->
+      <tr style="background: rgba(255, 215, 0, 0.05); border-top: 2px solid var(--border-color);">
+        <td><i class="fas fa-medal text-warning"></i> Recaudación 1er Premio</td>
+        <td>62%</td>
+        <td>$${fmt(getVal(p1, 'recaudacion', 'calculado'))}</td>
+        <td>$${fmt(getVal(p1, 'recaudacion', 'oficial'))}</td>
+        <td class="${getDiffClass(getVal(p1, 'recaudacion', 'diferencia'))}">${getDiffText(getVal(p1, 'recaudacion', 'diferencia'))}</td>
+        <td>${getStatus(getVal(p1, 'recaudacion', 'diferencia'))}</td>
+      </tr>
+      <tr>
+        <td style="padding-left: 2rem;"><span class="text-muted">↳</span> Arrastre del Pozo</td>
+        <td>-</td>
+        <td>$${fmt(getVal(p1, 'pozoVacante', 'calculado'))}</td>
+        <td>$${fmt(getVal(p1, 'pozoVacante', 'oficial'))}</td>
+        <td class="${getDiffClass(getVal(p1, 'pozoVacante', 'diferencia'))}">${getDiffText(getVal(p1, 'pozoVacante', 'diferencia'))}</td>
+        <td>${getStatus(getVal(p1, 'pozoVacante', 'diferencia'))}</td>
+      </tr>
+      <tr>
+        <td style="padding-left: 2rem;"><span class="text-muted">↳</span> Diferencia a Asegurar</td>
+        <td>-</td>
+        <td>$${fmt(getVal(p1, 'diferenciaAsegurar', 'calculado'))}</td>
+        <td>$${fmt(getVal(p1, 'diferenciaAsegurar', 'oficial'))}</td>
+        <td class="${getDiffClass(getVal(p1, 'diferenciaAsegurar', 'diferencia'))}">${getDiffText(getVal(p1, 'diferenciaAsegurar', 'diferencia'))}</td>
+        <td>${getStatus(getVal(p1, 'diferenciaAsegurar', 'diferencia'))}</td>
+      </tr>
+      <tr style="font-weight: 600;">
+        <td style="padding-left: 2rem;"><span class="text-muted">↳</span> Importe Final 1er Premio</td>
+        <td>-</td>
+        <td>$${fmt(getVal(p1, 'importeFinal', 'calculado'))}</td>
+        <td>$${fmt(getVal(p1, 'importeFinal', 'oficial'))}</td>
+        <td class="${getDiffClass(getVal(p1, 'importeFinal', 'diferencia'))}">${getDiffText(getVal(p1, 'importeFinal', 'diferencia'))}</td>
+        <td>${getStatus(getVal(p1, 'importeFinal', 'diferencia'))}</td>
+      </tr>
+
+      <!-- SEGUNDO PREMIO -->
+      <tr style="background: rgba(192, 192, 192, 0.05); border-top: 1px solid var(--border-color);">
+        <td><i class="fas fa-medal text-secondary"></i> 2do Recaudación Premio (7 aciertos)</td>
+        <td>23.50%</td>
+        <td>$${fmt(getVal(p2, 'recaudacion', 'calculado'))}</td>
+        <td>$${fmt(getVal(p2, 'recaudacion', 'oficial'))}</td>
+        <td class="${getDiffClass(getVal(p2, 'recaudacion', 'diferencia'))}">${getDiffText(getVal(p2, 'recaudacion', 'diferencia'))}</td>
+        <td>${getStatus(getVal(p2, 'recaudacion', 'diferencia'))}</td>
+      </tr>
+      <tr>
+        <td style="padding-left: 2rem;"><span class="text-muted">↳</span> Arrastre del Pozo</td>
+        <td>-</td>
+        <td>$${fmt(getVal(p2, 'pozoVacante', 'calculado'))}</td>
+        <td>$${fmt(getVal(p2, 'pozoVacante', 'oficial'))}</td>
+        <td class="${getDiffClass(getVal(p2, 'pozoVacante', 'diferencia'))}">${getDiffText(getVal(p2, 'pozoVacante', 'diferencia'))}</td>
+        <td>${getStatus(getVal(p2, 'pozoVacante', 'diferencia'))}</td>
+      </tr>
+      <tr style="font-weight: 600;">
+        <td style="padding-left: 2rem;"><span class="text-muted">↳</span> Importe Final 2do Premio</td>
+        <td>-</td>
+        <td>$${fmt(getVal(p2, 'importeFinal', 'calculado'))}</td>
+        <td>$${fmt(getVal(p2, 'importeFinal', 'oficial'))}</td>
+        <td class="${getDiffClass(getVal(p2, 'importeFinal', 'diferencia'))}">${getDiffText(getVal(p2, 'importeFinal', 'diferencia'))}</td>
+        <td>${getStatus(getVal(p2, 'importeFinal', 'diferencia'))}</td>
+      </tr>
+
+      <!-- TERCER PREMIO -->
+      <tr style="background: rgba(205, 127, 50, 0.05); border-top: 1px solid var(--border-color);">
+        <td><i class="fas fa-medal text-warning-dark"></i> 3er Premio (6 aciertos)</td>
+        <td>10%</td>
+        <td>$${fmt(getVal(p3, 'recaudacion', 'calculado'))}</td>
+        <td>$${fmt(getVal(p3, 'recaudacion', 'oficial'))}</td>
+        <td class="${getDiffClass(getVal(p3, 'recaudacion', 'diferencia'))}">${getDiffText(getVal(p3, 'recaudacion', 'diferencia'))}</td>
+        <td>${getStatus(getVal(p3, 'recaudacion', 'diferencia'))}</td>
+      </tr>
+      <tr>
+        <td style="padding-left: 2rem;"><span class="text-muted">↳</span> Arrastre del Pozo</td>
+        <td>-</td>
+        <td>$${fmt(getVal(p3, 'pozoVacante', 'calculado'))}</td>
+        <td>$${fmt(getVal(p3, 'pozoVacante', 'oficial'))}</td>
+        <td class="${getDiffClass(getVal(p3, 'pozoVacante', 'diferencia'))}">${getDiffText(getVal(p3, 'pozoVacante', 'diferencia'))}</td>
+        <td>${getStatus(getVal(p3, 'pozoVacante', 'diferencia'))}</td>
+      </tr>
+      <tr style="font-weight: 600;">
+        <td style="padding-left: 2rem;"><span class="text-muted">↳</span> Importe Final 3er Premio</td>
+        <td>-</td>
+        <td>$${fmt(getVal(p3, 'importeFinal', 'calculado'))}</td>
+        <td>$${fmt(getVal(p3, 'importeFinal', 'oficial'))}</td>
+        <td class="${getDiffClass(getVal(p3, 'importeFinal', 'diferencia'))}">${getDiffText(getVal(p3, 'importeFinal', 'diferencia'))}</td>
+        <td>${getStatus(getVal(p3, 'importeFinal', 'diferencia'))}</td>
+      </tr>
+
+      <!-- PREMIO AGENCIERO -->
+      <tr style="border-top: 1px solid var(--border-color);">
+        <td><i class="fas fa-user-tie text-info"></i> Premio Agenciero</td>
+        <td>0.50%</td>
+        <td>$${fmt(getVal(pag, 'recaudacion', 'calculado'))}</td>
+        <td>$${fmt(getVal(pag, 'recaudacion', 'oficial'))}</td>
+        <td class="${getDiffClass(getVal(pag, 'recaudacion', 'diferencia'))}">${getDiffText(getVal(pag, 'recaudacion', 'diferencia'))}</td>
+        <td>${getStatus(getVal(pag, 'recaudacion', 'diferencia'))}</td>
+      </tr>
+      <tr>
+        <td style="padding-left: 2rem;"><span class="text-muted">↳</span> Arrastre del Pozo</td>
+        <td>-</td>
+        <td>$${fmt(getVal(pag, 'pozoVacante', 'calculado'))}</td>
+        <td>$${fmt(getVal(pag, 'pozoVacante', 'oficial'))}</td>
+        <td class="${getDiffClass(getVal(pag, 'pozoVacante', 'diferencia'))}">${getDiffText(getVal(pag, 'pozoVacante', 'diferencia'))}</td>
+        <td>${getStatus(getVal(pag, 'pozoVacante', 'diferencia'))}</td>
+      </tr>
+       <tr style="font-weight: 600;">
+        <td style="padding-left: 2rem;"><span class="text-muted">↳</span> Total Agenciero</td>
+        <td>-</td>
+        <td>$${fmt(getVal(pag, 'importeFinal', 'calculado'))}</td>
+        <td>$${fmt(getVal(pag, 'importeFinal', 'oficial'))}</td>
+        <td class="${getDiffClass(getVal(pag, 'importeFinal', 'diferencia'))}">${getDiffText(getVal(pag, 'importeFinal', 'diferencia'))}</td>
+        <td>${getStatus(getVal(pag, 'importeFinal', 'diferencia'))}</td>
+      </tr>
+
+      <!-- FONDO RESERVA -->
+      <tr style="border-top: 1px solid var(--border-color); background: rgba(0, 0, 0, 0.05);">
+        <td><i class="fas fa-landmark text-muted"></i> Fondo de Reserva</td>
+        <td>4%</td>
+        <td>$${fmt(pfr.calculado)}</td>
+        <td>$${fmt(pfr.oficial)}</td>
+        <td class="${getDiffClass(pfr.diferencia)}">${getDiffText(pfr.diferencia)}</td>
+        <td>${getStatus(pfr.diferencia)}</td>
+      </tr>
+
+      <!-- TOTAL -->
+      <tr style="border-top: 2px solid var(--border-color); font-weight: bold; background: var(--bg-card-hover);">
+        <td><i class="fas fa-money-bill-wave text-success"></i> Total Premios</td>
+        <td>45%</td>
+        <td>$${fmt(ptot.calculado)}</td>
+        <td>$${fmt(ptot.oficial)}</td>
+        <td class="${getDiffClass(ptot.diferencia)}">${getDiffText(ptot.diferencia)}</td>
+        <td>${getStatus(ptot.diferencia)}</td>
+      </tr>
+    `;
+    
+    tableBody.innerHTML = html;
+  
+  } catch (error) {
+    console.error('Error renderizando tabla Poceada:', error);
+    tableBody.innerHTML = `<tr><td colspan="6" class="text-danger">Error renderizando datos: ${error.message}</td></tr>`;
+  }
+}
+
+/**
+ * Renderiza las cards de distribución de premios calculados
+ * NOTA: Esta card está oculta por defecto, la comparación ya muestra todo
+ */
+function renderDistribucionPremiosPoceada(data) {
+  const card = document.getElementById('cp-distribucion-premios-card');
+  if (!card) return;
+  
+  // Ocultar esta card ya que la comparación de premios muestra todo el desglose
+  card.classList.add('hidden');
+  return;
+  
+  // El código siguiente se mantiene por si se necesita en el futuro
+  if (!data.distribucionPremios) {
+    card.classList.add('hidden');
+    return;
+  }
+  
+  card.classList.remove('hidden');
+  const dist = data.distribucionPremios;
+  
+  // Actualizar valores
+  const set = (id, value) => {
+    const el = document.getElementById(id);
+    if (el) el.textContent = '$' + formatNumber(Math.round(value || 0));
+  };
+  
+  set('cp-premio-1ro', dist.primerPremio?.total);
+  set('cp-premio-2do', dist.segundoPremio?.total);
+  set('cp-premio-3ro', dist.terceroPremio?.total);
+  set('cp-premio-agenciero', dist.agenciero?.total);
+  set('cp-fondo-reserva', dist.fondoReserva?.monto || dist.fondoReserva);
+  set('cp-total-premios', dist.importeTotalPremios);
+  
+  // Mostrar arrastre del 1er premio si existe
+  const arrastre1ro = document.getElementById('cp-premio-1ro-arrastre');
+  if (arrastre1ro) {
+    if (dist.primerPremio?.pozoVacante > 0) {
+      arrastre1ro.innerHTML = `<span style="color: var(--accent-color);">+ $${formatNumber(Math.round(dist.primerPremio.pozoVacante))} arrastre</span>`;
+    } else {
+      arrastre1ro.textContent = '';
+    }
+  }
+  
+  // Mostrar pozo asegurado
+  const pozoAseguradoBadge = document.getElementById('cp-pozo-asegurado-badge');
+  if (pozoAseguradoBadge && dist.primerPremio?.pozoAsegurado) {
+    pozoAseguradoBadge.textContent = `Pozo Asegurado: $${formatNumber(dist.primerPremio.pozoAsegurado)}`;
+  }
+}
+
+function renderTablasQuiniela(data) {
+  const calc = data.datosCalculados;
+  const tbodyRecProv = document.querySelector('#cp-tabla-recaudacion-prov tbody');
+  const tbodyProv = document.querySelector('#cp-tabla-provincias tbody');
+  
+  if (tbodyRecProv && calc.provincias) {
+    tbodyRecProv.innerHTML = '';
+    const totalRecaudacion = calc.recaudacion || 1;
+    for (const [codigo, prov] of Object.entries(calc.provincias)) {
+      if (prov.recaudacion > 0) {
+        const porcentaje = ((prov.recaudacion / totalRecaudacion) * 100).toFixed(2);
+        tbodyRecProv.innerHTML += `
+          <tr>
+            <td><strong>${prov.nombre}</strong> (${codigo})</td>
+            <td>$${formatNumber(Math.round(prov.recaudacion))}</td>
+            <td>${porcentaje}%</td>
+          </tr>
+        `;
+      }
+    }
+  }
+
+  if (tbodyProv && calc.provincias) {
+    tbodyProv.innerHTML = '';
+    const totalApuestas = calc.apuestasTotal || 1;
+    for (const [codigo, prov] of Object.entries(calc.provincias)) {
+      if (prov.apuestas > 0) {
+        const porcentaje = ((prov.apuestas / totalApuestas) * 100).toFixed(2);
+        tbodyProv.innerHTML += `
+          <tr>
+            <td><strong>${prov.nombre}</strong> (${codigo})</td>
+            <td>${formatNumber(prov.apuestas)}</td>
+            <td>${porcentaje}%</td>
+          </tr>
+        `;
+      }
+    }
+  }
+}
+
+function corregirPozoManualmente() {
+  const actual = document.getElementById('cp-pozo-arrastre').textContent.replace('$', '').replace(/\./g, '').replace(',', '.').trim();
+  const nuevo = prompt('Ingrese el monto del pozo de arrastre:', actual);
+  if (nuevo !== null) {
+    const monto = parseFloat(nuevo.replace(',', '.'));
+    if (!isNaN(monto)) {
+      document.getElementById('cp-pozo-arrastre').textContent = '$' + formatNumber(monto);
+      cpResultadosActuales.pozoArrastre = monto;
+      showToast('Pozo de arrastre actualizado localmente', 'success');
+    }
+  }
+}
+
 function formatNumber(num) {
   return (num || 0).toLocaleString('es-AR');
+}
+
+// Imprimir Reporte de Control Posterior (Escrutinio)
+async function imprimirReportePosterior() {
+  if (!cpstResultados) {
+    showToast('No hay resultados de escrutinio para imprimir', 'warning');
+    return;
+  }
+
+  showToast('Generando Reporte PDF...', 'info');
+
+  try {
+    const token = getToken();
+    const response = await fetch(`${API_BASE}/actas/control-posterior/generar`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${token}`
+      },
+      body: JSON.stringify({
+        tipoJuego: cpstJuegoSeleccionado,
+        numeroSorteo: cpstResultados.numeroSorteo || 'S/N',
+        fechaSorteo: cpstResultados.fechaSorteo || '',
+        resultado: cpstResultados
+      })
+    });
+
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.message || 'Error generando PDF');
+    }
+
+    const blob = await response.blob();
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `Acta_ControlPosterior_${cpstJuegoSeleccionado}_${new Date().toISOString().split('T')[0]}.pdf`;
+    document.body.appendChild(a);
+    a.click();
+    window.URL.revokeObjectURL(url);
+    document.body.removeChild(a);
+    
+    showToast('Reporte PDF generado correctamente', 'success');
+
+  } catch (error) {
+    console.error('Error:', error);
+    showToast('Error al generar el PDF: ' + error.message, 'error');
+  }
 }
 
 // Imprimir Reporte de Control Previo (PDF técnico)
@@ -703,7 +1292,7 @@ async function imprimirReporteCP() {
   
   try {
     const token = getToken();
-    const response = await fetch('/api/actas/control-previo/generar', {
+    const response = await fetch(`${API_BASE}/actas/control-previo/generar`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -787,6 +1376,8 @@ let cpstDatosControlPrevio = null;
 let cpstResultados = null;
 let cpstNumeroSorteo = '';
 let cpstModalidadSorteo = ''; // R=Previa, P=Primera, M=Matutina, V=Vespertina, N=Nocturna
+let cpstJuegoSeleccionado = 'Quiniela'; // 'Quiniela' o 'Poceada'
+let cpstExtractoPoceada = null; // {numeros: [8 nums], letras: [4 letras]}
 
 // Mapeo de códigos de modalidad a nombres
 const MODALIDADES_NOMBRE = {
@@ -798,6 +1389,333 @@ const MODALIDADES_NOMBRE = {
   'A': 'Anticipada',
   'U': 'Única'
 };
+
+// Combinaciones para apuestas múltiples de Poceada (cantidad de 8-combinaciones posibles)
+const COMBINACIONES_MULTIPLES_POCEADA = {
+  8: 1,
+  9: 9,
+  10: 45,
+  11: 165,
+  12: 495,
+  13: 1287,
+  14: 3003,
+  15: 6435
+};
+
+// Función para seleccionar el juego en Control Posterior
+function seleccionarJuegoPosterior(juego) {
+  cpstJuegoSeleccionado = juego;
+  
+  // Actualizar título
+  const titulo = document.getElementById('cpst-titulo');
+  const subtitulo = document.getElementById('cpst-subtitulo');
+  if (titulo) titulo.textContent = `Control Posterior - ${juego}`;
+  if (subtitulo) {
+    subtitulo.textContent = juego === 'Poceada' 
+      ? 'Escrutinio de ganadores por aciertos (6, 7 u 8)'
+      : 'Análisis de ganadores post-sorteo';
+  }
+  
+  // Actualizar estilos de las tarjetas de radio
+  document.querySelectorAll('input[name="cpst-juego"]').forEach(radio => {
+    const card = radio.closest('.radio-card');
+    if (card) {
+      if (radio.value === juego) {
+        card.style.borderColor = 'var(--primary)';
+        card.style.background = 'rgba(37, 99, 235, 0.05)';
+        radio.checked = true;
+      } else {
+        card.style.borderColor = 'var(--border-color)';
+        card.style.background = 'transparent';
+      }
+    }
+  });
+  
+  // Mostrar/ocultar secciones según el juego
+  const extractoQuiniela = document.getElementById('cpst-extracto-quiniela-card');
+  const extractoPoceada = document.getElementById('cpst-extracto-poceada-card');
+  const detalleQuiniela = document.getElementById('cpst-detalle-quiniela');
+  const detallePoceada = document.getElementById('cpst-detalle-poceada');
+  
+  if (juego === 'Quiniela') {
+    extractoQuiniela?.classList.remove('hidden');
+    extractoPoceada?.classList.add('hidden');
+    detalleQuiniela?.classList.remove('hidden');
+    detallePoceada?.classList.add('hidden');
+  } else {
+    extractoQuiniela?.classList.add('hidden');
+    extractoPoceada?.classList.remove('hidden');
+    detalleQuiniela?.classList.add('hidden');
+    detallePoceada?.classList.remove('hidden');
+  }
+  
+  // Actualizar hint de modalidad
+  const hintModalidad = document.getElementById('cpst-hint-modalidad');
+  if (hintModalidad) {
+    hintModalidad.textContent = juego === 'Poceada'
+      ? '💡 Para Poceada solo se procesarán registros de tipo POC'
+      : '💡 Al cargar XMLs, solo se procesarán los de la modalidad detectada';
+  }
+  
+  // Limpiar resultados anteriores
+  document.getElementById('cpst-resultados')?.classList.add('hidden');
+  
+  console.log(`Control Posterior: Juego seleccionado = ${juego}`);
+}
+
+// Funciones para cambiar tabs de extracto en Poceada
+function cambiarTabExtractoPoceada(tab) {
+  document.querySelectorAll('#cpst-extracto-poceada-card .tab').forEach(t => t.classList.remove('active'));
+  document.querySelectorAll('#cpst-extracto-poceada-card .tab-content').forEach(c => c.classList.add('hidden'));
+  
+  document.querySelector(`#cpst-extracto-poceada-card .tab[data-tab="poc-ext-${tab}"]`)?.classList.add('active');
+  document.getElementById(`tab-poc-ext-${tab}`)?.classList.remove('hidden');
+  
+  // Si es tab manual, generar los inputs dinámicamente
+  if (tab === 'manual') {
+    generarInputsPoceadaManual();
+  }
+}
+
+// Generar inputs dinámicos para entrada manual de Poceada (20 números + 4 letras)
+function generarInputsPoceadaManual() {
+  const numerosGrid = document.getElementById('cpst-poceada-numeros-grid');
+  const letrasGrid = document.getElementById('cpst-poceada-letras-grid');
+  
+  // Generar 20 inputs de números si no existen
+  if (numerosGrid && numerosGrid.children.length === 0) {
+    numerosGrid.innerHTML = '';
+    for (let i = 1; i <= 20; i++) {
+      const div = document.createElement('div');
+      div.className = 'form-group';
+      div.style.margin = '0';
+      div.innerHTML = `
+        <label style="font-size: 0.7rem; text-align: center; display: block;">${i}°</label>
+        <input type="number" min="0" max="99" class="form-control text-center poceada-numero" placeholder="00" style="font-weight: bold; font-size: 0.9rem; padding: 0.3rem;">
+      `;
+      numerosGrid.appendChild(div);
+    }
+  }
+  
+  // Generar 4 inputs de letras si no existen
+  if (letrasGrid && letrasGrid.children.length === 0) {
+    letrasGrid.innerHTML = '';
+    for (let i = 1; i <= 4; i++) {
+      const div = document.createElement('div');
+      div.className = 'form-group';
+      div.style.margin = '0';
+      div.innerHTML = `
+        <label style="font-size: 0.75rem; text-align: center; display: block;">${i}°</label>
+        <input type="text" maxlength="1" class="form-control text-center poceada-letra" placeholder="${String.fromCharCode(64 + i)}" style="font-weight: bold; text-transform: uppercase;">
+      `;
+      letrasGrid.appendChild(div);
+    }
+  }
+}
+
+// Cargar extracto de Poceada desde XML
+async function cargarExtractoPoceadaXML(input) {
+  if (!input.files.length) return;
+  
+  const file = input.files[0];
+  const text = await file.text();
+  procesarXMLExtractoPoceada(text);
+}
+
+function cargarExtractoPoceadaDesdeTextoXML() {
+  const text = document.getElementById('cpst-poceada-xml-texto')?.value;
+  if (!text || text.trim() === '') {
+    showToast('Pegue el contenido XML del extracto', 'warning');
+    return;
+  }
+  procesarXMLExtractoPoceada(text);
+}
+
+function procesarXMLExtractoPoceada(xmlText) {
+  try {
+    console.log('Procesando XML Poceada...');
+    
+    const parser = new DOMParser();
+    const xmlDoc = parser.parseFromString(xmlText, 'text/xml');
+    
+    // Verificar errores de parseo
+    const parseError = xmlDoc.querySelector('parsererror');
+    if (parseError) {
+      throw new Error('XML mal formado');
+    }
+    
+    let numeros = [];
+    let letras = [];
+    
+    // ======= FORMATO OFICIAL LOTERÍA: <Suerte> con <N01> a <N20> y <Letras> =======
+    const suerteEl = xmlDoc.querySelector('Suerte');
+    if (suerteEl) {
+      // Extraer los 20 números del sorteo (N01 a N20)
+      for (let i = 1; i <= 20; i++) {
+        const tag = i < 10 ? `N0${i}` : `N${i}`;
+        const el = suerteEl.querySelector(tag);
+        if (el && el.textContent.trim()) {
+          numeros.push(parseInt(el.textContent.trim()));
+        }
+      }
+      
+      // Extraer las 4 letras (separadas por espacio)
+      const letrasEl = suerteEl.querySelector('Letras');
+      if (letrasEl) {
+        letras = letrasEl.textContent.trim().split(/\s+/).map(l => l.toUpperCase());
+      }
+    }
+    
+    // ======= FORMATO ALTERNATIVO: Tags individuales NUMERO_1, etc. =======
+    if (numeros.length < 20) {
+      for (let i = 1; i <= 20; i++) {
+        const selectors = [`NUMERO_${i}`, `numero_${i}`, `Numero${i}`, `NUMERO${i}`];
+        for (const sel of selectors) {
+          const el = xmlDoc.querySelector(sel);
+          if (el && el.textContent.trim()) {
+            numeros.push(parseInt(el.textContent.trim()) || 0);
+            break;
+          }
+        }
+      }
+    }
+    
+    if (letras.length < 4) {
+      const letrasEl = xmlDoc.querySelector('LETRAS, letras, Letras');
+      if (letrasEl) {
+        const lets = letrasEl.textContent.trim().split(/[\s,]+/).filter(l => /^[A-Pa-p]$/.test(l));
+        if (lets.length >= 4) letras = lets.slice(0, 4).map(l => l.toUpperCase());
+      }
+    }
+    
+    // Extraer info adicional del sorteo
+    const sorteoNum = xmlDoc.querySelector('Sorteo')?.textContent?.trim() || '';
+    const fechaSorteo = xmlDoc.querySelector('FechaSorteo')?.textContent?.trim() || '';
+    
+    console.log('Sorteo:', sorteoNum, 'Fecha:', fechaSorteo);
+    console.log('Números del sorteo (20):', numeros);
+    console.log('Letras del sorteo (4):', letras);
+    
+    if (numeros.length < 20) {
+      showToast(`Se encontraron solo ${numeros.length} números (se esperan 20)`, 'error');
+      return;
+    }
+    
+    if (letras.length < 4) {
+      showToast(`Se encontraron solo ${letras.length} letras (se esperan 4)`, 'error');
+      return;
+    }
+    
+    // Guardar los 20 números y 4 letras del sorteo
+    cpstExtractoPoceada = { 
+      numeros: numeros.slice(0, 20), 
+      letras: letras.slice(0, 4),
+      sorteo: sorteoNum,
+      fecha: fechaSorteo
+    };
+    
+    mostrarPreviewExtractoPoceada();
+    showToast(`Extracto Poceada cargado - Sorteo ${sorteoNum}`, 'success');
+    
+  } catch (error) {
+    console.error('Error procesando XML Poceada:', error);
+    console.error('XML recibido:', xmlText);
+    showToast('Error al procesar el XML: ' + error.message, 'error');
+  }
+}
+
+// Confirmar extracto de Poceada desde entrada manual
+function confirmarExtractoPoceada() {
+  const numerosInputs = document.querySelectorAll('#cpst-poceada-numeros-grid .poceada-numero');
+  const letrasInputs = document.querySelectorAll('#cpst-poceada-letras-grid .poceada-letra');
+  
+  const numeros = [];
+  const letras = [];
+  let hasError = false;
+  
+  numerosInputs.forEach((input, i) => {
+    const val = parseInt(input.value);
+    if (isNaN(val) || val < 0 || val > 99) {
+      if (!hasError) {
+        showToast(`Número ${i + 1} inválido (debe ser 00-99)`, 'error');
+        hasError = true;
+      }
+      return;
+    }
+    numeros.push(val);
+  });
+  
+  if (hasError) return;
+  
+  if (numeros.length < 20) {
+    showToast(`Debe ingresar los 20 números del sorteo (tiene ${numeros.length})`, 'warning');
+    return;
+  }
+  
+  letrasInputs.forEach((input, i) => {
+    const val = (input.value || '').toUpperCase();
+    if (!val || !/^[A-P]$/.test(val)) {
+      if (!hasError) {
+        showToast(`Letra ${i + 1} inválida (debe ser A-P)`, 'error');
+        hasError = true;
+      }
+      return;
+    }
+    letras.push(val);
+  });
+  
+  if (hasError) return;
+  
+  if (letras.length < 4) {
+    showToast('Debe ingresar las 4 letras del sorteo', 'warning');
+    return;
+  }
+  
+  cpstExtractoPoceada = { numeros, letras };
+  mostrarPreviewExtractoPoceada();
+  showToast('Extracto Poceada confirmado (20 números + 4 letras)', 'success');
+}
+
+function mostrarPreviewExtractoPoceada() {
+  const preview = document.getElementById('cpst-poceada-extracto-preview');
+  const numerosSpan = document.getElementById('cpst-poceada-numeros-preview');
+  const letrasSpan = document.getElementById('cpst-poceada-letras-preview');
+  
+  if (cpstExtractoPoceada && preview) {
+    preview.classList.remove('hidden');
+    // Mostrar los 20 números en 2 filas de 10
+    const nums = cpstExtractoPoceada.numeros.map(n => n.toString().padStart(2, '0'));
+    const fila1 = nums.slice(0, 10).join(' - ');
+    const fila2 = nums.slice(10, 20).join(' - ');
+    numerosSpan.innerHTML = `${fila1}<br>${fila2}`;
+    letrasSpan.textContent = cpstExtractoPoceada.letras.join(' - ');
+    
+    // Mostrar info del sorteo si existe
+    if (cpstExtractoPoceada.sorteo) {
+      const infoExtra = preview.querySelector('.sorteo-info') || document.createElement('div');
+      infoExtra.className = 'sorteo-info';
+      infoExtra.innerHTML = `<small style="color: var(--text-muted);">Sorteo: ${cpstExtractoPoceada.sorteo} - Fecha: ${cpstExtractoPoceada.fecha || ''}</small>`;
+      if (!preview.querySelector('.sorteo-info')) {
+        preview.appendChild(infoExtra);
+      }
+    }
+  }
+}
+
+function limpiarExtractoPoceada() {
+  cpstExtractoPoceada = null;
+  
+  // Limpiar inputs
+  document.querySelectorAll('#cpst-poceada-numeros-grid .poceada-numero').forEach(i => i.value = '');
+  document.querySelectorAll('#cpst-poceada-letras-grid .poceada-letra').forEach(i => i.value = '');
+  document.getElementById('cpst-poceada-xml-texto').value = '';
+  document.getElementById('cpst-poceada-extracto-xml').value = '';
+  
+  // Ocultar preview
+  document.getElementById('cpst-poceada-extracto-preview')?.classList.add('hidden');
+  
+  showToast('Extracto Poceada limpiado', 'info');
+}
 
 function initControlPosterior() {
   // Generar inputs de números
@@ -828,32 +1746,49 @@ function cargarDatosControlPrevio() {
     return;
   }
   
-  // Usar los datos del control previo
-  cpstDatosControlPrevio = cpResultadosActuales.datosCalculados;
-  cpstNumeroSorteo = cpstDatosControlPrevio.numeroSorteo;
+  // Detectar tipo de juego y seleccionar automáticamente
+  const tipoJuegoDetectado = cpResultadosActuales.tipoJuego || 'Quiniela';
+  if (tipoJuegoDetectado === 'Poceada') {
+    seleccionarJuegoPosterior('Poceada');
+  } else {
+    seleccionarJuegoPosterior('Quiniela');
+  }
   
-  // Detectar modalidad predominante del sorteo
+  // Usar los datos del control previo - INCLUIR datosOficiales para los premios
+  cpstDatosControlPrevio = {
+    ...(cpResultadosActuales.datosCalculados || cpResultadosActuales.resumen || {}),
+    datosOficiales: cpResultadosActuales.datosOficiales || null,
+    comparacion: cpResultadosActuales.comparacion || null
+  };
+  cpstNumeroSorteo = cpstDatosControlPrevio.numeroSorteo || cpResultadosActuales.sorteo || '';
+  
+  // Detectar modalidad predominante del sorteo (para Quiniela)
   cpstModalidadSorteo = detectarModalidadSorteo(cpstDatosControlPrevio.tiposSorteo);
   
-  // NUEVO: Cargar los registros parseados del TXT
-  cpstRegistrosNTF = cpRegistrosNTF || [];
+  // Cargar los registros parseados del TXT
+  cpstRegistrosNTF = cpRegistrosNTF || cpResultadosActuales.registrosNTF || [];
   
   // Mostrar datos cargados
   document.getElementById('cpst-datos-cargados').classList.remove('hidden');
   document.getElementById('cpst-sorteo').textContent = cpstNumeroSorteo;
-  document.getElementById('cpst-registros').textContent = formatNumber(cpstDatosControlPrevio.registros);
-  document.getElementById('cpst-recaudacion').textContent = '$' + formatNumber(cpstDatosControlPrevio.recaudacion);
+  document.getElementById('cpst-registros').textContent = formatNumber(cpstDatosControlPrevio.registros || 0);
+  document.getElementById('cpst-recaudacion').textContent = '$' + formatNumber(cpstDatosControlPrevio.recaudacion || 0);
   
-  // Mostrar modalidad detectada
-  const modalidadNombre = MODALIDADES_NOMBRE[cpstModalidadSorteo] || cpstModalidadSorteo;
-  const modalidadEl = document.getElementById('cpst-modalidad');
-  if (modalidadEl) {
-    modalidadEl.textContent = modalidadNombre;
+  // Mostrar juego seleccionado
+  const juegoBadge = document.getElementById('cpst-juego-badge');
+  if (juegoBadge) {
+    juegoBadge.textContent = cpstJuegoSeleccionado;
+  }
+  
+  // Mostrar premios si es Poceada y hay datos oficiales
+  if (tipoJuegoDetectado === 'Poceada' && cpResultadosActuales.datosOficiales?.premios) {
+    const premios = cpResultadosActuales.datosOficiales.premios;
+    console.log('Premios del Control Previo:', premios);
   }
   
   // Mostrar cuántos registros reales hay
   const cantRegistros = cpstRegistrosNTF.length;
-  showToast(`Datos cargados: ${formatNumber(cantRegistros)} líneas. Modalidad: ${modalidadNombre}. Al cargar XMLs solo se procesarán los de esta modalidad.`, 'success');
+  showToast(`Datos cargados: ${formatNumber(cantRegistros)} registros. Juego: ${cpstJuegoSeleccionado}. Al ejecutar escrutinio se procesarán solo registros de este juego.`, 'success');
 }
 
 // Detectar la modalidad predominante del sorteo
@@ -880,14 +1815,30 @@ async function cargarZipPosterior(input) {
   if (!input.files.length) return;
   
   const file = input.files[0];
-  showToast('Procesando archivo ZIP...', 'info');
+  
+  // Detectar tipo de juego por nombre del archivo
+  const juegoConfig = detectarTipoJuego(file.name);
+  if (!juegoConfig) {
+    showToast('No se pudo detectar el tipo de juego. El nombre debe empezar con QNL (Quiniela) o PCD (Poceada)', 'error');
+    return;
+  }
+  
+  // Seleccionar el juego automáticamente
+  seleccionarJuegoPosterior(juegoConfig.nombre);
+  
+  showToast(`Procesando archivo ZIP de ${juegoConfig.nombre}...`, 'info');
   
   try {
     const token = getToken();
     const formData = new FormData();
     formData.append('archivo', file);
     
-    const response = await fetch('/api/control-previo/quiniela/procesar', {
+    // Usar el endpoint correcto según el tipo de juego
+    const endpoint = juegoConfig.nombre === 'Poceada' 
+      ? `${API_BASE}/control-previo/poceada/procesar`
+      : `${API_BASE}/control-previo/quiniela/procesar`;
+    
+    const response = await fetch(endpoint, {
       method: 'POST',
       headers: { 'Authorization': `Bearer ${token}` },
       body: formData
@@ -897,10 +1848,11 @@ async function cargarZipPosterior(input) {
     if (!response.ok) throw new Error(data.message);
     
     cpResultadosActuales = data.data;
+    cpResultadosActuales.tipoJuego = juegoConfig.nombre; // Guardar tipo detectado
     
-    // NUEVO: Guardar los registros parseados del TXT
-    cpRegistrosNTF = data.data.registrosNTF || [];
-    console.log(`ZIP cargado: ${cpRegistrosNTF.length} registros parseados del TXT`);
+    // Guardar los registros parseados del TXT
+    cpRegistrosNTF = data.data.registrosNTF || data.data.registros || [];
+    console.log(`ZIP ${juegoConfig.nombre} cargado: ${cpRegistrosNTF.length} registros parseados del TXT`);
     
     cargarDatosControlPrevio();
     
@@ -1467,7 +2419,7 @@ async function cargarExtractoPDF(input) {
     formData.append('archivo', file);
     
     const token = getToken();
-    const response = await fetch('/api/control-posterior/quiniela/procesar-pdf', {
+    const response = await fetch(`${API_BASE}/control-posterior/quiniela/procesar-pdf`, {
       method: 'POST',
       headers: { 'Authorization': `Bearer ${token}` },
       body: formData
@@ -1696,9 +2648,17 @@ function eliminarExtracto(idx) {
 }
 
 async function ejecutarEscrutinio() {
-  if (cpstExtractos.length === 0) {
-    showToast('Cargue al menos un extracto', 'warning');
-    return;
+  // Validaciones según el juego
+  if (cpstJuegoSeleccionado === 'Quiniela') {
+    if (cpstExtractos.length === 0) {
+      showToast('Cargue al menos un extracto', 'warning');
+      return;
+    }
+  } else if (cpstJuegoSeleccionado === 'Poceada') {
+    if (!cpstExtractoPoceada || cpstExtractoPoceada.numeros.length < 20 || cpstExtractoPoceada.letras.length < 4) {
+      showToast('Cargue el extracto de Poceada (20 números del sorteo + 4 letras)', 'warning');
+      return;
+    }
   }
   
   if (!cpstDatosControlPrevio) {
@@ -1715,30 +2675,57 @@ async function ejecutarEscrutinio() {
   // Obtener registros anulados del control previo
   const registrosAnulados = cpstDatosControlPrevio.registrosAnulados || 0;
   
-  showToast(`Ejecutando escrutinio: ${formatNumber(cpstRegistrosNTF.length)} válidos + ${formatNumber(registrosAnulados)} anulados...`, 'info');
+  showToast(`Ejecutando escrutinio ${cpstJuegoSeleccionado}: ${formatNumber(cpstRegistrosNTF.length)} válidos + ${formatNumber(registrosAnulados)} anulados...`, 'info');
   
   try {
     const token = getToken();
-    const response = await fetch('/api/control-posterior/quiniela/escrutinio', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${token}`
-      },
-      body: JSON.stringify({
-        registrosNTF: cpstRegistrosNTF,
-        extractos: cpstExtractos,
-        datosControlPrevio: cpstDatosControlPrevio,
-        registrosAnulados: registrosAnulados
-      })
-    });
     
-    const data = await response.json();
-    if (!response.ok) throw new Error(data.message);
-    
-    cpstResultados = data.data;
-    mostrarResultadosEscrutinio(cpstResultados);
-    showToast('Escrutinio completado', 'success');
+    if (cpstJuegoSeleccionado === 'Poceada') {
+      // Ejecutar escrutinio de Poceada
+      const response = await fetch(`${API_BASE}/control-posterior/poceada/escrutinio`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({
+          registrosNTF: cpstRegistrosNTF,
+          extracto: cpstExtractoPoceada,
+          datosControlPrevio: cpstDatosControlPrevio,
+          registrosAnulados: registrosAnulados
+        })
+      });
+      
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.message);
+      
+      cpstResultados = data.data;
+      mostrarResultadosEscrutinioPoceada(cpstResultados);
+      showToast('Escrutinio Poceada completado', 'success');
+      
+    } else {
+      // Ejecutar escrutinio de Quiniela (código existente)
+      const response = await fetch(`${API_BASE}/control-posterior/quiniela/escrutinio`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({
+          registrosNTF: cpstRegistrosNTF,
+          extractos: cpstExtractos,
+          datosControlPrevio: cpstDatosControlPrevio,
+          registrosAnulados: registrosAnulados
+        })
+      });
+      
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.message);
+      
+      cpstResultados = data.data;
+      mostrarResultadosEscrutinio(cpstResultados);
+      showToast('Escrutinio completado', 'success');
+    }
     
   } catch (error) {
     console.error('Error:', error);
@@ -1746,11 +2733,272 @@ async function ejecutarEscrutinio() {
   }
 }
 
+// Mostrar resultados específicos de Poceada
+
+function getTextoGanadores(cantidad) {
+  if (!cantidad || cantidad === 0) return 'VACANTE';
+  if (cantidad === 1) return 'UN (1) GANADOR';
+  const basicos = {
+    2: 'DOS', 3: 'TRES', 4: 'CUATRO', 5: 'CINCO', 
+    6: 'SEIS', 7: 'SIETE', 8: 'OCHO', 9: 'NUEVE', 10: 'DIEZ'
+  };
+  if (basicos[cantidad]) return `${basicos[cantidad]} (${cantidad}) GANADORES`;
+  return `${cantidad} GANADORES`;
+}
+
+function mostrarResultadosEscrutinioPoceada(resultado) {
+  document.getElementById('cpst-resultados').classList.remove('hidden');
+  
+  // Ocultar tabla de Quiniela, mostrar tabla de Poceada
+  document.getElementById('cpst-detalle-quiniela')?.classList.add('hidden');
+  document.getElementById('cpst-detalle-poceada')?.classList.remove('hidden');
+  
+  // Resumen general
+  document.getElementById('cpst-total-ganadores').textContent = formatNumber(resultado.totalGanadores);
+  document.getElementById('cpst-total-premios').textContent = '$' + formatNumber(resultado.totalPremios);
+  
+  // Tasa de devolución
+  if (resultado.comparacion && resultado.comparacion.recaudacion.controlPrevio > 0) {
+    const tasa = (resultado.totalPremios / resultado.comparacion.recaudacion.controlPrevio * 100).toFixed(2);
+    document.getElementById('cpst-tasa-devolucion').textContent = tasa + '%';
+  }
+  
+  // Tabla comparación (igual que Quiniela)
+  if (resultado.comparacion) {
+    const tbody = document.querySelector('#cpst-tabla-comparacion tbody');
+    tbody.innerHTML = '';
+    
+    const reg = resultado.comparacion.registros;
+    const apu = resultado.comparacion.apuestas;
+    const rec = resultado.comparacion.recaudacion;
+    
+    tbody.innerHTML += `
+      <tr>
+        <td>Registros (válidos)</td>
+        <td>${formatNumber(reg.controlPrevio)}</td>
+        <td>${formatNumber(reg.controlPosterior)}</td>
+        <td class="${reg.coincide ? 'text-success' : 'text-danger'}">${reg.coincide ? '✓ OK' : '✗ DIFERENCIA'}</td>
+      </tr>
+    `;
+    
+    if (reg.anulados > 0) {
+      tbody.innerHTML += `
+        <tr style="background: var(--surface-hover);">
+          <td><small class="text-muted">↳ Anulados (no escrutados)</small></td>
+          <td><small class="text-muted">-</small></td>
+          <td><small class="text-muted">${formatNumber(reg.anulados)}</small></td>
+          <td><small class="text-muted">info</small></td>
+        </tr>
+      `;
+    }
+    
+    tbody.innerHTML += `
+      <tr>
+        <td>Apuestas</td>
+        <td>${formatNumber(apu.controlPrevio)}</td>
+        <td>${formatNumber(apu.controlPosterior)}</td>
+        <td class="${apu.coincide ? 'text-success' : 'text-danger'}">${apu.coincide ? '✓ OK' : '✗ DIFERENCIA'}</td>
+      </tr>
+      <tr>
+        <td>Recaudación</td>
+        <td>$${formatNumber(rec.controlPrevio)}</td>
+        <td>$${formatNumber(rec.controlPosterior)}</td>
+        <td class="${rec.coincide ? 'text-success' : 'text-danger'}">${rec.coincide ? '✓ OK' : '✗ DIFERENCIA'}</td>
+      </tr>
+    `;
+  }
+  
+  // Tabla de detalle por nivel de aciertos
+  const niveles = resultado.porNivel || {};
+  
+  // 8 aciertos (Primer Premio)
+  const n8 = niveles[8] || { ganadores: 0, premioUnitario: 0, totalPremios: 0, pozoVacante: 0 };
+  const textNo8 = n8.ganadoresTexto || getTextoGanadores(n8.ganadores);
+
+  document.getElementById('cpst-poc-gan-8').innerHTML = `${formatNumber(n8.ganadores)}<br><small class="text-muted" style="font-size: 0.7em;">${textNo8}</small>`;
+  document.getElementById('cpst-poc-premio-8').textContent = '$' + formatNumber(n8.premioUnitario);
+  document.getElementById('cpst-poc-total-8').textContent = '$' + formatNumber(n8.totalPremios);
+  document.getElementById('cpst-poc-vacante-8').textContent = n8.ganadores === 0 ? '$' + formatNumber(n8.pozoVacante) : '-';
+  
+  // 7 aciertos (Segundo Premio)
+  const n7 = niveles[7] || { ganadores: 0, premioUnitario: 0, totalPremios: 0, pozoVacante: 0 };
+  const textNo7 = n7.ganadoresTexto || getTextoGanadores(n7.ganadores);
+
+  document.getElementById('cpst-poc-gan-7').innerHTML = `${formatNumber(n7.ganadores)}<br><small class="text-muted" style="font-size: 0.7em;">${textNo7}</small>`;
+  document.getElementById('cpst-poc-premio-7').textContent = '$' + formatNumber(n7.premioUnitario);
+  document.getElementById('cpst-poc-total-7').textContent = '$' + formatNumber(n7.totalPremios);
+  document.getElementById('cpst-poc-vacante-7').textContent = n7.ganadores === 0 ? '$' + formatNumber(n7.pozoVacante) : '-';
+  
+  // 6 aciertos (Tercer Premio)
+  const n6 = niveles[6] || { ganadores: 0, premioUnitario: 0, totalPremios: 0, pozoVacante: 0 };
+  const textNo6 = n6.ganadoresTexto || getTextoGanadores(n6.ganadores);
+
+  document.getElementById('cpst-poc-gan-6').innerHTML = `${formatNumber(n6.ganadores)}<br><small class="text-muted" style="font-size: 0.7em;">${textNo6}</small>`;
+  document.getElementById('cpst-poc-premio-6').textContent = '$' + formatNumber(n6.premioUnitario);
+  document.getElementById('cpst-poc-total-6').textContent = '$' + formatNumber(n6.totalPremios);
+  document.getElementById('cpst-poc-vacante-6').textContent = n6.ganadores === 0 ? '$' + formatNumber(n6.pozoVacante) : '-';
+  
+  // Estímulo Agente (Agenciero)
+  // Se inserta dinámicamente si no existe, o se actualiza
+  const tablaBody = document.querySelector('#cpst-tabla-poceada tbody');
+  
+  // Eliminar fila de agenciero anterior si existe para evitar duplicados al re-ejecutar
+  const filaAgencieroOld = document.getElementById('cpst-poc-row-agenciero');
+  if (filaAgencieroOld) filaAgencieroOld.remove();
+  
+  const agData = resultado.agenciero || { ganadores: 0, premioUnitario: 0, totalPremios: 0, pozoVacante: 0 };
+  const textAg = agData.ganadoresTexto || getTextoGanadores(agData.ganadores);
+
+  // Insertar fila de estímulo después del 1er premio (o al final)
+  const filaAgenciero = document.createElement('tr');
+  filaAgenciero.id = 'cpst-poc-row-agenciero';
+  filaAgenciero.style.background = 'var(--surface-hover)';
+  
+  let agencieroDetalle = '';
+  if (agData.ganadores > 0 && agData.detalles && agData.detalles.length > 0) {
+    const agencias = agData.detalles.map(d => `<span class="badge badge-info">${d.ctaCte || d.agencia}</span>`).join(' ');
+    agencieroDetalle = `<div style="margin-top: 4px; font-size: 0.8em;">Cta Cte: ${agencias}</div>`;
+  }
+  
+  filaAgenciero.innerHTML = `
+    <td><span class="badge badge-info">ESTÍMULO AGENTE</span></td>
+    <td><strong>Ag. Vendedor</strong></td>
+    <td>
+      ${formatNumber(agData.ganadores)}<br>
+      <small class="text-muted" style="font-size: 0.7em;">${textAg}</small>
+      ${agencieroDetalle}
+    </td>
+    <td>$${formatNumber(agData.premioUnitario)}</td>
+    <td>$${formatNumber(agData.totalPremios)}</td>
+    <td>0.5%</td>
+    <td>${agData.pozoVacante > 0 ? '$' + formatNumber(agData.pozoVacante) : '-'}</td>
+  `;
+  
+  // Insertar después de la fila nivel 8 (Primer Premio)
+  const filaNivel8 = document.querySelector('#cpst-tabla-poceada tbody .nivel-8');
+  if (filaNivel8 && filaNivel8.nextSibling) {
+    tablaBody.insertBefore(filaAgenciero, filaNivel8.nextSibling);
+  } else {
+    tablaBody.appendChild(filaAgenciero);
+  }
+
+  // Premio de Letras (Cuatro de Cuatro / Letras Coincidentes)
+  // Eliminar fila de letras anterior si existe
+  const filaLetrasOld = document.getElementById('cpst-poc-row-letras');
+  if (filaLetrasOld) filaLetrasOld.remove();
+
+  const letData = niveles['letras'] || { ganadores: 0, premioUnitario: 0, totalPremios: 0, pozoVacante: 0 };
+  const textLet = letData.ganadoresTexto || getTextoGanadores(letData.ganadores);
+
+  const filaLetras = document.createElement('tr');
+  filaLetras.id = 'cpst-poc-row-letras';
+  filaLetras.className = 'nivel-letras';
+  filaLetras.innerHTML = `
+    <td><span class="badge badge-success">🔡 PREMIO LETRAS</span></td>
+    <td><strong>4 de 4</strong></td>
+    <td>
+      ${formatNumber(letData.ganadores)}<br>
+      <small class="text-muted" style="font-size: 0.7em;">${textLet}</small>
+    </td>
+    <td>$${formatNumber(letData.premioUnitario)}</td>
+    <td>$${formatNumber(letData.totalPremios)}</td>
+    <td>-</td>
+    <td>${letData.ganadores === 0 && letData.pozoVacante > 0 ? '$' + formatNumber(letData.pozoVacante) : '-'}</td>
+  `;
+
+  // Insertar después del 3er premio
+  const filaNivel6 = document.querySelector('#cpst-tabla-poceada tbody .nivel-6');
+  if (filaNivel6 && filaNivel6.nextSibling) {
+    tablaBody.insertBefore(filaLetras, filaNivel6.nextSibling);
+  } else {
+    tablaBody.appendChild(filaLetras);
+  }
+
+  // Totales
+  const totalGanadores = n8.ganadores + n7.ganadores + n6.ganadores + (letData ? letData.ganadores : 0);
+  const totalPremios = n8.totalPremios + n7.totalPremios + n6.totalPremios + (letData ? letData.totalPremios : 0);
+  const totalVacante = (n8.ganadores === 0 ? n8.pozoVacante : 0) + (n7.ganadores === 0 ? n7.pozoVacante : 0) + (n6.ganadores === 0 ? n6.pozoVacante : 0) + (letData && letData.ganadores === 0 ? letData.pozoVacante : 0);
+  
+  document.getElementById('cpst-poc-gan-total').textContent = formatNumber(totalGanadores);
+  document.getElementById('cpst-poc-total-premios').textContent = '$' + formatNumber(totalPremios);
+  document.getElementById('cpst-poc-vacante-total').textContent = '$' + formatNumber(totalVacante);
+  
+  // Tabla de desglose por cantidad de números jugados
+  const porMultiples = resultado.porCantidadNumeros || {};
+  const tbodyMultiples = document.getElementById('cpst-tabla-poceada-multiples-body');
+  tbodyMultiples.innerHTML = '';
+  
+  for (let cant = 8; cant <= 15; cant++) {
+    const datos = porMultiples[cant] || { combinaciones: COMBINACIONES_MULTIPLES_POCEADA[cant] || 0, registros: 0, gan8: 0, gan7: 0, gan6: 0, totalPremios: 0 };
+    if (datos.registros > 0) {
+      tbodyMultiples.innerHTML += `
+        <tr>
+          <td><strong>${cant} números</strong></td>
+          <td>${formatNumber(datos.combinaciones)} comb.</td>
+          <td>${formatNumber(datos.registros)}</td>
+          <td>${datos.gan8 > 0 ? `<span class="badge badge-warning">${datos.gan8}</span>` : '-'}</td>
+          <td>${datos.gan7 > 0 ? `<span class="badge badge-primary">${datos.gan7}</span>` : '-'}</td>
+          <td>${datos.gan6 > 0 ? `<span class="badge badge-secondary">${datos.gan6}</span>` : '-'}</td>
+          <td>$${formatNumber(datos.totalPremios)}</td>
+        </tr>
+      `;
+    }
+  }
+  
+  if (tbodyMultiples.innerHTML === '') {
+    tbodyMultiples.innerHTML = '<tr><td colspan="7" class="text-muted">No hay registros de apuestas múltiples</td></tr>';
+  }
+  
+  // Actualizar detalle por tipo (ocultar el de Quiniela)
+  const premiosXML = resultado.premiosXML || {};
+  document.getElementById('cpst-detalle-tipos').innerHTML = `
+    <div class="alert" style="background: var(--bg-input); padding: 1rem; border-radius: 8px; margin-bottom: 1rem;">
+      <h4 style="margin-bottom: 0.5rem;"><i class="fas fa-info-circle"></i> Extracto Utilizado</h4>
+      <div style="display: flex; gap: 2rem; flex-wrap: wrap; margin-top: 0.5rem;">
+        <div>
+          <strong>Números (20):</strong>
+          <span style="font-family: monospace; font-size: 0.95rem; color: var(--primary);">
+            ${cpstExtractoPoceada.numeros.slice(0, 10).map(n => n.toString().padStart(2, '0')).join(' - ')}<br>
+            ${cpstExtractoPoceada.numeros.slice(10, 20).map(n => n.toString().padStart(2, '0')).join(' - ')}
+          </span>
+        </div>
+        <div>
+          <strong>Letras:</strong>
+          <span style="font-family: monospace; font-size: 1.1rem; color: var(--primary);">
+            ${cpstExtractoPoceada.letras.join(' - ')}
+          </span>
+        </div>
+      </div>
+    </div>
+    <div class="alert" style="background: var(--bg-secondary); padding: 1rem; border-radius: 8px; border-left: 4px solid var(--warning);">
+      <h4 style="margin-bottom: 0.5rem;"><i class="fas fa-trophy"></i> Premios del XML (Control Previo)</h4>
+      <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 1rem; margin-top: 0.5rem;">
+        <div>
+          <small class="text-muted">Primer Premio (8 aciertos)</small>
+          <div style="font-size: 1.2rem; font-weight: bold; color: var(--warning);">$${formatNumber(premiosXML.primerPremio || 0)}</div>
+        </div>
+        <div>
+          <small class="text-muted">Segundo Premio (7 aciertos)</small>
+          <div style="font-size: 1.2rem; font-weight: bold; color: var(--primary);">$${formatNumber(premiosXML.segundoPremio || 0)}</div>
+        </div>
+        <div>
+          <small class="text-muted">Tercer Premio (6 aciertos)</small>
+          <div style="font-size: 1.2rem; font-weight: bold; color: var(--text-secondary);">$${formatNumber(premiosXML.tercerPremio || 0)}</div>
+        </div>
+      </div>
+    </div>
+  `;
+}
+
 // La función generarRegistrosSimulados fue removida
 // Ahora se usan los registros reales parseados del archivo TXT (cpstRegistrosNTF)
 
 function mostrarResultadosEscrutinio(resultado) {
   document.getElementById('cpst-resultados').classList.remove('hidden');
+  
+  // Mostrar tabla de Quiniela, ocultar tabla de Poceada
+  document.getElementById('cpst-detalle-quiniela')?.classList.remove('hidden');
+  document.getElementById('cpst-detalle-poceada')?.classList.add('hidden');
   
   // Resumen
   document.getElementById('cpst-total-ganadores').textContent = formatNumber(resultado.totalGanadores);
@@ -1950,7 +3198,7 @@ async function descargarExcel() {
   
   try {
     const token = getToken();
-    const response = await fetch('/api/control-posterior/quiniela/excel', {
+    const response = await fetch(`${API_BASE}/control-posterior/quiniela/excel`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -1979,42 +3227,7 @@ async function descargarExcel() {
 }
 
 async function generarPDFControlPosterior() {
-  if (!cpstResultados) {
-    showToast('Ejecute el escrutinio primero', 'warning');
-    return;
-  }
-  
-  showToast('Generando PDF...', 'info');
-  
-  try {
-    const token = getToken();
-    const response = await fetch('/api/control-posterior/quiniela/pdf', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${token}`
-      },
-      body: JSON.stringify({
-        resultado: cpstResultados,
-        numeroSorteo: cpstNumeroSorteo,
-        modalidad: cpstModalidadSorteo,
-        comparacion: cpstResultados.comparacion,
-        datosControlPrevio: cpstDatosControlPrevio,
-        extractos: cpstExtractos
-      })
-    });
-    
-    if (!response.ok) throw new Error('Error generando PDF');
-    
-    const blob = await response.blob();
-    const url = window.URL.createObjectURL(blob);
-    window.open(url, '_blank');
-    setTimeout(() => window.URL.revokeObjectURL(url), 30000);
-    
-    showToast('PDF generado', 'success');
-  } catch (error) {
-    showToast(error.message || 'Error generando PDF', 'error');
-  }
+  return imprimirReportePosterior();
 }
 
 async function generarActaNotarial() {
@@ -2053,7 +3266,7 @@ async function generarActaNotarial() {
   
   try {
     const token = getToken();
-    const response = await fetch('/api/actas/notarial/generar', {
+    const response = await fetch(`${API_BASE}/actas/notarial/generar`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',

@@ -294,18 +294,86 @@ Los siguientes archivos del sistema anterior (`simba/public_html/`) contienen la
 - **`js/Poceada/poceadadistribucion.json`**: 
   - Porcentajes de distribución de premios
 
-### Qué Falta Implementar para Poceada
+### Sistema de Configuración Dinámica
 
-#### 1. Control Previo (PRIORIDAD ALTA)
-- [ ] Crear `src/modules/control-previo/poceada.controller.js`
-- [ ] Adaptar parser NTF v2 para Poceada:
-  - Detectar archivos `PCD*.TXT` o `TMB*.TXT`
-  - Extraer cantidad de números jugados (posición 207-208)
-  - Calcular apuestas = C(n, 8) para cada ticket
-  - Contar registros válidos/anulados
-  - Leer recaudación y premios del XML
-- [ ] Validar estructura del XML
-- [ ] Mostrar resultados en frontend (similar a Quiniela)
+A partir de Enero 2026, los porcentajes y configuraciones de juegos se cargan desde un archivo JSON centralizado en lugar de estar hardcodeados.
+
+#### Archivo de Configuración
+
+**Ubicación**: `src/config/distribucion-juegos.json`
+
+**Estructura**:
+```json
+{
+  "version": "2026-01",
+  "vigencia": {
+    "desde": "2026-01-01",
+    "hasta": "2026-01-31"
+  },
+  "fuente": "IF-2025-55768962-GCABA-LOTBA",
+  "juegos": {
+    "poceada": {
+      "porcentajePozoTotal": 45,
+      "distribucionPremios": {
+        "primerPremio": { "porcentaje": 62, "aciertos": 8 },
+        "segundoPremio": { "porcentaje": 23.5, "aciertos": 7 },
+        "tercerPremio": { "porcentaje": 10, "aciertos": 6 },
+        "agenteVendedor": { "porcentaje": 0.5 },
+        "fondoReserva": { "porcentaje": 4 }
+      },
+      "pozoAsegurado": { "primerPremio": 60000000 },
+      "valorApuesta": { "simple": 1100 },
+      "agenciaVentaWeb": "5188880"
+    },
+    "quiniela": { ... },
+    "tombolina": { ... },
+    "quinielaYa": { ... }
+  }
+}
+```
+
+#### Endpoints de Configuración
+
+| Método | Ruta | Descripción |
+|--------|------|-------------|
+| GET | `/api/control-previo/config/distribucion` | Obtener configuración actual |
+| POST | `/api/control-previo/config/recargar` | Recargar configuración desde archivo |
+
+#### Actualización de Configuración
+
+Cuando LOTBA emita una nueva programación mensual:
+
+1. Actualizar el archivo `distribucion-juegos.json` con los nuevos valores
+2. Llamar al endpoint `/api/control-previo/config/recargar` para aplicar cambios
+3. El sistema mostrará la versión de configuración en uso en la interfaz
+
+### Estado Actual de Implementación
+
+#### ✅ 1. Control Previo (COMPLETADO)
+- [x] Creado `src/modules/control-previo/poceada.controller.js`
+- [x] Parser NTF v2 para Poceada implementado:
+  - Detecta archivos `PCD*.TXT` o `TMB*.TXT`
+  - Extrae cantidad de números jugados (posición 207-208 según PDF oficial)
+  - Calcula apuestas = C(n, 8) para cada ticket usando tabla predefinida
+  - Cuenta registros válidos/anulados (solo ordinal '01' o vacío)
+  - Lee recaudación y premios del XML
+- [x] Validación de estructura del XML
+- [x] Comparación de datos TXT vs XML (registros, anulados, apuestas, recaudación)
+- [x] Validación de archivos de seguridad (HASH TXT y HASH XML)
+- [x] Mostrar resultados en frontend con tablas de provincias
+- [x] Búsqueda de pozo de arrastre del sorteo anterior
+- [x] Validación de agencias amigas (solo para agencia 88880 - venta web)
+- [x] **NUEVO**: Sistema de configuración dinámica desde JSON
+- [x] **NUEVO**: Detección de ventas web (agencia 5188880)
+- [x] **NUEVO**: Comparación de premios calculados vs XML oficial
+- [x] **NUEVO**: Frontend con tablas de comparación de premios y distribución calculada
+
+**Notas importantes:**
+- El parser usa las posiciones correctas según el PDF oficial "2-Diseño Apuestas.pdf"
+- `VALOR_APUESTA` está en posición 122-131 (10 caracteres, formato EEEEEEEEDD)
+- `CANTIDAD_NUMEROS` está en posición 207-208 (2 dígitos)
+- `FECHA_CANCELACION` se valida como 8 espacios en blanco si no está cancelada
+- Las combinaciones se calculan usando una tabla predefinida para optimizar rendimiento
 
 #### 2. Control Posterior - Escrutinio (PRIORIDAD ALTA)
 - [ ] Crear `src/modules/control-posterior/poceada-escrutinio.controller.js`
@@ -346,12 +414,14 @@ Los siguientes archivos del sistema anterior (`simba/public_html/`) contienen la
 
 ### Cómo Continuar el Desarrollo
 
-#### Paso 1: Control Previo Poceada
-1. Copiar `src/modules/control-previo/quiniela.controller.js` como base
-2. Modificar para detectar archivos `PCD*.TXT` o `TMB*.TXT`
-3. Adaptar parser para leer cantidad de números jugados (posición 207-208)
-4. Implementar función `combinations(n, r)` para calcular C(n, 8)
-5. Leer valores de premios desde XML (similar a Quiniela)
+#### Paso 1: Control Previo Poceada ✅ COMPLETADO
+~~1. Copiar `src/modules/control-previo/quiniela.controller.js` como base~~ ✅
+~~2. Modificar para detectar archivos `PCD*.TXT` o `TMB*.TXT`~~ ✅
+~~3. Adaptar parser para leer cantidad de números jugados (posición 207-208)~~ ✅
+~~4. Implementar función `combinations(n, r)` para calcular C(n, 8)~~ ✅
+~~5. Leer valores de premios desde XML (similar a Quiniela)~~ ✅
+
+**Estado:** El Control Previo de Poceada está completamente funcional. Puede procesar archivos ZIP, comparar datos TXT vs XML, y mostrar resultados en el frontend.
 6. Crear ruta en `src/app.js`: `/api/control-previo/poceada/procesar-zip`
 
 #### Paso 2: Control Posterior Poceada

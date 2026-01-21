@@ -820,11 +820,12 @@ const generarPDFReporte = async (req, res) => {
     let filaNum = 0;
     
     // Filtrar solo extractos con datos
-    const extractosConDatos = resultado.reportePorExtracto.filter(rep => rep.cargado !== false && rep.totalGanadores > 0);
+    const reporteList = (resultado && resultado.reportePorExtracto) ? resultado.reportePorExtracto : [];
     
-    for (const rep of resultado.reportePorExtracto) {
+    for (const rep of reporteList) {
       // Saltar extractos no cargados o sin datos
       if (rep.cargado === false) continue;
+      if (rep.totalGanadores === 0 && rep.totalPagado === 0) continue;
       if (rep.totalGanadores === 0 && rep.totalPagado === 0) continue;
       
       // Línea separadora entre extractos
@@ -925,7 +926,9 @@ const generarPDFReporte = async (req, res) => {
     let detFilaNum = 0;
     let totales = { c1t: 0, c1p: 0, c2t: 0, c2p: 0, c3t: 0, c3p: 0, c4t: 0, c4p: 0, rt: 0, rp: 0, lt: 0, lp: 0, total: 0, totalP: 0 };
     
-    for (const rep of resultado.reportePorExtracto) {
+    const reporteListDetalle = (resultado && resultado.reportePorExtracto) ? resultado.reportePorExtracto : [];
+    
+    for (const rep of reporteListDetalle) {
       // Saltar extractos no cargados o sin datos
       if (rep.cargado === false) continue;
       if (rep.totalGanadores === 0 && rep.totalPagado === 0) continue;
@@ -1059,7 +1062,9 @@ const generarPDFReporte = async (req, res) => {
       { nombre: 'Letras', indice: '$1000 fijo', tickets: 0, premio: 0 }
     ];
     
-    for (const rep of resultado.reportePorExtracto) {
+    const reporteListTipos = (resultado && resultado.reportePorExtracto) ? resultado.reportePorExtracto : [];
+    
+    for (const rep of reporteListTipos) {
       if (rep.cargado === false) continue;
       if (rep.totalGanadores === 0 && rep.totalPagado === 0) continue;
       tipos[0].tickets += rep.porCifras[1].ganadores; tipos[0].premio += rep.porCifras[1].pagado;

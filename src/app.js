@@ -18,7 +18,11 @@ const PORT = process.env.PORT || 3000;
 
 // Middlewares de seguridad
 app.use(helmet({ contentSecurityPolicy: false }));
-app.use(cors());
+app.use(cors({
+  origin: '*',
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With']
+}));
 
 // Parseo de JSON y formularios
 app.use(express.json({ limit: '50mb' }));
@@ -61,7 +65,8 @@ app.use((err, req, res, next) => {
 
 // 404
 app.use((req, res) => {
-  res.status(404).json({ success: false, message: 'Ruta no encontrada' });
+  console.log('❌ 404 - Ruta no encontrada:', req.method, req.path);
+  res.status(404).json({ success: false, message: 'Ruta no encontrada', path: req.path, method: req.method });
 });
 
 // Iniciar servidor
@@ -82,5 +87,14 @@ async function startServer() {
 }
 
 startServer();
+
+// Prevenir que el servidor se caiga por errores no capturados
+process.on('uncaughtException', (err) => {
+  console.error('❌ CRITICAL ERROR (Uncaught Exception):', err);
+});
+
+process.on('unhandledRejection', (reason, promise) => {
+  console.error('❌ CRITICAL ERROR (Unhandled Rejection):', reason);
+});
 
 module.exports = app;

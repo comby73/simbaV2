@@ -12,4 +12,7 @@ router.post('/control-previo/generar', actasController.generarActaControlPrevio)
 // Generar Acta Notarial de Sorteo (PDF)
 router.post('/notarial/generar', actasController.generarActaNotarial);
 
+// Generar Acta de Control Posterior (PDF Escrutinio)
+router.post('/control-posterior/generar', actasController.generarActaControlPosterior);
+
 module.exports = router;

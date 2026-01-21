@@ -362,21 +362,22 @@
       <section id="view-control-previo" class="view hidden">
         <div class="page-header">
           <div>
-            <h1>Control Previo - Quiniela</h1>
-            <p>Procesamiento y validación de archivos NTF</p>
+            <h1 id="cp-titulo">Control Previo</h1>
+            <p id="cp-subtitulo">Procesamiento y validación de archivos NTF</p>
           </div>
         </div>
         
         <!-- Carga de archivo -->
         <div class="card">
-          <div class="card-header">
+          <div class="card-header d-flex" style="justify-content: space-between; align-items: center;">
             <h3>Cargar Archivo ZIP</h3>
+            <span class="badge" id="cp-juego-detectado"></span>
           </div>
           
           <div class="upload-area" id="cp-upload-area">
             <i class="fas fa-file-archive"></i>
             <p>Arrastre el archivo ZIP aquí o haga clic para seleccionar</p>
-            <span>Archivos: QNLxxxxxx.zip (contiene TXT, XML, hash, PDF)</span>
+            <span id="cp-upload-hint">Ej: QNLxxxxxx.zip o PCDxxxxxx.zip</span>
             <input type="file" id="cp-archivo-input" accept=".zip" hidden>
           </div>
           
@@ -389,6 +390,24 @@
               <button class="btn btn-primary" onclick="procesarControlPrevio()">
                 <i class="fas fa-cogs"></i> Procesar
               </button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Pozo de Arrastre (Solo Poceada) -->
+        <div id="cp-poceada-especifico" class="card hidden" style="border-left: 5px solid var(--primary);">
+          <div class="card-body">
+            <div style="display: flex; justify-content: space-between; align-items: center;">
+              <div>
+                <h4>Pozo de Arrastre</h4>
+                <p class="text-muted">Acumulado del sorteo anterior</p>
+              </div>
+              <div style="text-align: right;">
+                <div id="cp-pozo-arrastre" style="font-size: 2rem; font-weight: bold; color: var(--primary);">$ 0</div>
+                <button class="btn btn-sm btn-secondary" onclick="corregirPozoManualmente()" style="margin-top: 5px;">
+                  <i class="fas fa-edit"></i> Corregir
+                </button>
+              </div>
             </div>
           </div>
         </div>
@@ -481,6 +500,72 @@
               </table>
             </div>
           </div>
+          
+          <!-- Comparación de Premios (Solo Poceada) -->
+          <div class="card hidden" id="cp-comparacion-premios-card">
+            <div class="card-header">
+              <h3>📊 Comparación de Premios</h3>
+              <span class="badge badge-info" id="cp-config-version"></span>
+            </div>
+            <div class="table-container">
+              <table class="table">
+                <thead>
+                  <tr>
+                    <th>Premio</th>
+                    <th>Porcentaje</th>
+                    <th>Calculado</th>
+                    <th>Oficial (XML)</th>
+                    <th>Diferencia</th>
+                    <th>Estado</th>
+                  </tr>
+                </thead>
+                <tbody id="cp-tabla-premios"></tbody>
+              </table>
+            </div>
+            <div class="card-body" style="padding-top: 0;">
+              <small class="text-muted">
+                <strong>Leyenda:</strong> 
+                <span style="color: var(--success-color);">✅ OK</span> = Sin diferencia |
+                <span style="color: var(--warning-color);">⚠️ Revisar</span> = Diferencia menor |
+                <span style="color: var(--danger-color);">❌ Error</span> = Diferencia significativa
+              </small>
+            </div>
+          </div>
+          
+          <!-- Distribución de Premios (Solo Poceada) -->
+          <div class="card hidden" id="cp-distribucion-premios-card">
+            <div class="card-header">
+              <h3>💰 Distribución de Premios Calculada</h3>
+              <span class="badge" id="cp-pozo-asegurado-badge" style="background: var(--accent-color);">Pozo Asegurado: -</span>
+            </div>
+            <div class="stats-grid">
+              <div class="stat-card">
+                <div class="stat-value" id="cp-premio-1ro">$0</div>
+                <div class="stat-label">1er Premio (8 aciertos)</div>
+                <small id="cp-premio-1ro-arrastre" class="text-muted"></small>
+              </div>
+              <div class="stat-card">
+                <div class="stat-value" id="cp-premio-2do">$0</div>
+                <div class="stat-label">2do Premio (7 aciertos)</div>
+              </div>
+              <div class="stat-card">
+                <div class="stat-value" id="cp-premio-3ro">$0</div>
+                <div class="stat-label">3er Premio (6 aciertos)</div>
+              </div>
+              <div class="stat-card">
+                <div class="stat-value" id="cp-premio-agenciero">$0</div>
+                <div class="stat-label">Premio Agenciero</div>
+              </div>
+              <div class="stat-card">
+                <div class="stat-value" id="cp-fondo-reserva">$0</div>
+                <div class="stat-label">Fondo de Reserva</div>
+              </div>
+              <div class="stat-card">
+                <div class="stat-value" id="cp-total-premios">$0</div>
+                <div class="stat-label">Total Premios (45%)</div>
+              </div>
+            </div>
+          </div>
 
           <!-- Verificación de Seguridad -->
           <div class="card">
@@ -510,7 +595,7 @@
           <!-- Online -->
           <div class="card">
             <div class="card-header">
-              <h3>Quiniela Online (Agencia 88880)</h3>
+              <h3 id="cp-online-titulo">Quiniela Online (Agencia 88880)</h3>
             </div>
             <div class="stats-grid" style="margin-bottom: 0;">
               <div class="stat-card">
@@ -555,8 +640,37 @@
       <!-- Control Posterior -->
       <section id="view-control-posterior" class="view hidden">
         <div class="page-header">
-          <h1>Control Posterior - Quiniela</h1>
-          <p>Análisis de ganadores post-sorteo</p>
+          <h1 id="cpst-titulo">Control Posterior</h1>
+          <p id="cpst-subtitulo">Análisis de ganadores post-sorteo</p>
+        </div>
+        
+        <!-- Selección de Juego -->
+        <div class="card" style="border-left: 4px solid var(--primary);">
+          <div class="card-header">
+            <h3><i class="fas fa-gamepad"></i> Seleccionar Juego</h3>
+          </div>
+          <div class="card-body">
+            <div class="form-row" style="gap: 1rem;">
+              <div class="form-group" style="flex: 1;">
+                <label class="radio-card" style="display: flex; align-items: center; gap: 1rem; padding: 1rem; border: 2px solid var(--border-color); border-radius: 8px; cursor: pointer; transition: all 0.2s;" onclick="seleccionarJuegoPosterior('Quiniela')">
+                  <input type="radio" name="cpst-juego" value="Quiniela" checked style="width: 20px; height: 20px;">
+                  <div>
+                    <strong style="font-size: 1.1rem;">🎱 Quiniela</strong>
+                    <p class="text-muted" style="margin: 0; font-size: 0.85rem;">20 números + extractos por ubicación</p>
+                  </div>
+                </label>
+              </div>
+              <div class="form-group" style="flex: 1;">
+                <label class="radio-card" style="display: flex; align-items: center; gap: 1rem; padding: 1rem; border: 2px solid var(--border-color); border-radius: 8px; cursor: pointer; transition: all 0.2s;" onclick="seleccionarJuegoPosterior('Poceada')">
+                  <input type="radio" name="cpst-juego" value="Poceada" style="width: 20px; height: 20px;">
+                  <div>
+                    <strong style="font-size: 1.1rem;">🎯 Poceada</strong>
+                    <p class="text-muted" style="margin: 0; font-size: 0.85rem;">8 números + 4 letras | 6, 7 u 8 aciertos</p>
+                  </div>
+                </label>
+              </div>
+            </div>
+          </div>
         </div>
         
         <!-- Paso 1: Cargar datos -->
@@ -581,18 +695,18 @@
           <div id="cpst-datos-cargados" class="hidden" style="margin-top: 1rem; padding: 1rem; background: var(--bg-input); border-radius: 8px;">
             <div style="display: flex; gap: 2rem; flex-wrap: wrap;">
               <span><strong>Sorteo:</strong> <span id="cpst-sorteo">-</span></span>
-              <span><strong>Modalidad:</strong> <span id="cpst-modalidad" class="badge badge-primary">-</span></span>
+              <span><strong>Juego:</strong> <span id="cpst-juego-badge" class="badge badge-primary">-</span></span>
               <span><strong>Registros:</strong> <span id="cpst-registros">0</span></span>
               <span><strong>Recaudación:</strong> <span id="cpst-recaudacion">$0</span></span>
             </div>
-            <small class="text-muted" style="display: block; margin-top: 0.5rem;">
+            <small class="text-muted" style="display: block; margin-top: 0.5rem;" id="cpst-hint-modalidad">
               💡 Al cargar XMLs, solo se procesarán los de la modalidad detectada
             </small>
           </div>
         </div>
 
-        <!-- Paso 2: Cargar Extracto -->
-        <div class="card">
+        <!-- Paso 2: Cargar Extracto (QUINIELA) -->
+        <div class="card" id="cpst-extracto-quiniela-card">
           <div class="card-header">
             <h3>2. Extracto (Números Ganadores)</h3>
           </div>
@@ -708,6 +822,107 @@
           <div id="cpst-extractos-lista" style="margin-top: 1rem;"></div>
         </div>
 
+        <!-- Paso 2: Cargar Extracto (POCEADA) - Oculto por defecto -->
+        <div class="card hidden" id="cpst-extracto-poceada-card">
+          <div class="card-header">
+            <h3>2. Extracto Poceada (20 Números + 4 Letras del Sorteo)</h3>
+          </div>
+          
+          <div class="tabs-container" style="margin-top: 1rem;">
+            <div class="tabs" style="display: flex; gap: 0; border-bottom: 2px solid var(--border-color);">
+              <button class="tab active" data-tab="poc-ext-xml" onclick="cambiarTabExtractoPoceada('xml')">
+                <i class="fas fa-file-code"></i> XML
+              </button>
+              <button class="tab" data-tab="poc-ext-manual" onclick="cambiarTabExtractoPoceada('manual')">
+                <i class="fas fa-keyboard"></i> Manual
+              </button>
+            </div>
+            
+            <!-- Tab XML Poceada -->
+            <div class="tab-content" id="tab-poc-ext-xml">
+              <div style="margin-top: 1rem;">
+                <label>Cargar archivo XML del extracto</label>
+                <input type="file" id="cpst-poceada-extracto-xml" accept=".xml" class="form-control" onchange="cargarExtractoPoceadaXML(this)">
+                <small class="text-muted">
+                  XML del extracto oficial de Poceada con los 20 números y 4 letras del sorteo
+                </small>
+              </div>
+              <div style="margin-top: 1rem;">
+                <label>O pegar XML directamente</label>
+                <textarea id="cpst-poceada-xml-texto" class="form-control" rows="4" placeholder="<extracto>...</extracto>"></textarea>
+                <button class="btn btn-secondary" style="margin-top: 0.5rem;" onclick="cargarExtractoPoceadaDesdeTextoXML()">
+                  <i class="fas fa-check"></i> Cargar XML
+                </button>
+              </div>
+            </div>
+            
+            <!-- Tab Manual Poceada -->
+            <div class="tab-content hidden" id="tab-poc-ext-manual">
+              <div style="margin-top: 1rem;">
+                <label style="margin-bottom: 0.5rem; display: block;">
+                  <strong>20 Números del Sorteo</strong> (00-99)
+                </label>
+                <div style="display: grid; grid-template-columns: repeat(10, 1fr); gap: 0.5rem; max-width: 600px;" id="cpst-poceada-numeros-grid">
+                  <!-- Los 20 inputs se generan dinámicamente -->
+                </div>
+                <small class="text-muted" style="display: block; margin-top: 0.5rem;">
+                  Ingrese los 20 números sorteados. Los jugadores ganan si sus 8 números elegidos están entre estos 20.
+                </small>
+              </div>
+              
+              <div style="margin-top: 1.5rem;">
+                <label style="margin-bottom: 0.5rem; display: block;">
+                  <strong>4 Letras Ganadoras</strong> (A-P)
+                </label>
+                <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 0.5rem; max-width: 300px;" id="cpst-poceada-letras-grid">
+                  <div class="form-group" style="margin: 0;">
+                    <label style="font-size: 0.75rem; text-align: center; display: block;">1°</label>
+                    <input type="text" maxlength="1" class="form-control text-center poceada-letra" placeholder="A" style="font-weight: bold; text-transform: uppercase;">
+                  </div>
+                  <div class="form-group" style="margin: 0;">
+                    <label style="font-size: 0.75rem; text-align: center; display: block;">2°</label>
+                    <input type="text" maxlength="1" class="form-control text-center poceada-letra" placeholder="B" style="font-weight: bold; text-transform: uppercase;">
+                  </div>
+                  <div class="form-group" style="margin: 0;">
+                    <label style="font-size: 0.75rem; text-align: center; display: block;">3°</label>
+                    <input type="text" maxlength="1" class="form-control text-center poceada-letra" placeholder="C" style="font-weight: bold; text-transform: uppercase;">
+                  </div>
+                  <div class="form-group" style="margin: 0;">
+                    <label style="font-size: 0.75rem; text-align: center; display: block;">4°</label>
+                    <input type="text" maxlength="1" class="form-control text-center poceada-letra" placeholder="D" style="font-weight: bold; text-transform: uppercase;">
+                  </div>
+                </div>
+                <small class="text-muted" style="display: block; margin-top: 0.5rem;">
+                  Letras válidas: A, B, C, D, E, F, G, H, I, J, K, L, M, N, O, P
+                </small>
+              </div>
+            </div>
+          </div>
+          
+          <div style="margin-top: 1.5rem; padding: 1rem; background: var(--bg-input); border-radius: 8px;" id="cpst-poceada-extracto-preview" class="hidden">
+            <h4 style="margin-bottom: 1rem;"><i class="fas fa-check-circle text-success"></i> Extracto Cargado</h4>
+            <div style="display: flex; gap: 2rem; flex-wrap: wrap;">
+              <div>
+                <strong>Números:</strong>
+                <span id="cpst-poceada-numeros-preview" style="font-family: monospace; font-size: 1.1rem;">-</span>
+              </div>
+              <div>
+                <strong>Letras:</strong>
+                <span id="cpst-poceada-letras-preview" style="font-family: monospace; font-size: 1.1rem;">-</span>
+              </div>
+            </div>
+          </div>
+          
+          <div style="margin-top: 1.5rem; display: flex; gap: 1rem;">
+            <button class="btn btn-primary" onclick="confirmarExtractoPoceada()">
+              <i class="fas fa-check"></i> Confirmar Extracto
+            </button>
+            <button class="btn btn-secondary" onclick="limpiarExtractoPoceada()">
+              <i class="fas fa-eraser"></i> Limpiar
+            </button>
+          </div>
+        </div>
+
         <!-- Paso 3: Ejecutar Escrutinio -->
         <div class="card">
           <div class="card-header">
@@ -758,10 +973,10 @@
             </div>
           </div>
 
-          <!-- Detalle por Extracto -->
-          <div class="card">
+          <!-- Detalle por Extracto (QUINIELA) -->
+          <div class="card" id="cpst-detalle-quiniela">
             <div class="card-header">
-              <h3>Detalle por Extracto</h3>
+              <h3>Detalle por Extracto - Quiniela</h3>
             </div>
             <div class="table-container">
               <table class="table" id="cpst-tabla-extractos">
@@ -789,6 +1004,94 @@
                 <tbody></tbody>
               </table>
               <small class="text-muted">Gan = cantidad de registros ganadores | Prem. = monto total premiado</small>
+            </div>
+          </div>
+
+          <!-- Detalle por Aciertos (POCEADA) -->
+          <div class="card hidden" id="cpst-detalle-poceada">
+            <div class="card-header" style="display: flex; justify-content: space-between; align-items: center;">
+              <h3>Detalle por Nivel de Aciertos - Poceada</h3>
+              <button class="btn btn-primary btn-sm" onclick="imprimirReportePosterior()">
+                <i class="fas fa-file-pdf"></i> Imprimir Acta
+              </button>
+            </div>
+            <div class="table-container">
+              <table class="table" id="cpst-tabla-poceada">
+                <thead>
+                  <tr>
+                    <th>Nivel</th>
+                    <th>Aciertos</th>
+                    <th>Ganadores</th>
+                    <th>Premio por Ganador</th>
+                    <th>Total Premios</th>
+                    <th>% del Pozo</th>
+                    <th>Pozo Vacante</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr class="nivel-8">
+                    <td><span class="badge badge-warning" style="background: gold; color: black;">🏆 PRIMER PREMIO</span></td>
+                    <td><strong>8 aciertos</strong></td>
+                    <td id="cpst-poc-gan-8">0</td>
+                    <td id="cpst-poc-premio-8">$0</td>
+                    <td id="cpst-poc-total-8">$0</td>
+                    <td>62%</td>
+                    <td id="cpst-poc-vacante-8">$0</td>
+                  </tr>
+                  <tr class="nivel-7">
+                    <td><span class="badge badge-primary">🥈 SEGUNDO PREMIO</span></td>
+                    <td><strong>7 aciertos</strong></td>
+                    <td id="cpst-poc-gan-7">0</td>
+                    <td id="cpst-poc-premio-7">$0</td>
+                    <td id="cpst-poc-total-7">$0</td>
+                    <td>23.5%</td>
+                    <td id="cpst-poc-vacante-7">$0</td>
+                  </tr>
+                  <tr class="nivel-6">
+                    <td><span class="badge badge-secondary">🥉 TERCER PREMIO</span></td>
+                    <td><strong>6 aciertos</strong></td>
+                    <td id="cpst-poc-gan-6">0</td>
+                    <td id="cpst-poc-premio-6">$0</td>
+                    <td id="cpst-poc-total-6">$0</td>
+                    <td>10%</td>
+                    <td id="cpst-poc-vacante-6">$0</td>
+                  </tr>
+                </tbody>
+                <tfoot>
+                  <tr style="background: var(--bg-card); font-weight: bold;">
+                    <td colspan="2">TOTALES</td>
+                    <td id="cpst-poc-gan-total">0</td>
+                    <td>-</td>
+                    <td id="cpst-poc-total-premios">$0</td>
+                    <td>95.5%</td>
+                    <td id="cpst-poc-vacante-total">$0</td>
+                  </tr>
+                </tfoot>
+              </table>
+              <small class="text-muted" style="display: none;">
+                💡 El 4.5% restante es reserva. Si no hay ganadores, el pozo se acumula como arrastre para el próximo sorteo.
+              </small>
+            </div>
+            
+            <!-- Desglose por tipo de apuesta múltiple -->
+            <div style="margin-top: 1.5rem;">
+              <h4 style="margin-bottom: 1rem;"><i class="fas fa-layer-group"></i> Desglose por Cantidad de Números Jugados</h4>
+              <div class="table-container">
+                <table class="table" id="cpst-tabla-poceada-multiples">
+                  <thead>
+                    <tr>
+                      <th>Números Jugados</th>
+                      <th>Combinaciones</th>
+                      <th>Registros</th>
+                      <th>Gan. 8 Ac.</th>
+                      <th>Gan. 7 Ac.</th>
+                      <th>Gan. 6 Ac.</th>
+                      <th>Total Premios</th>
+                    </tr>
+                  </thead>
+                  <tbody id="cpst-tabla-poceada-multiples-body"></tbody>
+                </table>
+              </div>
             </div>
           </div>
 

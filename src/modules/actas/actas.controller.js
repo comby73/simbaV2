@@ -5,6 +5,14 @@ const generarActaControlPrevio = async (req, res) => {
   try {
     const datos = req.body;
     
+    // Detectar tipo de juego
+    const tipoJuego = datos.tipoJuego || 'Quiniela';
+    
+    if (tipoJuego === 'Poceada') {
+      return generarActaControlPrevioPoceada(req, res, datos);
+    }
+    
+    // Continuar con Quiniela
     if (!datos || !datos.datosCalculados) {
       return res.status(400).json({
         success: false,
@@ -265,7 +273,7 @@ function formatearNumero(num) {
 }
 
 function formatearMoneda(num) {
-  return '$' + (num || 0).toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  return '$ ' + (num || 0).toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }
 
 // Generar Acta Notarial de Sorteo
@@ -381,7 +389,630 @@ const generarActaNotarial = async (req, res) => {
   }
 };
 
+// ========================================
+// GENERAR ACTA CONTROL PREVIO - POCEADA
+// ========================================
+async function generarActaControlPrevioPoceada(req, res, datos) {
+  try {
+    const resumen = datos.resumen || {};
+    const oficial = datos.datosOficiales || {};
+    const comparacion = datos.comparacion || {};
+    const seguridad = datos.seguridad || {};
+    const distribucion = datos.distribucionPremios || {};
+    
+    // Crear documento PDF - 2 páginas
+    const doc = new PDFDocument({ 
+      size: 'A4',
+      margins: { top: 40, bottom: 40, left: 50, right: 50 },
+      autoFirstPage: true
+    });
+    
+    // Configurar respuesta
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `inline; filename=Acta_ControlPrevio_Poceada_${datos.sorteo || 'sorteo'}.pdf`);
+    
+    // Pipe del PDF a la respuesta
+    doc.pipe(res);
+
+    const fechaHoy = new Date().toLocaleDateString('es-AR', {
+      weekday: 'long', year: 'numeric', month: 'long', day: 'numeric'
+    });
+    const horaHoy = new Date().toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit' });
+
+    // ========== PÁGINA 1 ==========
+    
+    // ========== ENCABEZADO ==========
+    doc.fontSize(10).fillColor('#666')
+       .text('CONTROL PREVIO', 450, 30, { align: 'right' });
+    
+    doc.moveTo(50, 50).lineTo(545, 50).stroke('#ddd');
+
+    // ========== TÍTULO ==========
+    doc.fontSize(18).fillColor('#7c3aed')
+       .text('QUINIELA POCEADA DE LA CIUDAD', 50, 65, { align: 'center' });
+
+    // ========== INFORMACIÓN DEL SORTEO ==========
+    doc.roundedRect(50, 95, 495, 55, 5).fillAndStroke('#f8fafc', '#e2e8f0');
+    
+    doc.fontSize(9).fillColor('#666').text('SORTEO N°', 70, 105);
+    doc.fontSize(16).fillColor('#7c3aed').text(datos.sorteo || '-', 70, 118);
+    
+    doc.fontSize(9).fillColor('#666').text('ARCHIVO PROCESADO', 200, 105);
+    doc.fontSize(10).fillColor('#333').text(datos.archivo || '-', 200, 118);
+    
+    doc.fontSize(9).fillColor('#666').text('FECHA PROCESAMIENTO', 380, 105);
+    doc.fontSize(10).fillColor('#333').text(new Date(datos.fechaProcesamiento || Date.now()).toLocaleString('es-AR'), 380, 118);
+
+    // ========== RESUMEN DE DATOS ==========
+    let y = 160;
+    
+    doc.fontSize(11).fillColor('#1e293b')
+       .text('RESUMEN DE DATOS', 50, y, { underline: true });
+    y += 20;
+
+    // Cajas de estadísticas (5 en una fila)
+    const boxWidth = 95;
+    const boxHeight = 50;
+    const boxes = [
+      { label: 'Registros Válidos', value: formatearNumero(resumen.registros), color: '#7c3aed' },
+      { label: 'Anulados', value: formatearNumero(resumen.anulados), color: '#ef4444' },
+      { label: 'Apuestas', value: formatearNumero(resumen.apuestasTotal), color: '#10b981' },
+      { label: 'Recaudación', value: formatearMoneda(resumen.recaudacion), color: '#f59e0b' },
+      { label: 'Venta Web', value: formatearNumero(resumen.ventaWeb || 0), color: '#3b82f6' }
+    ];
+
+    boxes.forEach((box, i) => {
+      const x = 50 + (i * (boxWidth + 5));
+      doc.roundedRect(x, y, boxWidth, boxHeight, 3).fillAndStroke('#f1f5f9', '#e2e8f0');
+      doc.fontSize(7).fillColor('#666').text(box.label, x + 5, y + 6, { width: boxWidth - 10 });
+      doc.fontSize(12).fillColor(box.color).text(box.value, x + 5, y + 22, { width: boxWidth - 10 });
+    });
+
+    y += boxHeight + 20;
+
+    // ========== DISTRIBUCIÓN DE PREMIOS CALCULADA ==========
+    doc.fontSize(11).fillColor('#1e293b')
+       .text('DISTRIBUCIÓN DE PREMIOS CALCULADA (45% de Recaudación)', 50, y, { underline: true });
+    y += 18;
+
+    // Tabla de distribución de premios CALCULADOS
+    doc.rect(50, y, 495, 16).fill('#7c3aed');
+    doc.fontSize(8).fillColor('#fff');
+    doc.text('Premio', 55, y + 4);
+    doc.text('%', 155, y + 4);
+    doc.text('Recaudación', 190, y + 4);
+    doc.text('Pozo Vacante', 280, y + 4);
+    doc.text('Dif. Asegurar', 370, y + 4);
+    doc.text('Importe Final', 460, y + 4);
+    y += 16;
+
+    // Usar datos de distribucion (calculados)
+    const filasPremiosCalc = [
+      { 
+        nombre: '1° Premio (8 aciertos)', 
+        porcentaje: '62%',
+        recaudacion: distribucion.primerPremio?.monto || 0,
+        vacante: distribucion.primerPremio?.pozoVacante || 0,
+        asegurar: distribucion.primerPremio?.diferenciaAsegurar || 0,
+        final: distribucion.primerPremio?.importeFinal || distribucion.primerPremio?.total || 0
+      },
+      { 
+        nombre: '2° Premio (7 aciertos)', 
+        porcentaje: '23.5%',
+        recaudacion: distribucion.segundoPremio?.monto || 0,
+        vacante: distribucion.segundoPremio?.pozoVacante || 0,
+        asegurar: 0,
+        final: distribucion.segundoPremio?.total || 0
+      },
+      { 
+        nombre: '3° Premio (6 aciertos)', 
+        porcentaje: '10%',
+        recaudacion: distribucion.terceroPremio?.monto || 0,
+        vacante: distribucion.terceroPremio?.pozoVacante || 0,
+        asegurar: 0,
+        final: distribucion.terceroPremio?.total || 0
+      },
+      { 
+        nombre: 'Agente Vendedor', 
+        porcentaje: '0.5%',
+        recaudacion: distribucion.agenciero?.monto || 0,
+        vacante: distribucion.agenciero?.pozoVacante || 0,
+        asegurar: '-',
+        final: distribucion.agenciero?.total || 0
+      },
+      { 
+        nombre: 'Fondo de Reserva', 
+        porcentaje: '4%',
+        recaudacion: distribucion.fondoReserva?.monto || 0,
+        vacante: '-',
+        asegurar: '-',
+        final: distribucion.fondoReserva?.monto || 0
+      }
+    ];
+
+    doc.fontSize(8);
+    let alternate = false;
+    for (const fila of filasPremiosCalc) {
+      if (alternate) {
+        doc.rect(50, y, 495, 14).fill('#f8fafc');
+      }
+      doc.fillColor('#333').text(fila.nombre, 55, y + 3);
+      doc.text(fila.porcentaje, 155, y + 3);
+      doc.text(formatearMoneda(fila.recaudacion), 190, y + 3);
+      doc.text(typeof fila.vacante === 'number' ? formatearMoneda(fila.vacante) : fila.vacante, 280, y + 3);
+      doc.text(typeof fila.asegurar === 'number' ? formatearMoneda(fila.asegurar) : fila.asegurar, 370, y + 3);
+      doc.fillColor('#7c3aed').text(formatearMoneda(fila.final), 460, y + 3);
+      y += 14;
+      alternate = !alternate;
+    }
+    
+    // Total calculado
+    doc.rect(50, y, 495, 14).fill('#e0e7ff');
+    doc.fillColor('#1e293b').fontSize(8);
+    doc.text('TOTAL PREMIOS CALCULADO', 55, y + 3, { continued: false });
+    doc.fillColor('#7c3aed').text(formatearMoneda(distribucion.importeTotalPremios || 0), 460, y + 3);
+    y += 20;
+
+    // ========== DISTRIBUCIÓN DE PREMIOS UTE (OFICIAL) ==========
+    doc.fontSize(11).fillColor('#1e293b')
+       .text('DISTRIBUCIÓN DE PREMIOS UTE (OFICIAL)', 50, y, { underline: true });
+    y += 18;
+
+    // Tabla de distribución de premios OFICIALES (UTE)
+    doc.rect(50, y, 495, 16).fill('#059669');
+    doc.fontSize(8).fillColor('#fff');
+    doc.text('Premio', 55, y + 4);
+    doc.text('%', 155, y + 4);
+    doc.text('Recaudación', 190, y + 4);
+    doc.text('Pozo Vacante', 280, y + 4);
+    doc.text('Dif. Asegurar', 370, y + 4);
+    doc.text('Importe Final', 460, y + 4);
+    y += 16;
+
+    // Usar datos oficiales del XML
+    const premiosOficiales = oficial.premios || {};
+    const filasPremiosUTE = [
+      { 
+        nombre: '1° Premio (8 aciertos)', 
+        porcentaje: '62%',
+        recaudacion: premiosOficiales.primero?.monto || 0,
+        vacante: premiosOficiales.primero?.pozoVacante || 0,
+        asegurar: premiosOficiales.primero?.pozoAsegurar || 0,
+        final: premiosOficiales.primero?.total || 0
+      },
+      { 
+        nombre: '2° Premio (7 aciertos)', 
+        porcentaje: '23.5%',
+        recaudacion: premiosOficiales.segundo?.monto || 0,
+        vacante: premiosOficiales.segundo?.pozoVacante || 0,
+        asegurar: 0,
+        final: premiosOficiales.segundo?.total || 0
+      },
+      { 
+        nombre: '3° Premio (6 aciertos)', 
+        porcentaje: '10%',
+        recaudacion: premiosOficiales.tercero?.monto || 0,
+        vacante: premiosOficiales.tercero?.pozoVacante || 0,
+        asegurar: 0,
+        final: premiosOficiales.tercero?.total || 0
+      },
+      { 
+        nombre: 'Agente Vendedor', 
+        porcentaje: '0.5%',
+        recaudacion: premiosOficiales.agenciero?.monto || 0,
+        vacante: premiosOficiales.agenciero?.pozoVacante || 0,
+        asegurar: '-',
+        final: premiosOficiales.agenciero?.total || 0
+      },
+      { 
+        nombre: 'Fondo de Reserva', 
+        porcentaje: '4%',
+        recaudacion: oficial.fondoReserva || 0,
+        vacante: '-',
+        asegurar: '-',
+        final: oficial.fondoReserva || 0
+      }
+    ];
+
+    doc.fontSize(8);
+    alternate = false;
+    for (const fila of filasPremiosUTE) {
+      if (alternate) {
+        doc.rect(50, y, 495, 14).fill('#f0fdf4');
+      }
+      doc.fillColor('#333').text(fila.nombre, 55, y + 3);
+      doc.text(fila.porcentaje, 155, y + 3);
+      doc.text(formatearMoneda(fila.recaudacion), 190, y + 3);
+      doc.text(typeof fila.vacante === 'number' ? formatearMoneda(fila.vacante) : fila.vacante, 280, y + 3);
+      doc.text(typeof fila.asegurar === 'number' ? formatearMoneda(fila.asegurar) : fila.asegurar, 370, y + 3);
+      doc.fillColor('#059669').text(formatearMoneda(fila.final), 460, y + 3);
+      y += 14;
+      alternate = !alternate;
+    }
+    
+    // Total UTE
+    const importeTotalUTE = oficial.importeTotalPremios || 
+      (premiosOficiales.primero?.total || 0) + 
+      (premiosOficiales.segundo?.total || 0) + 
+      (premiosOficiales.tercero?.total || 0) + 
+      (premiosOficiales.agenciero?.total || 0) + 
+      (oficial.fondoReserva || 0);
+    
+    doc.rect(50, y, 495, 14).fill('#dcfce7');
+    doc.fillColor('#1e293b').fontSize(8);
+    doc.text('TOTAL PREMIOS UTE', 55, y + 3, { continued: false });
+    doc.fillColor('#059669').text(formatearMoneda(importeTotalUTE), 460, y + 3);
+    y += 20;
+
+    // ========== COMPARACIÓN CALCULADO vs UTE ==========
+    doc.fontSize(11).fillColor('#1e293b')
+       .text('COMPARACIÓN CALCULADO vs UTE', 50, y, { underline: true });
+    y += 18;
+
+    // Tabla de comparación de premios
+    doc.rect(50, y, 495, 16).fill('#f1f5f9');
+    doc.fontSize(8).fillColor('#334155');
+    doc.text('Concepto', 55, y + 4);
+    doc.text('Calculado', 180, y + 4);
+    doc.text('UTE (Oficial)', 290, y + 4);
+    doc.text('Diferencia', 400, y + 4);
+    doc.text('Estado', 480, y + 4);
+    y += 16;
+
+    const compPremios = comparacion.premios || {};
+    const itemsComparacion = [
+      { concepto: '1° Premio', calc: compPremios.primerPremio?.importeFinal?.calculado, oficial: compPremios.primerPremio?.importeFinal?.oficial, diff: compPremios.primerPremio?.importeFinal?.diferencia },
+      { concepto: '2° Premio', calc: compPremios.segundoPremio?.importeFinal?.calculado, oficial: compPremios.segundoPremio?.importeFinal?.oficial, diff: compPremios.segundoPremio?.importeFinal?.diferencia },
+      { concepto: '3° Premio', calc: compPremios.terceroPremio?.importeFinal?.calculado, oficial: compPremios.terceroPremio?.importeFinal?.oficial, diff: compPremios.terceroPremio?.importeFinal?.diferencia },
+      { concepto: 'Agente Vendedor', calc: compPremios.agenciero?.importeFinal?.calculado, oficial: compPremios.agenciero?.importeFinal?.oficial, diff: compPremios.agenciero?.importeFinal?.diferencia },
+      { concepto: 'Fondo Reserva', calc: compPremios.fondoReserva?.calculado, oficial: compPremios.fondoReserva?.oficial, diff: compPremios.fondoReserva?.diferencia },
+      { concepto: 'TOTAL PREMIOS', calc: compPremios.importeTotalPremios?.calculado, oficial: compPremios.importeTotalPremios?.oficial, diff: compPremios.importeTotalPremios?.diferencia, bold: true }
+    ];
+
+    doc.fontSize(8);
+    for (const item of itemsComparacion) {
+      const ok = Math.abs(item.diff || 0) < 1;
+      if (item.bold) {
+        doc.rect(50, y, 495, 14).fill('#e0e7ff');
+      }
+      doc.fillColor(item.bold ? '#1e293b' : '#333').text(item.concepto, 55, y + 3);
+      doc.fillColor('#7c3aed').text(formatearMoneda(item.calc || 0), 180, y + 3);
+      doc.fillColor('#059669').text(formatearMoneda(item.oficial || 0), 290, y + 3);
+      doc.fillColor(ok ? '#666' : '#ef4444').text(formatearMoneda(item.diff || 0), 400, y + 3);
+      doc.fillColor(ok ? '#10b981' : '#ef4444').text(ok ? '✓ OK' : '✗ DIF', 480, y + 3);
+      y += 14;
+    }
+
+    // ========== PÁGINA 2 ==========
+    doc.addPage();
+    y = 50;
+
+    // Encabezado página 2
+    doc.fontSize(10).fillColor('#666')
+       .text('LOTERÍA NACIONAL S.E.', 50, 30)
+       .text(`SORTEO: ${datos.sorteo || '-'}`, 450, 30, { align: 'right' });
+    doc.moveTo(50, 50).lineTo(545, 50).stroke('#ddd');
+    y = 60;
+
+    // ========== COMPARACIÓN CON DATOS OFICIALES (REGISTROS) ==========
+    doc.fontSize(11).fillColor('#1e293b')
+       .text('COMPARACIÓN DE REGISTROS Y RECAUDACIÓN', 50, y, { underline: true });
+    y += 18;
+
+    if (comparacion.registros) {
+      doc.rect(50, y, 495, 16).fill('#f1f5f9');
+      doc.fontSize(8).fillColor('#334155');
+      doc.text('Concepto', 55, y + 4);
+      doc.text('Calculado', 200, y + 4);
+      doc.text('Oficial (UTE)', 310, y + 4);
+      doc.text('Estado', 450, y + 4);
+      y += 16;
+
+      const items = [
+        { concepto: 'Registros Válidos', calc: comparacion.registros?.calculado, oficial: comparacion.registros?.oficial },
+        { concepto: 'Registros Anulados', calc: comparacion.anulados?.calculado, oficial: comparacion.anulados?.oficial },
+        { concepto: 'Apuestas Totales', calc: comparacion.apuestas?.calculado, oficial: comparacion.apuestas?.oficial },
+        { concepto: 'Recaudación Bruta', calc: comparacion.recaudacion?.calculado, oficial: comparacion.recaudacion?.oficial, esMonto: true }
+      ];
+
+      doc.fontSize(8);
+      for (const item of items) {
+        const diff = (item.calc || 0) - (item.oficial || 0);
+        const ok = Math.abs(diff) < 1;
+        doc.fillColor('#333').text(item.concepto, 55, y + 3);
+        doc.text(item.esMonto ? formatearMoneda(item.calc) : formatearNumero(item.calc), 200, y + 3);
+        doc.text(item.esMonto ? formatearMoneda(item.oficial) : formatearNumero(item.oficial), 310, y + 3);
+        doc.fillColor(ok ? '#10b981' : '#ef4444')
+           .text(ok ? '✓ OK' : `✗ Dif: ${item.esMonto ? formatearMoneda(diff) : formatearNumero(diff)}`, 450, y + 3);
+        y += 13;
+      }
+    } else {
+      doc.fontSize(9).fillColor('#666').text('No se encontró archivo XML de control previo', 55, y);
+      y += 15;
+    }
+
+    // ========== DESGLOSE POR PROVINCIA ==========
+    y += 15;
+    doc.fontSize(11).fillColor('#1e293b')
+       .text('DESGLOSE POR PROVINCIA', 50, y, { underline: true });
+    y += 18;
+
+    // Encabezado
+    doc.rect(50, y, 495, 14).fill('#f1f5f9');
+    doc.fontSize(8).fillColor('#334155');
+    doc.text('Provincia', 55, y + 3);
+    doc.text('Registros', 200, y + 3);
+    doc.text('Apuestas', 280, y + 3);
+    doc.text('Recaudación', 360, y + 3);
+    doc.text('% Total', 460, y + 3);
+    y += 14;
+
+    const provincias = datos.provincias || {};
+    const totalApuestas = resumen.apuestasTotal || 1;
+    
+    doc.fontSize(8);
+    let provCount = 0;
+    for (const [key, prov] of Object.entries(provincias)) {
+      if (prov && prov.registros > 0 && provCount < 20) {
+        const porcentaje = ((prov.apuestas / totalApuestas) * 100).toFixed(1);
+        doc.fillColor('#333')
+           .text(key, 55, y + 2)
+           .text(formatearNumero(prov.registros), 200, y + 2)
+           .text(formatearNumero(prov.apuestas), 280, y + 2)
+           .text(formatearMoneda(prov.recaudacion), 360, y + 2)
+           .text(porcentaje + '%', 460, y + 2);
+        y += 12;
+        provCount++;
+      }
+    }
+
+    // ========== VERIFICACIÓN DE SEGURIDAD ==========
+    y += 15;
+    doc.fontSize(11).fillColor('#1e293b')
+       .text('VERIFICACIÓN DE ARCHIVOS', 50, y, { underline: true });
+    y += 16;
+
+    if (seguridad.archivos) {
+      const arch = seguridad.archivos;
+      const items = [
+        { label: 'TXT', ok: arch.txt },
+        { label: 'XML CP', ok: arch.xml },
+        { label: 'Hash TXT', ok: arch.hash },
+        { label: 'Hash XML', ok: arch.hashCP },
+        { label: 'PDF', ok: arch.pdf }
+      ];
+      
+      doc.fontSize(9);
+      items.forEach((item, i) => {
+        const x = 55 + (i * 95);
+        doc.fillColor(item.ok ? '#10b981' : '#ef4444')
+           .text(`${item.ok ? '✓' : '✗'} ${item.label}`, x, y);
+      });
+      
+      if (seguridad.verificado !== undefined) {
+        y += 15;
+        doc.fillColor(seguridad.verificado ? '#10b981' : '#ef4444')
+           .fontSize(9)
+           .text(`Integridad Hash: ${seguridad.verificado ? '✓ VERIFICADO' : '✗ NO COINCIDE'}`, 55, y);
+      }
+    }
+
+    // ========== FIRMAS ==========
+    y = 720;
+    doc.moveTo(100, y).lineTo(250, y).stroke('#333');
+    doc.moveTo(350, y).lineTo(500, y).stroke('#333');
+    
+    doc.fontSize(10).fillColor('#666');
+    doc.text('Operador', 100, y + 5, { width: 150, align: 'center' });
+    doc.text('Supervisor', 350, y + 5, { width: 150, align: 'center' });
+
+    // ========== PIE DE PÁGINA ==========
+    doc.fontSize(8).fillColor('#999');
+    doc.text(`Generado: ${fechaHoy} - ${horaHoy}`, 50, 780);
+    doc.text('Página 2 de 2', 450, 780, { align: 'right' });
+
+    // Finalizar documento
+    doc.end();
+
+  } catch (error) {
+    console.error('Error generando acta Poceada:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Error generando acta PDF Poceada: ' + error.message
+    });
+  }
+}
+
+// Generar PDF de Acta de Control Posterior (Escrutinio)
+const generarActaControlPosterior = async (req, res) => {
+  try {
+    const datos = req.body;
+    const tipoJuego = datos.tipoJuego || 'Poceada';
+    
+    // Crear documento PDF
+    const doc = new PDFDocument({ 
+      size: 'A4',
+      margins: { top: 50, bottom: 50, left: 50, right: 50 }
+    });
+    
+    // Configurar respuesta
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `inline; filename=Acta_ControlPosterior_${datos.numeroSorteo || 'sorteo'}.pdf`);
+    
+    doc.pipe(res);
+
+    const fechaHoy = new Date().toLocaleDateString('es-AR', {
+      weekday: 'long', year: 'numeric', month: 'long', day: 'numeric'
+    });
+    const horaHoy = new Date().toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit' });
+
+    // ========== ENCABEZADO ==========
+    doc.fontSize(10).fillColor('#666')
+       .text('LOTERÍA DE LA CIUDAD', 50, 30)
+       .text('CONTROL POSTERIOR', 450, 30, { align: 'right' });
+    
+    doc.moveTo(50, 45).lineTo(545, 45).stroke('#ddd');
+
+    // ========== TÍTULO ==========
+    doc.fontSize(18).fillColor('#1e293b')
+       .text('ACTA DE CONTROL POSTERIOR (ESCRUTINIO)', 50, 70, { align: 'center' });
+    
+    doc.fontSize(14).fillColor('#2563eb')
+       .text(tipoJuego.toUpperCase(), 50, 95, { align: 'center' });
+
+    const resData = datos.resultado || {};
+    const numeroSorteoReal = (datos.numeroSorteo && datos.numeroSorteo !== 'S/N') ? datos.numeroSorteo : (resData.numeroSorteo || 'S/N');
+    const fechaSorteoReal = (datos.fechaSorteo && datos.fechaSorteo !== '-') ? datos.fechaSorteo : (resData.fechaSorteo || '-');
+
+    // ========== INFORMACIÓN DEL SORTEO ==========
+    doc.roundedRect(50, 125, 495, 60, 5).stroke('#e2e8f0');
+    
+    doc.fontSize(10).fillColor('#666').text('SORTEO N°', 70, 140);
+    doc.fontSize(16).fillColor('#2563eb').text(numeroSorteoReal, 70, 155);
+    
+    doc.fontSize(9).fillColor('#666').text('FECHA SORTEO', 250, 140);
+    doc.fontSize(10).fillColor('#333').text(fechaSorteoReal, 250, 155);
+    
+    doc.fontSize(9).fillColor('#666').text('FECHA PROCESAMIENTO', 400, 140);
+    doc.fontSize(10).fillColor('#333').text(fechaHoy + ' ' + horaHoy, 400, 155);
+
+    let y = 205;
+
+    if (tipoJuego === 'Poceada') {
+      const porNivel = resData.porNivel || {};
+      const agenciero = resData.agenciero || {};
+
+      // ========== EXTRACTO ==========
+      doc.fontSize(12).fillColor('#1e293b').text('EXTRACTO DEL SORTEO', 50, y, { underline: true });
+      y += 20;
+      
+      const extracto = resData.extractoUsado || {};
+      doc.fontSize(10).fillColor('#333').text(`Números: ${ (extracto.numeros || []).join(' - ') }`, 60, y);
+      y += 15;
+      doc.text(`Letras: ${ (extracto.letras || '') }`, 60, y);
+      y += 25;
+
+      // ========== DETALLE DE PREMIOS ==========
+      doc.fontSize(12).fillColor('#1e293b').text('DETALLE DE PREMIOS POR NIVEL', 50, y, { underline: true });
+      y += 20;
+
+      // Cabecera de tabla
+      doc.rect(50, y, 495, 20).fill('#1e3a5f');
+      doc.fontSize(9).fillColor('#ffffff').font('Helvetica-Bold');
+      doc.text('NIVEL', 55, y + 6);
+      doc.text('GANADORES', 150, y + 6);
+      doc.text('PREMIO UNIT.', 250, y + 6);
+      doc.text('TOTAL PREMIOS', 350, y + 6);
+      doc.text('VACANTE', 450, y + 6);
+      y += 28;
+
+      const niveles = [
+        { label: '8 ACIERTOS', id: 8 },
+        { label: '7 ACIERTOS', id: 7 },
+        { label: '6 ACIERTOS', id: 6 },
+        { label: 'LETRAS', id: 'letras' }
+      ];
+
+      doc.font('Helvetica');
+      levelsLoop: for (const nivel of niveles) {
+        const n = porNivel[nivel.id] || { ganadores: 0, premioUnitario: 0, totalPremios: 0, pozoVacante: 0 };
+        
+        // Destacar fila de LETRAS
+        if (nivel.id === 'letras') {
+          doc.rect(50, y - 5, 495, 20).fill('#f0f9ff'); // Azul muy claro
+        }
+
+        doc.fillColor('#1e293b').font(nivel.id === 8 ? 'Helvetica-Bold' : 'Helvetica');
+        doc.text(nivel.label, 55, y);
+        doc.font('Helvetica');
+        doc.text(formatearNumero(n.ganadores), 150, y);
+        doc.text(formatearMoneda(n.premioUnitario), 250, y);
+        doc.text(formatearMoneda(n.totalPremios), 350, y);
+        doc.fillColor(n.ganadores === 0 ? '#ef4444' : '#1e293b');
+        doc.text(n.ganadores === 0 ? formatearMoneda(n.pozoVacante) : '-', 450, y);
+        
+        y += 20;
+
+        // Si es 8 aciertos, mostrar estímulo agenciero después
+        if (nivel.id === 8) {
+          // Fondo para estímulo
+          doc.rect(50, y - 5, 495, 20).fill('#fff7ed'); // Naranja muy claro
+          
+          doc.fillColor('#9a3412').font('Helvetica-Bold');
+          doc.text('ESTÍMULO AG.', 65, y);
+          doc.font('Helvetica');
+          doc.text(formatearNumero(agenciero.ganadores || 0), 150, y);
+          doc.text(formatearMoneda(agenciero.premioUnitario || 0), 250, y);
+          doc.text(formatearMoneda(agenciero.totalPremios || 0), 350, y);
+          doc.text(agenciero.pozoVacante > 0 ? formatearMoneda(agenciero.pozoVacante) : '-', 450, y);
+          y += 20;
+
+          // Mostrar detalles de agencias si hay ganadores
+          if (agenciero.detalles && agenciero.detalles.length > 0) {
+            const ags = agenciero.detalles.map(d => d.ctaCte || d.agencia).join(', ');
+            doc.fontSize(8.5).fillColor('#431407').font('Helvetica-Bold')
+               .text(`Cta. Cte. Ganadora(s): ${ags}`, 70, y);
+            y += 15;
+          }
+          doc.fontSize(9);
+        }
+      }
+
+      // ========== COMPARACIÓN CONTROL PREVIO ==========
+      y += 20;
+      doc.fontSize(12).fillColor('#1e293b').text('COMPARACIÓN CON CONTROL PREVIO', 50, y, { underline: true });
+      y += 20;
+
+      const comp = resData.comparacion || {};
+      
+      const compTable = [
+        { item: 'Registros Válidos', cp: comp.registros?.controlPrevio, cs: comp.registros?.controlPosterior, ok: comp.registros?.coincide },
+        { item: 'Apuestas Totales', cp: comp.apuestas?.controlPrevio, cs: comp.apuestas?.controlPosterior, ok: comp.apuestas?.coincide },
+        { item: 'Recaudación Bruta', cp: comp.recaudacion?.controlPrevio, cs: comp.recaudacion?.controlPosterior, ok: comp.recaudacion?.coincide, isMoney: true }
+      ];
+
+      doc.rect(50, y, 495, 18).fill('#f1f5f9');
+      doc.fontSize(9).fillColor('#475569').font('Helvetica-Bold');
+      doc.text('CONCEPTO', 60, y + 5);
+      doc.text('CONTROL PREVIO', 180, y + 5);
+      doc.text('ESCRUTINIO', 330, y + 5);
+      doc.text('ESTADO', 480, y + 5);
+      y += 22;
+
+      doc.font('Helvetica').fillColor('#333');
+      compTable.forEach(row => {
+        doc.text(row.item, 60, y);
+        doc.text(row.isMoney ? formatearMoneda(row.cp) : formatearNumero(row.cp), 180, y);
+        doc.text(row.isMoney ? formatearMoneda(row.cs) : formatearNumero(row.cs), 330, y);
+        doc.fillColor(row.ok ? '#10b981' : '#ef4444').text(row.ok ? 'OK' : 'DIFERENCIA', 480, y);
+        doc.fillColor('#333');
+        y += 18;
+      });
+    }
+
+    // ========== FIRMAS ==========
+    y = 700;
+    doc.moveTo(100, y).lineTo(250, y).stroke('#333');
+    doc.moveTo(350, y).lineTo(500, y).stroke('#333');
+    
+    doc.fontSize(10).fillColor('#666').font('Helvetica');
+    doc.text('Firma Operador', 100, y + 5, { width: 150, align: 'center' });
+    doc.text('Firma Supervisor', 350, y + 5, { width: 150, align: 'center' });
+
+    // Finalizar
+    doc.end();
+
+  } catch (error) {
+    console.error('Error generando acta control posterior:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Error generando PDF: ' + error.message
+    });
+  }
+}
+
 module.exports = {
   generarActaControlPrevio,
-  generarActaNotarial
+  generarActaNotarial,
+  generarActaControlPosterior
 };

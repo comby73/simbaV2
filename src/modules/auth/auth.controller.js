@@ -13,13 +13,34 @@ const login = async (req, res) => {
       return errorResponse(res, 'Usuario y contraseña son requeridos', 400);
     }
 
-    const users = await query(
-      `SELECT u.*, r.codigo as rol, r.nombre as rol_nombre
-       FROM usuarios u 
-       JOIN roles r ON u.rol_id = r.id
-       WHERE u.username = ?`,
-      [username]
-    );
+    let users;
+    try {
+      users = await query(
+        `SELECT u.*, r.codigo as rol, r.nombre as rol_nombre
+         FROM usuarios u 
+         LEFT JOIN roles r ON u.rol_id = r.id
+         WHERE u.username = ?`,
+        [username]
+      );
+    } catch (dbError) {
+      console.error('❌ Error en consulta SQL:', dbError);
+      console.error('SQL Error Code:', dbError.code);
+      console.error('SQL Error Message:', dbError.message);
+      
+      // Mensajes más descriptivos según el tipo de error
+      let errorMessage = 'Error de base de datos';
+      if (dbError.code === 'ECONNREFUSED') {
+        errorMessage = 'MySQL no está corriendo. Por favor, iniciá MySQL desde el Panel de Control de XAMPP.';
+      } else if (dbError.code === 'ER_BAD_DB_ERROR') {
+        errorMessage = 'La base de datos no existe. Ejecutá: npm run db:init';
+      } else if (dbError.code === 'ER_NO_SUCH_TABLE') {
+        errorMessage = 'Las tablas no existen. Ejecutá: npm run db:init';
+      } else {
+        errorMessage = `Error de base de datos: ${dbError.message}`;
+      }
+      
+      return errorResponse(res, errorMessage, 500);
+    }
 
     if (users.length === 0) {
       return errorResponse(res, 'Credenciales inválidas', 401);
@@ -48,9 +69,15 @@ const login = async (req, res) => {
     );
 
     // Generar token
+    const jwtSecret = process.env.JWT_SECRET;
+    if (!jwtSecret) {
+      console.error('❌ JWT_SECRET no está definido en las variables de entorno');
+      return errorResponse(res, 'Error de configuración del servidor', 500);
+    }
+    
     const token = jwt.sign(
       { userId: user.id, username: user.username, rol: user.rol },
-      process.env.JWT_SECRET,
+      jwtSecret,
       { expiresIn: process.env.JWT_EXPIRES_IN || '24h' }
     );
 
@@ -71,8 +98,9 @@ const login = async (req, res) => {
     }, 'Login exitoso');
 
   } catch (error) {
-    console.error('Error en login:', error);
-    return errorResponse(res, 'Error en el servidor', 500);
+    console.error('❌ Error en login:', error);
+    console.error('Stack trace:', error.stack);
+    return errorResponse(res, `Error en el servidor: ${error.message}`, 500);
   }
 };
 

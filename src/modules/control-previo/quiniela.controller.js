@@ -147,6 +147,7 @@ const procesarZip = async (req, res) => {
     const resultado = {
       archivo: req.file.originalname,
       fechaProcesamiento: new Date().toISOString(),
+      tipoJuego: 'Quiniela', // Identificar el tipo de juego
       
       // Datos del TXT procesado
       datosCalculados: {
@@ -177,6 +178,30 @@ const procesarZip = async (req, res) => {
       
       // Datos del XML (UTE)
       datosOficiales: resultadosXml,
+      
+      // Comparación de datos (TXT vs XML) - similar a Poceada
+      comparacion: resultadosXml ? {
+        registros: {
+          calculado: resultadosTxt.registros,
+          oficial: resultadosXml.registrosValidos,
+          diferencia: resultadosTxt.registros - resultadosXml.registrosValidos
+        },
+        anulados: {
+          calculado: resultadosTxt.anulados,
+          oficial: resultadosXml.registrosAnulados,
+          diferencia: resultadosTxt.anulados - resultadosXml.registrosAnulados
+        },
+        apuestas: {
+          calculado: resultadosTxt.apuestas,
+          oficial: resultadosXml.apuestasEnSorteo,
+          diferencia: resultadosTxt.apuestas - resultadosXml.apuestasEnSorteo
+        },
+        recaudacion: {
+          calculado: resultadosTxt.recaudacion,
+          oficial: resultadosXml.recaudacionBruta,
+          diferencia: resultadosTxt.recaudacion - resultadosXml.recaudacionBruta
+        }
+      } : null,
       
       // Verificación de seguridad
       seguridad: {
@@ -274,7 +299,7 @@ async function procesarArchivoNTF(content) {
     const fechaCancelacion = extraerCampo(line, NTF_GENERIC.FECHA_CANCELACION);
     const ordinalApuesta = extraerCampo(line, NTF_GENERIC.ORDINAL_APUESTA);
     const valorApuesta = parseInt(extraerCampo(line, NTF_GENERIC.VALOR_APUESTA)) / 100;
-    const agencia = extraerCampo(line, NTF_GENERIC.AGENCIA);
+    const agencia = extraerCampo(line, NTF_GENERIC.AGENCIA).trim(); // Limpiar espacios
     const numeroTicket = extraerCampo(line, NTF_GENERIC.NUMERO_TICKET);
     const agenciaAmiga = extraerCampo(line, NTF_GENERIC.AGENCIA_AMIGA).trim(); // Pos 114-121 (8 dígitos)
     
@@ -293,7 +318,8 @@ async function procesarArchivoNTF(content) {
 
     // Detectar si está anulado: fecha de cancelación NO está en blanco
     const estaAnulado = fechaCancelacion.trim() !== '';
-    const esOnline = agencia === '88880';
+    // Detectar online: agencia 88880 (puede tener espacios o ceros a la izquierda)
+    const esOnline = agencia === '88880' || agencia.padStart(5, '0') === '88880' || agencia.replace(/\s/g, '') === '88880';
     
     // VALIDACIÓN DE AGENCIA AMIGA: Solo la agencia 88880 (venta web) puede tener agencia amiga
     // Si tiene valor (no espacios, no ceros), debe existir en la tabla de agencias
