@@ -1033,59 +1033,58 @@ const generarActaControlPosterior = async (req, res) => {
       y += 25;
       
       // Header tabla extractos
-      doc.rect(50, y, 495, 16).fill('#e2e8f0');
-      doc.fillColor('#475569').fontSize(7).font('Helvetica-Bold');
+      doc.rect(50, y, 495, 18).fill('#e2e8f0');
+      doc.fillColor('#475569').fontSize(8).font('Helvetica-Bold');
       doc.text('EXTRACTO', 55, y + 5);
-      doc.text('TOTAL', 140, y + 5, { width: 50, align: 'right' });
-      doc.text('1 CIFRA', 200, y + 5, { width: 50, align: 'right' });
-      doc.text('2 CIFRAS', 255, y + 5, { width: 50, align: 'right' });
-      doc.text('3 CIFRAS', 310, y + 5, { width: 50, align: 'right' });
-      doc.text('4 CIFRAS', 365, y + 5, { width: 50, align: 'right' });
-      doc.text('REDOB.', 420, y + 5, { width: 50, align: 'right' });
-      doc.text('LETRAS', 475, y + 5, { width: 50, align: 'right' });
-      y += 18;
+      doc.text('TOTAL', 125, y + 5, { width: 65, align: 'right' });
+      doc.text('1 CIFRA', 195, y + 5, { width: 55, align: 'right' });
+      doc.text('2 CIFRAS', 255, y + 5, { width: 55, align: 'right' });
+      doc.text('3 CIFRAS', 315, y + 5, { width: 55, align: 'right' });
+      doc.text('4 CIFRAS', 375, y + 5, { width: 55, align: 'right' });
+      doc.text('REDOB.', 435, y + 5, { width: 50, align: 'right' });
+      doc.text('LETRAS', 490, y + 5, { width: 50, align: 'right' });
+      y += 20;
       
       // Filas por extracto (2 filas por extracto: ganadores + importes)
       let totGan = 0, totPrem = 0;
       let tot1c = 0, tot2c = 0, tot3c = 0, tot4c = 0, totRed = 0, totLet = 0;
       let prem1c = 0, prem2c = 0, prem3c = 0, prem4c = 0, premRed = 0, premLet = 0;
       
-      const fmtPremioCorto = (p) => {
+      // Función para formatear importe completo con separación de miles y decimales
+      const fmtImporteCompleto = (p) => {
         if (!p || p === 0) return '-';
-        if (p >= 1000000) return '$' + (p/1000000).toFixed(1) + 'M';
-        if (p >= 1000) return '$' + (p/1000).toFixed(0) + 'k';
-        return '$' + p.toFixed(0);
+        return '$' + p.toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
       };
       
-      doc.font('Helvetica').fontSize(7);
+      doc.font('Helvetica').fontSize(8);
       extractosCargados.forEach((rep, i) => {
         // Fondo alternado para cada extracto (cubre las 2 filas)
-        if (i % 2 === 0) doc.rect(50, y - 2, 495, 24).fill('#f8fafc');
+        if (i % 2 === 0) doc.rect(50, y - 2, 495, 28).fill('#f8fafc');
         
         // Primera fila: Nombre del extracto + cantidad de ganadores
-        doc.fillColor('#1e293b').font('Helvetica-Bold');
+        doc.fillColor('#1e293b').font('Helvetica-Bold').fontSize(9);
         doc.text(rep.nombre.substring(0, 14), 55, y);
-        doc.font('Helvetica').fillColor('#333');
-        doc.text(rep.totalGanadores || '-', 140, y, { width: 50, align: 'right' });
-        doc.text(rep.porCifras[1].ganadores || '-', 200, y, { width: 50, align: 'right' });
-        doc.text(rep.porCifras[2].ganadores || '-', 255, y, { width: 50, align: 'right' });
-        doc.text(rep.porCifras[3].ganadores || '-', 310, y, { width: 50, align: 'right' });
-        doc.text(rep.porCifras[4].ganadores || '-', 365, y, { width: 50, align: 'right' });
-        doc.text(rep.redoblona.ganadores || '-', 420, y, { width: 50, align: 'right' });
-        doc.text(rep.letras.ganadores || '-', 475, y, { width: 50, align: 'right' });
+        doc.font('Helvetica').fillColor('#333').fontSize(9);
+        doc.text(rep.totalGanadores || '-', 125, y, { width: 65, align: 'right' });
+        doc.text(rep.porCifras[1].ganadores || '-', 195, y, { width: 55, align: 'right' });
+        doc.text(rep.porCifras[2].ganadores || '-', 255, y, { width: 55, align: 'right' });
+        doc.text(rep.porCifras[3].ganadores || '-', 315, y, { width: 55, align: 'right' });
+        doc.text(rep.porCifras[4].ganadores || '-', 375, y, { width: 55, align: 'right' });
+        doc.text(rep.redoblona.ganadores || '-', 435, y, { width: 50, align: 'right' });
+        doc.text(rep.letras.ganadores || '-', 490, y, { width: 50, align: 'right' });
         
-        y += 10;
+        y += 12;
         
-        // Segunda fila: Importes pagados (en verde, más pequeño)
-        doc.fillColor('#16a34a').fontSize(6).font('Helvetica-Bold');
+        // Segunda fila: Importes pagados (en verde, tamaño legible)
+        doc.fillColor('#16a34a').fontSize(8).font('Helvetica-Bold');
         doc.text('', 55, y); // espacio vacío para alinear
-        doc.text(fmtPremioCorto(rep.totalPagado), 140, y, { width: 50, align: 'right' });
-        doc.text(fmtPremioCorto(rep.porCifras[1].pagado), 200, y, { width: 50, align: 'right' });
-        doc.text(fmtPremioCorto(rep.porCifras[2].pagado), 255, y, { width: 50, align: 'right' });
-        doc.text(fmtPremioCorto(rep.porCifras[3].pagado), 310, y, { width: 50, align: 'right' });
-        doc.text(fmtPremioCorto(rep.porCifras[4].pagado), 365, y, { width: 50, align: 'right' });
-        doc.text(fmtPremioCorto(rep.redoblona.pagado), 420, y, { width: 50, align: 'right' });
-        doc.text(fmtPremioCorto(rep.letras.pagado), 475, y, { width: 50, align: 'right' });
+        doc.text(fmtImporteCompleto(rep.totalPagado), 125, y, { width: 65, align: 'right' });
+        doc.text(fmtImporteCompleto(rep.porCifras[1].pagado), 195, y, { width: 55, align: 'right' });
+        doc.text(fmtImporteCompleto(rep.porCifras[2].pagado), 255, y, { width: 55, align: 'right' });
+        doc.text(fmtImporteCompleto(rep.porCifras[3].pagado), 315, y, { width: 55, align: 'right' });
+        doc.text(fmtImporteCompleto(rep.porCifras[4].pagado), 375, y, { width: 55, align: 'right' });
+        doc.text(fmtImporteCompleto(rep.redoblona.pagado), 435, y, { width: 50, align: 'right' });
+        doc.text(fmtImporteCompleto(rep.letras.pagado), 490, y, { width: 50, align: 'right' });
         
         // Acumular totales
         totGan += rep.totalGanadores;
@@ -1103,34 +1102,34 @@ const generarActaControlPosterior = async (req, res) => {
         premRed += rep.redoblona.pagado;
         premLet += rep.letras.pagado;
         
-        y += 14;
-        doc.fontSize(7);
+        y += 16;
+        doc.fontSize(8);
       });
       
       // Fila de totales - GANADORES
-      doc.rect(50, y, 495, 12).fill('#1e3a5f');
-      doc.fillColor('#ffffff').fontSize(7).font('Helvetica-Bold');
+      doc.rect(50, y, 495, 14).fill('#1e3a5f');
+      doc.fillColor('#ffffff').fontSize(9).font('Helvetica-Bold');
       doc.text('TOTAL GAN.', 55, y + 3);
-      doc.text(totGan, 140, y + 3, { width: 50, align: 'right' });
-      doc.text(tot1c, 200, y + 3, { width: 50, align: 'right' });
-      doc.text(tot2c, 255, y + 3, { width: 50, align: 'right' });
-      doc.text(tot3c, 310, y + 3, { width: 50, align: 'right' });
-      doc.text(tot4c, 365, y + 3, { width: 50, align: 'right' });
-      doc.text(totRed, 420, y + 3, { width: 50, align: 'right' });
-      doc.text(totLet, 475, y + 3, { width: 50, align: 'right' });
-      y += 12;
+      doc.text(totGan, 125, y + 3, { width: 65, align: 'right' });
+      doc.text(tot1c, 195, y + 3, { width: 55, align: 'right' });
+      doc.text(tot2c, 255, y + 3, { width: 55, align: 'right' });
+      doc.text(tot3c, 315, y + 3, { width: 55, align: 'right' });
+      doc.text(tot4c, 375, y + 3, { width: 55, align: 'right' });
+      doc.text(totRed, 435, y + 3, { width: 50, align: 'right' });
+      doc.text(totLet, 490, y + 3, { width: 50, align: 'right' });
+      y += 14;
       
       // Fila de totales - IMPORTES
-      doc.rect(50, y, 495, 12).fill('#334155');
-      doc.fillColor('#ffffff').fontSize(6).font('Helvetica-Bold');
+      doc.rect(50, y, 495, 14).fill('#334155');
+      doc.fillColor('#ffffff').fontSize(8).font('Helvetica-Bold');
       doc.text('TOTAL $', 55, y + 3);
-      doc.text(fmtPremioCorto(totPrem), 140, y + 3, { width: 50, align: 'right' });
-      doc.text(fmtPremioCorto(prem1c), 200, y + 3, { width: 50, align: 'right' });
-      doc.text(fmtPremioCorto(prem2c), 255, y + 3, { width: 50, align: 'right' });
-      doc.text(fmtPremioCorto(prem3c), 310, y + 3, { width: 50, align: 'right' });
-      doc.text(fmtPremioCorto(prem4c), 365, y + 3, { width: 50, align: 'right' });
-      doc.text(fmtPremioCorto(premRed), 420, y + 3, { width: 50, align: 'right' });
-      doc.text(fmtPremioCorto(premLet), 475, y + 3, { width: 50, align: 'right' });
+      doc.text(fmtImporteCompleto(totPrem), 125, y + 3, { width: 65, align: 'right' });
+      doc.text(fmtImporteCompleto(prem1c), 195, y + 3, { width: 55, align: 'right' });
+      doc.text(fmtImporteCompleto(prem2c), 255, y + 3, { width: 55, align: 'right' });
+      doc.text(fmtImporteCompleto(prem3c), 315, y + 3, { width: 55, align: 'right' });
+      doc.text(fmtImporteCompleto(prem4c), 375, y + 3, { width: 55, align: 'right' });
+      doc.text(fmtImporteCompleto(premRed), 435, y + 3, { width: 50, align: 'right' });
+      doc.text(fmtImporteCompleto(premLet), 490, y + 3, { width: 50, align: 'right' });
       
       y += 20;
 
