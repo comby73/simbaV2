@@ -1371,6 +1371,107 @@ function initActas() {
   
   // Establecer fecha de hoy
   document.getElementById('acta-fecha').value = new Date().toISOString().split('T')[0];
+  
+  // Cargar datos desde la programación si hay un sorteo procesado
+  cargarDatosProgramacionEnActa();
+}
+
+// Cargar automáticamente datos de la programación en el formulario de Actas
+function cargarDatosProgramacionEnActa() {
+  // Verificar si hay datos del control previo procesado
+  if (!cpResultadosActuales || !cpResultadosActuales.sorteo) {
+    console.log('No hay datos de sorteo para cargar en el acta');
+    return;
+  }
+  
+  const sorteoInfo = cpResultadosActuales.sorteo || {};
+  const programacion = sorteoInfo.programacion || cpResultadosActuales.validacionProgramacion?.sorteo || {};
+  const modalidadInfo = sorteoInfo.modalidad || {};
+  const tipoJuego = cpResultadosActuales.tipoJuego || 'Quiniela';
+  
+  console.log('Cargando datos de programación en acta:', { sorteoInfo, programacion, modalidadInfo });
+  
+  // N° Sorteo
+  if (sorteoInfo.numero || programacion.numero) {
+    document.getElementById('acta-numero-sorteo').value = sorteoInfo.numero || programacion.numero;
+  }
+  
+  // Fecha del sorteo
+  if (programacion.fecha) {
+    const fecha = new Date(programacion.fecha);
+    document.getElementById('acta-fecha').value = fecha.toISOString().split('T')[0];
+  }
+  
+  // Juego (Quiniela/Poceada)
+  const selectJuego = document.getElementById('acta-juego');
+  if (tipoJuego.toUpperCase() === 'POCEADA') {
+    selectJuego.value = 'POCEADA';
+  } else {
+    selectJuego.value = 'QUINIELA';
+  }
+  
+  // Modalidad
+  const selectModalidad = document.getElementById('acta-modalidad');
+  const nombreModalidad = modalidadInfo.nombre || programacion.modalidad || '';
+  if (nombreModalidad) {
+    // Mapear nombre a valor del select
+    const mapeoModalidad = {
+      'LA PREVIA': 'LA PREVIA',
+      'La Previa': 'LA PREVIA',
+      'PREVIA': 'LA PREVIA',
+      'LA PRIMERA': 'LA PRIMERA',
+      'La Primera': 'LA PRIMERA',
+      'PRIMERA': 'LA PRIMERA',
+      'MATUTINA': 'MATUTINA',
+      'Matutina': 'MATUTINA',
+      'VESPERTINA': 'VESPERTINA',
+      'Vespertina': 'VESPERTINA',
+      'NOCTURNA': 'NOCTURNA',
+      'Nocturna': 'NOCTURNA',
+      'MONTEVIDEO': 'MONTEVIDEO',
+      'Montevideo': 'MONTEVIDEO'
+    };
+    const valorModalidad = mapeoModalidad[nombreModalidad] || nombreModalidad.toUpperCase();
+    // Buscar opción que coincida
+    for (const option of selectModalidad.options) {
+      if (option.value === valorModalidad || option.value.includes(nombreModalidad.toUpperCase())) {
+        selectModalidad.value = option.value;
+        break;
+      }
+    }
+  }
+  
+  // Hora programada (desde programación)
+  if (programacion.hora) {
+    // programacion.hora puede venir como "14:00:00" o "14:00"
+    const hora = programacion.hora.substring(0, 5); // Tomar solo HH:MM
+    document.getElementById('acta-hora-programada').value = hora;
+  }
+  
+  // Jurisdicciones desde programación
+  if (programacion.prov_caba !== undefined) {
+    document.getElementById('jur-caba').checked = programacion.prov_caba === 1;
+  }
+  if (programacion.prov_bsas !== undefined) {
+    document.getElementById('jur-bsas').checked = programacion.prov_bsas === 1;
+  }
+  if (programacion.prov_cordoba !== undefined) {
+    document.getElementById('jur-cordoba').checked = programacion.prov_cordoba === 1;
+  }
+  if (programacion.prov_santafe !== undefined) {
+    document.getElementById('jur-santafe').checked = programacion.prov_santafe === 1;
+  }
+  if (programacion.prov_montevideo !== undefined) {
+    document.getElementById('jur-montevideo').checked = programacion.prov_montevideo === 1;
+  }
+  if (programacion.prov_mendoza !== undefined) {
+    document.getElementById('jur-mendoza').checked = programacion.prov_mendoza === 1;
+  }
+  if (programacion.prov_entrerios !== undefined) {
+    document.getElementById('jur-entrerios').checked = programacion.prov_entrerios === 1;
+  }
+  
+  showToast('Datos del sorteo cargados desde programación', 'info');
 }
 
 function limpiarActa() {

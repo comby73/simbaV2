@@ -517,7 +517,17 @@ const validarProvincias = async (req, res) => {
       sorteo: {
         numero: sorteo.numero_sorteo,
         fecha: sorteo.fecha_sorteo,
-        modalidad: sorteo.modalidad_nombre
+        hora: sorteo.hora_sorteo,
+        modalidad: sorteo.modalidad_nombre,
+        modalidad_codigo: sorteo.modalidad_codigo,
+        // Incluir datos de provincias para el acta
+        prov_caba: sorteo.prov_caba,
+        prov_bsas: sorteo.prov_bsas,
+        prov_cordoba: sorteo.prov_cordoba,
+        prov_santafe: sorteo.prov_santafe,
+        prov_montevideo: sorteo.prov_montevideo,
+        prov_mendoza: sorteo.prov_mendoza,
+        prov_entrerios: sorteo.prov_entrerios
       },
       provincias: [],
       errores: [],
