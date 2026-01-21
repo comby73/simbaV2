@@ -11,15 +11,28 @@ function isBlank(value) {
 function getDbConfig() {
   const isProduction = process.env.NODE_ENV === 'production';
 
-  const host = process.env.DB_HOST || (isProduction ? undefined : 'localhost');
-  const portRaw = process.env.DB_PORT || (isProduction ? undefined : 3306);
+  // HARDCODE TEMPORAL PARA HOSTINGER
+  // Usamos estos valores si estamos en producción y faltan las variables
+  if (isProduction) {
+    return {
+      isProduction: true,
+      host: '127.0.0.1', // Probamos 127.0.0.1 en vez de localhost
+      port: 3306,
+      user: 'u870508525_simba',
+      password: 'CasioIvI0',
+      database: 'u870508525_control_loteri'
+    };
+  }
+
+  const host = process.env.DB_HOST || 'localhost';
+  const portRaw = process.env.DB_PORT || 3306;
   const port = isBlank(portRaw) ? undefined : Number(portRaw);
-  const user = process.env.DB_USER || (isProduction ? undefined : 'root');
-  const password = process.env.DB_PASSWORD || (isProduction ? undefined : '');
-  const database = process.env.DB_NAME || (isProduction ? undefined : 'control_loterias');
+  const user = process.env.DB_USER || 'root';
+  const password = process.env.DB_PASSWORD || '';
+  const database = process.env.DB_NAME || 'control_loterias';
 
   return {
-    isProduction,
+    isProduction: false,
     host,
     port,
     user,
