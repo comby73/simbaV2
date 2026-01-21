@@ -1797,6 +1797,23 @@ function detectarModalidadSorteo(tiposSorteo) {
     return '';
   }
   
+  // Mapeo de códigos NTF a letras de modalidad XML
+  const MAPEO_NTF_A_XML = {
+    'SR': 'M',   // Sorteo Regular -> Matutina (el más común)
+    'MA': 'M',   // Matutina
+    'VE': 'V',   // Vespertina
+    'NO': 'N',   // Nocturna
+    'PR': 'R',   // La Previa
+    'P1': 'P',   // Primera
+    'LP': 'R',   // La Previa
+    'LPR': 'R',  // La Previa
+    'M': 'M',    // Matutina (si ya viene como letra)
+    'V': 'V',    // Vespertina
+    'N': 'N',    // Nocturna
+    'R': 'R',    // La Previa
+    'P': 'P',    // Primera
+  };
+  
   // Encontrar la modalidad con más apuestas
   let maxApuestas = 0;
   let modalidadPrincipal = '';
@@ -1808,7 +1825,12 @@ function detectarModalidadSorteo(tiposSorteo) {
     }
   }
   
-  return modalidadPrincipal;
+  // Convertir código NTF a letra XML
+  const modalidadXML = MAPEO_NTF_A_XML[modalidadPrincipal.toUpperCase()] || modalidadPrincipal;
+  
+  console.log(`Modalidad detectada: NTF="${modalidadPrincipal}" -> XML="${modalidadXML}"`);
+  
+  return modalidadXML;
 }
 
 async function cargarZipPosterior(input) {
