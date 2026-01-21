@@ -1,11 +1,15 @@
 // API Client
-// Detectar si estamos en Apache (puerto 80), Node.js (3000) o abriendo el archivo directamente
+// Detectar el entorno: producción, Apache local (XAMPP), Node.js directo, o archivo
 const isFile = window.location.protocol === 'file:' || window.location.protocol === 'null:';
-const isApache = (window.location.port === '' || window.location.port === '80') && !isFile;
+const isProduction = window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1';
+const isApache = (window.location.port === '' || window.location.port === '80') && !isFile && !isProduction;
 
-// Si es file://, apuntamos al puerto de Node.js por defecto 
-// Usar la IP local o localhost para evitar problemas de CORS con 'null' origin si es posible
-const API_BASE = isFile ? 'http://localhost:3000/api' : (isApache ? '/simbaV2/public/api' : '/api');
+// Configurar API_BASE según el entorno:
+// - Producción (Hostinger): /api
+// - Apache local (XAMPP): /simbaV2/public/api  
+// - Node.js directo: /api
+// - Archivo local: http://localhost:3000/api
+const API_BASE = isFile ? 'http://localhost:3000/api' : (isProduction ? '/api' : (isApache ? '/simbaV2/public/api' : '/api'));
 
 const getToken = () => localStorage.getItem('cl_token');
 const setToken = (token) => localStorage.setItem('cl_token', token);
