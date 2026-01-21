@@ -636,8 +636,14 @@ function mostrarResultadosCP(data) {
         </div>
       `;
     } else {
-      agenciasAmigasDiv.classList.add('hidden');
-      agenciasAmigasDiv.innerHTML = '';
+      // Mostrar mensaje cuando no hay agencias amigas
+      agenciasAmigasDiv.classList.remove('hidden');
+      agenciasAmigasDiv.innerHTML = `
+        <div class="alert alert-info">
+          <h4><i class="fas fa-info-circle"></i> Agencias Amigas</h4>
+          <p style="margin: 0.5rem 0 0 0; color: var(--text-muted);">No se detectaron agencias amigas en este sorteo.</p>
+        </div>
+      `;
     }
   }
   
