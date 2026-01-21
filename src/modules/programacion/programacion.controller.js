@@ -647,37 +647,18 @@ const getSorteosDelDia = async (req, res) => {
 
     // Obtener sorteos programados para la fecha
     const sorteos = await query(`
-      SELECT 
-        ps.*,
-        cp.id as control_previo_id,
-        cp.recaudacion_calculada,
-        cp.registros_procesados,
-        cp.fecha_procesamiento as fecha_control_previo,
-        cpost.id as control_posterior_id,
-        cpost.total_premios_pagados,
-        cpost.fecha_procesamiento as fecha_escrutinio
-      FROM programacion_sorteos ps
-      LEFT JOIN control_previo cp ON ps.numero_sorteo = cp.numero_sorteo AND ps.juego = cp.juego
-      LEFT JOIN control_posterior cpost ON ps.numero_sorteo = cpost.numero_sorteo AND ps.juego = cpost.juego
-      WHERE ps.fecha_sorteo = ? AND ps.activo = 1
-      ORDER BY ps.hora_sorteo ASC, ps.juego ASC
+      SELECT * FROM programacion_sorteos 
+      WHERE fecha_sorteo = ? AND activo = 1
+      ORDER BY hora_sorteo ASC, juego ASC
     `, [fechaConsulta]);
 
-    // Procesar estado de cada sorteo
+    // Por ahora solo mostramos los sorteos sin estado de procesamiento
+    // TODO: Agregar JOINs con control_previo y control_posterior cuando se unifique la estructura
     const sorteosConEstado = sorteos.map(s => {
+      // Por defecto todos pendientes (sin integración con control_previo/posterior aún)
       let estado = 'pendiente';
       let estadoColor = 'secondary';
       let estadoIcono = 'clock';
-      
-      if (s.control_posterior_id) {
-        estado = 'escrutado';
-        estadoColor = 'success';
-        estadoIcono = 'check-double';
-      } else if (s.control_previo_id) {
-        estado = 'control_previo';
-        estadoColor = 'info';
-        estadoIcono = 'clipboard-check';
-      }
 
       return {
         id: s.id,
@@ -700,17 +681,10 @@ const getSorteosDelDia = async (req, res) => {
         estado,
         estadoColor,
         estadoIcono,
-        // Datos de Control Previo
-        controlPrevio: s.control_previo_id ? {
-          recaudacion: s.recaudacion_calculada,
-          registros: s.registros_procesados,
-          fecha: s.fecha_control_previo
-        } : null,
-        // Datos de Control Posterior (Escrutinio)
-        controlPosterior: s.control_posterior_id ? {
-          premiosPagados: s.total_premios_pagados,
-          fecha: s.fecha_escrutinio
-        } : null
+        // Datos de Control Previo (TODO: integrar)
+        controlPrevio: null,
+        // Datos de Control Posterior (TODO: integrar)
+        controlPosterior: null
       };
     });
 
