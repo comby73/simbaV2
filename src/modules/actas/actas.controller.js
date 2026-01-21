@@ -53,7 +53,7 @@ const generarActaControlPrevio = async (req, res) => {
 
     // ========== ENCABEZADO ==========
     doc.fontSize(10).fillColor('#666')
-       .text('LOTERÍA NACIONAL S.E.', 50, 30)
+       .text('LOTERÍA DE LA CIUDAD DE BUENOS AIRES S.E.', 50, 30)
        .text('CONTROL PREVIO', 450, 30, { align: 'right' });
     
     doc.moveTo(50, 55).lineTo(545, 55).stroke('#ddd');
@@ -66,10 +66,22 @@ const generarActaControlPrevio = async (req, res) => {
        .text('QUINIELA DE LA CIUDAD', 50, 105, { align: 'center' });
 
     // ========== INFORMACIÓN DEL SORTEO ==========
-    doc.roundedRect(50, 135, 495, 70, 5).fillAndStroke('#f8fafc', '#e2e8f0');
+    doc.roundedRect(50, 135, 495, 85, 5).fillAndStroke('#f8fafc', '#e2e8f0');
     
     doc.fontSize(10).fillColor('#666').text('SORTEO N°', 70, 150);
     doc.fontSize(18).fillColor('#2563eb').text(calc.numeroSorteo || '-', 70, 165);
+    
+    // Mostrar modalidad desde programación (si está disponible)
+    const validacionProg = datos.validacionProgramacion || {};
+    const sorteoInfo = datos.sorteo || {};
+    let modalidadTexto = '-';
+    if (validacionProg.modalidad && validacionProg.modalidad.nombre) {
+      modalidadTexto = validacionProg.modalidad.nombre + ' (' + validacionProg.modalidad.codigo + ')';
+    } else if (sorteoInfo.modalidad && sorteoInfo.modalidad.nombre) {
+      modalidadTexto = sorteoInfo.modalidad.nombre + ' (' + sorteoInfo.modalidad.codigo + ')';
+    }
+    doc.fontSize(9).fillColor('#666').text('MODALIDAD', 70, 185);
+    doc.fontSize(11).fillColor('#10b981').text(modalidadTexto, 70, 198);
     
     doc.fontSize(9).fillColor('#666').text('ARCHIVO PROCESADO', 250, 150);
     doc.fontSize(10).fillColor('#333').text(datos.archivo || '-', 250, 165);
@@ -78,7 +90,7 @@ const generarActaControlPrevio = async (req, res) => {
     doc.fontSize(10).fillColor('#333').text(new Date(datos.fechaProcesamiento).toLocaleString('es-AR'), 250, 192);
 
     // ========== RESUMEN DE DATOS ==========
-    let y = 220;
+    let y = 235;
     
     doc.fontSize(12).fillColor('#1e293b')
        .text('RESUMEN DE DATOS', 50, y, { underline: true });
@@ -201,48 +213,88 @@ const generarActaControlPrevio = async (req, res) => {
     y += 15;
     doc.fontSize(11).fillColor('#1e293b')
        .text('QUINIELA ONLINE (Agencia 88880)', 50, y, { underline: true });
-    y += 20;
+    y += 15;
 
     const online = calc.online || {};
     doc.fontSize(9).fillColor('#333');
-    doc.text(`Registros: ${formatearNumero(online.registros || 0)}`, 55, y);
-    doc.text(`Apuestas: ${formatearNumero(online.apuestas || 0)}`, 170, y);
-    doc.text(`Recaudación: ${formatearMoneda(online.recaudacion || 0)}`, 285, y);
-    doc.text(`Anulados: ${formatearNumero(online.anulados || 0)}`, 430, y);
+    doc.text(`Registros: ${formatearNumero(online.registros || 0)}  |  Apuestas: ${formatearNumero(online.apuestas || 0)}  |  Recaudación: ${formatearMoneda(online.recaudacion || 0)}  |  Anulados: ${formatearNumero(online.anulados || 0)}`, 55, y);
 
-    // ========== VERIFICACIÓN DE SEGURIDAD ==========
-    y += 30;
+    // ========== VALIDACIÓN CONTRA PROGRAMACIÓN (compacto) ==========
+    y += 25;
+    const validacion = datos.validacionProgramacion || {};
+    
     doc.fontSize(11).fillColor('#1e293b')
-       .text('VERIFICACIÓN DE ARCHIVOS', 50, y, { underline: true });
-    y += 20;
+       .text('VALIDACIÓN CONTRA PROGRAMACIÓN', 50, y, { underline: true });
+    y += 15;
+
+    if (validacion.encontrado) {
+      const sorteo = validacion.sorteo || {};
+      doc.fontSize(9).fillColor('#10b981')
+         .text(`✓ Sorteo ${sorteo.numero} - ${sorteo.modalidad_nombre || 'Sin modalidad'} (${formatearFecha(sorteo.fecha)})`, 55, y);
+      y += 12;
+      
+      // Resumen compacto de provincias (solo las que tienen problema)
+      const provConProblema = (validacion.provincias || []).filter(p => p.estado !== 'OK');
+      if (provConProblema.length > 0) {
+        doc.fontSize(8).fillColor('#ef4444');
+        const problemas = provConProblema.map(p => `${p.nombre}: ${p.estado}`).join(' | ');
+        doc.text(`Provincias con alertas: ${problemas}`, 55, y);
+        y += 10;
+      } else {
+        doc.fontSize(8).fillColor('#10b981')
+           .text('✓ Todas las provincias coinciden con la programación', 55, y);
+        y += 10;
+      }
+    } else {
+      doc.fontSize(9).fillColor('#f59e0b')
+         .text('⚠ Sorteo no encontrado en programación', 55, y);
+      y += 12;
+    }
+
+    // ========== AGENCIAS AMIGAS (compacto) ==========
+    y += 10;
+    const estadAgAmigas = datos.estadisticasAgenciasAmigas || calc.estadisticasAgenciasAmigas || {};
+    const erroresAgAmigas = datos.erroresAgenciasAmigas || [];
+    
+    doc.fontSize(10).fillColor('#1e293b')
+       .text('AGENCIAS AMIGAS:', 50, y);
+    
+    const agAmigasResumen = `Total: ${formatearNumero(estadAgAmigas.total || 0)} | Válidas: ${formatearNumero(estadAgAmigas.validas || 0)} | Inválidas: ${formatearNumero(estadAgAmigas.invalidas || 0)}`;
+    doc.fontSize(9).fillColor('#333').text(agAmigasResumen, 180, y);
+    y += 12;
+
+    if (erroresAgAmigas.length > 0) {
+      doc.fontSize(8).fillColor('#ef4444')
+         .text(`⚠ ${erroresAgAmigas.length} agencias no registradas`, 55, y);
+      y += 10;
+    }
+
+    // ========== VERIFICACIÓN DE SEGURIDAD (compacto en una línea) ==========
+    y += 10;
+    doc.fontSize(10).fillColor('#1e293b').text('VERIFICACIÓN:', 50, y);
 
     if (seguridad.archivos) {
       const arch = seguridad.archivos;
-      const items = [
-        { label: 'TXT', ok: arch.txt },
-        { label: 'XML', ok: arch.xml },
-        { label: 'Hash TXT', ok: arch.hash },
-        { label: 'Hash XML', ok: arch.hashCP },
-        { label: 'PDF', ok: arch.pdf }
-      ];
+      const items = ['TXT', 'XML', 'Hash'].map(label => {
+        const ok = label === 'TXT' ? arch.txt : label === 'XML' ? arch.xml : arch.hash;
+        return ok ? `✓${label}` : `✗${label}`;
+      }).join('  ');
       
-      doc.fontSize(9);
-      items.forEach((item, i) => {
-        const x = 55 + (i * 90);
-        doc.fillColor(item.ok ? '#10b981' : '#ef4444')
-           .text(`${item.ok ? '✓' : '✗'} ${item.label}`, x, y);
-      });
+      doc.fontSize(9).fillColor('#333').text(items, 150, y);
       
       if (seguridad.verificado !== null) {
-        y += 18;
-        doc.fillColor(seguridad.verificado ? '#10b981' : '#ef4444')
-           .fontSize(10)
-           .text(`Hash: ${seguridad.verificado ? '✓ VERIFICADO' : '✗ NO COINCIDE'}`, 55, y);
+        const hashStatus = seguridad.verificado ? '✓ Hash OK' : '✗ Hash NO COINCIDE';
+        doc.fillColor(seguridad.verificado ? '#10b981' : '#ef4444').text(hashStatus, 350, y);
       }
     }
 
     // ========== FIRMAS ==========
-    y = 720;
+    y += 40;
+    // Asegurar que las firmas estén en la parte inferior de la página actual
+    if (y < 680) {
+      y = 680;
+    }
+    
     doc.moveTo(100, y).lineTo(250, y).stroke('#333');
     doc.moveTo(350, y).lineTo(500, y).stroke('#333');
     
@@ -253,7 +305,7 @@ const generarActaControlPrevio = async (req, res) => {
     // ========== PIE DE PÁGINA ==========
     doc.fontSize(8).fillColor('#999');
     doc.text(`Generado: ${fechaHoy} - ${horaHoy}`, 50, 780);
-    doc.text('Página 1 de 1', 450, 780, { align: 'right' });
+    doc.text('Sistema SIMBA v2.0', 450, 780, { align: 'right' });
 
     // Finalizar documento
     doc.end();
@@ -270,6 +322,16 @@ const generarActaControlPrevio = async (req, res) => {
 // Utilidades de formato
 function formatearNumero(num) {
   return (num || 0).toLocaleString('es-AR');
+}
+
+function formatearFecha(fecha) {
+  if (!fecha) return '-';
+  try {
+    const d = new Date(fecha);
+    return d.toLocaleDateString('es-AR');
+  } catch (e) {
+    return String(fecha);
+  }
 }
 
 function formatearMoneda(num) {

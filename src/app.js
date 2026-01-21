@@ -12,6 +12,7 @@ const controlPrevioRoutes = require('./modules/control-previo/control-previo.rou
 const controlPosteriorRoutes = require('./modules/control-posterior/control-posterior.routes');
 const actasRoutes = require('./modules/actas/actas.routes');
 const agenciasRoutes = require('./modules/agencias/agencias.routes');
+const programacionRoutes = require('./modules/programacion/programacion.routes');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -38,6 +39,7 @@ app.use('/api/control-previo', controlPrevioRoutes);
 app.use('/api/control-posterior', controlPosteriorRoutes);
 app.use('/api/actas', actasRoutes);
 app.use('/api/agencias', agenciasRoutes);
+app.use('/api/programacion', programacionRoutes);
 
 // Ruta principal
 app.get('/', (req, res) => {

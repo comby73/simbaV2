@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Control de Loterías</title>
-  <link rel="stylesheet" href="css/styles.css?v=20260121">
+  <link rel="stylesheet" href="css/styles.css?v=20260121b">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
 </head>
 <body>
@@ -95,6 +95,11 @@
         </a>
         <a class="nav-item" data-view="control-posterior">
           <i class="fas fa-calculator"></i> Control Posterior
+        </a>
+        
+        <div class="nav-section">Configuración</div>
+        <a class="nav-item" data-view="programacion">
+          <i class="fas fa-calendar-alt"></i> Programación
         </a>
         
         <div class="nav-section">Documentos</div>
@@ -575,6 +580,33 @@
             <div id="cp-seguridad-content"></div>
           </div>
 
+          <!-- NUEVO: Validación contra Programación -->
+          <div class="card hidden" id="cp-validacion-programacion">
+            <div class="card-header">
+              <h3><i class="fas fa-calendar-check"></i> Validación contra Programación</h3>
+              <span class="badge badge-info" id="cp-modalidad-badge">Sin Modalidad</span>
+            </div>
+            <div class="card-body">
+              <div id="cp-validacion-estado" style="margin-bottom: 1rem;">
+                <!-- Estado general de validación -->
+              </div>
+              <table class="data-table" id="cp-tabla-validacion-provincias">
+                <thead>
+                  <tr>
+                    <th>Provincia</th>
+                    <th>Programada</th>
+                    <th>Apuestas</th>
+                    <th>Recaudación</th>
+                    <th>Estado</th>
+                  </tr>
+                </thead>
+                <tbody></tbody>
+              </table>
+              <div id="cp-validacion-errores" class="hidden" style="margin-top: 1rem;"></div>
+              <div id="cp-validacion-warnings" class="hidden" style="margin-top: 0.5rem;"></div>
+            </div>
+          </div>
+
           <!-- Resumen de Agencias Amigas -->
           <div class="card hidden" id="cp-agencias-amigas-resumen">
             <div class="card-body">
@@ -696,12 +728,43 @@
             <div style="display: flex; gap: 2rem; flex-wrap: wrap;">
               <span><strong>Sorteo:</strong> <span id="cpst-sorteo">-</span></span>
               <span><strong>Juego:</strong> <span id="cpst-juego-badge" class="badge badge-primary">-</span></span>
+              <span><strong>Modalidad:</strong> <span id="cpst-modalidad-badge" class="badge">-</span></span>
               <span><strong>Registros:</strong> <span id="cpst-registros">0</span></span>
               <span><strong>Recaudación:</strong> <span id="cpst-recaudacion">$0</span></span>
             </div>
             <small class="text-muted" style="display: block; margin-top: 0.5rem;" id="cpst-hint-modalidad">
               💡 Al cargar XMLs, solo se procesarán los de la modalidad detectada
             </small>
+          </div>
+          
+          <!-- NUEVO: Validación de Programación -->
+          <div id="cpst-validacion-programacion" class="hidden" style="margin-top: 1rem;">
+            <div class="card" style="background: var(--bg-input); border: 1px solid var(--border-color);">
+              <h4 style="margin-bottom: 1rem;"><i class="fas fa-clipboard-check"></i> Validación contra Programación</h4>
+              
+              <!-- Estado de validación -->
+              <div id="cpst-validacion-estado" style="margin-bottom: 1rem;"></div>
+              
+              <!-- Tabla de provincias -->
+              <div class="table-responsive">
+                <table class="table" id="cpst-tabla-validacion-provincias">
+                  <thead>
+                    <tr>
+                      <th>Provincia</th>
+                      <th>Programada</th>
+                      <th>Apuestas</th>
+                      <th>Recaudación</th>
+                      <th>Estado</th>
+                    </tr>
+                  </thead>
+                  <tbody></tbody>
+                </table>
+              </div>
+              
+              <!-- Errores y Warnings -->
+              <div id="cpst-validacion-errores" class="hidden" style="margin-top: 1rem;"></div>
+              <div id="cpst-validacion-warnings" class="hidden" style="margin-top: 1rem;"></div>
+            </div>
           </div>
         </div>
 
@@ -1312,6 +1375,118 @@
         </div>
       </section>
 
+      <!-- Programación de Sorteos -->
+      <section id="view-programacion" class="view hidden">
+        <div class="page-header">
+          <div>
+            <h1><i class="fas fa-calendar-alt"></i> Programación de Sorteos</h1>
+            <p>Cargar y gestionar la programación mensual de sorteos</p>
+          </div>
+        </div>
+
+        <!-- Cargar Excel -->
+        <div class="card">
+          <h3><i class="fas fa-file-excel"></i> Cargar Programación desde Excel</h3>
+          <div class="form-row">
+            <div class="form-group" style="flex: 1;">
+              <label>Juego</label>
+              <select id="programacion-juego" class="form-control">
+                <option value="quiniela">Quiniela</option>
+                <option value="poceada" disabled>Poceada (próximamente)</option>
+              </select>
+            </div>
+            <div class="form-group" style="flex: 2;">
+              <label>Archivo Excel (.xlsx)</label>
+              <input type="file" id="programacion-archivo" class="form-control" accept=".xlsx,.xls">
+            </div>
+            <div class="form-group" style="flex: 0;">
+              <label>&nbsp;</label>
+              <button class="btn btn-primary" onclick="cargarProgramacionExcel()">
+                <i class="fas fa-upload"></i> Cargar
+              </button>
+            </div>
+            <div class="form-group" style="flex: 0;">
+              <label>&nbsp;</label>
+              <button class="btn btn-danger" onclick="borrarProgramacion()" title="Borrar toda la programación antes de cargar">
+                <i class="fas fa-trash"></i> Borrar Todo
+              </button>
+            </div>
+          </div>
+          <div class="alert alert-info" style="margin-top: 0.5rem;">
+            <i class="fas fa-info-circle"></i> <strong>Tip:</strong> Use "Borrar Todo" antes de recargar si el Excel tiene cambios en las provincias habilitadas.
+          </div>
+          <div id="programacion-upload-result" class="alert hidden"></div>
+        </div>
+
+        <!-- Filtros y Listado -->
+        <div class="card">
+          <h3><i class="fas fa-list"></i> Programación Cargada</h3>
+          <div class="form-row">
+            <div class="form-group">
+              <label>Mes</label>
+              <input type="month" id="programacion-filtro-mes" class="form-control">
+            </div>
+            <div class="form-group">
+              <label>Modalidad</label>
+              <select id="programacion-filtro-modalidad" class="form-control">
+                <option value="" selected>Todas</option>
+                <option value="R">La Previa</option>
+                <option value="P">Primera</option>
+                <option value="M">Matutina</option>
+                <option value="V">Vespertina</option>
+                <option value="N">Nocturna</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label>&nbsp;</label>
+              <button class="btn btn-secondary" onclick="buscarProgramacion()">
+                <i class="fas fa-search"></i> Buscar
+              </button>
+            </div>
+          </div>
+
+          <div class="table-responsive">
+            <table class="table" id="table-programacion">
+              <thead>
+                <tr>
+                  <th>Sorteo</th>
+                  <th>Fecha</th>
+                  <th>Hora</th>
+                  <th>Modalidad</th>
+                  <th>CABA</th>
+                  <th>BS.AS</th>
+                  <th>CBA</th>
+                  <th>STA.FE</th>
+                  <th>URU</th>
+                  <th>MZA</th>
+                  <th>E.RS</th>
+                </tr>
+              </thead>
+              <tbody></tbody>
+            </table>
+          </div>
+          <div id="programacion-paginacion" class="pagination"></div>
+        </div>
+
+        <!-- Historial de Cargas -->
+        <div class="card">
+          <h3><i class="fas fa-history"></i> Historial de Cargas</h3>
+          <table class="table" id="table-programacion-cargas">
+            <thead>
+              <tr>
+                <th>Fecha</th>
+                <th>Juego</th>
+                <th>Mes</th>
+                <th>Archivo</th>
+                <th>Registros</th>
+                <th>Actualizados</th>
+              </tr>
+            </thead>
+            <tbody></tbody>
+          </table>
+        </div>
+      </section>
+
       <!-- Reportes -->
       <section id="view-reportes" class="view hidden">
         <div class="page-header">
@@ -1370,6 +1545,6 @@
   <div id="toast-container"></div>
 
   <script src="js/api.js?v=20260121b"></script>
-  <script src="js/app.js?v=20260121b"></script>
+  <script src="js/app.js?v=20260122c"></script>
 </body>
 </html>

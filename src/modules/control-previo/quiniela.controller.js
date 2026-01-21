@@ -59,14 +59,183 @@ const NTF_QUINIELA = {
 
 // Mapeo de provincias (posición en loterías jugadas)
 const PROVINCIAS_MAP = {
-  0: { codigo: 'CABA', nombre: 'Ciudad Autónoma' },
-  1: { codigo: 'PBA', nombre: 'Buenos Aires' },
-  2: { codigo: 'CBA', nombre: 'Córdoba' },
-  3: { codigo: 'SFE', nombre: 'Santa Fe' },
-  4: { codigo: 'URU', nombre: 'Montevideo' },
-  5: { codigo: 'MZA', nombre: 'Mendoza' },
-  6: { codigo: 'ENR', nombre: 'Entre Ríos' }
+  0: { codigo: 'CABA', nombre: 'Ciudad Autónoma', campo_prog: 'prov_caba' },
+  1: { codigo: 'PBA', nombre: 'Buenos Aires', campo_prog: 'prov_bsas' },
+  2: { codigo: 'CBA', nombre: 'Córdoba', campo_prog: 'prov_cordoba' },
+  3: { codigo: 'SFE', nombre: 'Santa Fe', campo_prog: 'prov_santafe' },
+  4: { codigo: 'URU', nombre: 'Montevideo', campo_prog: 'prov_montevideo' },
+  5: { codigo: 'MZA', nombre: 'Mendoza', campo_prog: 'prov_mendoza' },
+  6: { codigo: 'ENR', nombre: 'Entre Ríos', campo_prog: 'prov_entrerios' }
 };
+
+// Mapeo de códigos NTF a códigos de programación
+const MODALIDAD_NTF_A_PROG = {
+  // La Previa
+  'A': { codigo: 'R', nombre: 'LA PREVIA' },
+  'AS': { codigo: 'R', nombre: 'LA PREVIA' },
+  'SR': { codigo: 'R', nombre: 'LA PREVIA' },
+  'R': { codigo: 'R', nombre: 'LA PREVIA' },
+  'PR': { codigo: 'R', nombre: 'LA PREVIA' },
+  'LP': { codigo: 'R', nombre: 'LA PREVIA' },
+  // La Primera
+  'U': { codigo: 'P', nombre: 'LA PRIMERA' },
+  'US': { codigo: 'P', nombre: 'LA PRIMERA' },
+  'SU': { codigo: 'P', nombre: 'LA PRIMERA' },
+  'SP': { codigo: 'P', nombre: 'LA PRIMERA' },
+  'P': { codigo: 'P', nombre: 'LA PRIMERA' },
+  'P1': { codigo: 'P', nombre: 'LA PRIMERA' },
+  // Matutina
+  'M': { codigo: 'M', nombre: 'MATUTINA' },
+  'MS': { codigo: 'M', nombre: 'MATUTINA' },
+  'SM': { codigo: 'M', nombre: 'MATUTINA' },
+  'MA': { codigo: 'M', nombre: 'MATUTINA' },
+  // Vespertina
+  'V': { codigo: 'V', nombre: 'VESPERTINA' },
+  'VS': { codigo: 'V', nombre: 'VESPERTINA' },
+  'SV': { codigo: 'V', nombre: 'VESPERTINA' },
+  'VE': { codigo: 'V', nombre: 'VESPERTINA' },
+  // Nocturna
+  'N': { codigo: 'N', nombre: 'NOCTURNA' },
+  'NS': { codigo: 'N', nombre: 'NOCTURNA' },
+  'SN': { codigo: 'N', nombre: 'NOCTURNA' },
+  'NO': { codigo: 'N', nombre: 'NOCTURNA' }
+};
+
+/**
+ * Buscar programación del sorteo y validar provincias
+ * @param {number} numeroSorteo - Número de sorteo
+ * @param {object} provinciasNTF - Provincias encontradas en el NTF con sus apuestas/recaudación
+ * @param {string} modalidadNTF - Código de modalidad del NTF (A, M, V, U, N)
+ */
+async function validarContraProgramacion(numeroSorteo, provinciasNTF, modalidadNTF) {
+  const resultado = {
+    encontrado: false,
+    sorteo: null,
+    modalidad: {
+      codigo: null,
+      nombre: null,
+      detectada: modalidadNTF
+    },
+    provincias: [],
+    errores: [],
+    warnings: []
+  };
+
+  try {
+    // Convertir número de sorteo a entero (quitar ceros iniciales)
+    // Ejemplo: "051912" -> 51912
+    const numeroSorteoInt = parseInt(numeroSorteo, 10);
+    
+    // Buscar sorteo en programación
+    const sorteos = await query(
+      'SELECT * FROM programacion_sorteos WHERE numero_sorteo = ? AND juego = ?',
+      [numeroSorteoInt, 'Quiniela']
+    );
+
+    if (sorteos.length === 0) {
+      resultado.warnings.push({
+        tipo: 'SORTEO_NO_PROGRAMADO',
+        mensaje: `Sorteo ${numeroSorteoInt} no encontrado en la programación cargada`
+      });
+      return resultado;
+    }
+
+    const sorteo = sorteos[0];
+    resultado.encontrado = true;
+    resultado.sorteo = {
+      numero: sorteo.numero_sorteo,
+      fecha: sorteo.fecha_sorteo,
+      hora: sorteo.hora_sorteo,
+      modalidad_codigo: sorteo.modalidad_codigo,
+      modalidad_nombre: sorteo.modalidad_nombre
+    };
+    resultado.modalidad.codigo = sorteo.modalidad_codigo;
+    resultado.modalidad.nombre = sorteo.modalidad_nombre;
+
+    // Validar modalidad si se detectó una
+    if (modalidadNTF) {
+      const modalidadMapeada = MODALIDAD_NTF_A_PROG[modalidadNTF.trim().toUpperCase()];
+      if (modalidadMapeada && sorteo.modalidad_codigo && modalidadMapeada.codigo !== sorteo.modalidad_codigo) {
+        resultado.warnings.push({
+          tipo: 'MODALIDAD_NO_COINCIDE',
+          mensaje: `Modalidad del archivo (${modalidadNTF} -> ${modalidadMapeada.nombre}) no coincide con programación (${sorteo.modalidad_nombre})`
+        });
+      }
+    }
+
+    // Validar cada provincia
+    for (const [index, prov] of Object.entries(PROVINCIAS_MAP)) {
+      const provNTF = provinciasNTF[prov.codigo] || { apuestas: 0, recaudacion: 0 };
+      const habilitada = sorteo[prov.campo_prog] === 1;
+      const tieneApuestas = provNTF.apuestas > 0;
+
+      const estadoProv = {
+        indice: parseInt(index),
+        codigo: prov.codigo,
+        nombre: prov.nombre,
+        habilitada,
+        apuestas: provNTF.apuestas,
+        recaudacion: provNTF.recaudacion,
+        estado: 'OK'
+      };
+
+      if (!habilitada && tieneApuestas) {
+        estadoProv.estado = 'ERROR';
+        resultado.errores.push({
+          tipo: 'PROVINCIA_NO_HABILITADA',
+          provincia: prov.nombre,
+          codigo: prov.codigo,
+          mensaje: `Provincia ${prov.nombre} NO está habilitada pero tiene ${provNTF.apuestas} apuestas ($${provNTF.recaudacion.toLocaleString()})`,
+          apuestas: provNTF.apuestas,
+          recaudacion: provNTF.recaudacion
+        });
+      } else if (habilitada && !tieneApuestas) {
+        estadoProv.estado = 'WARNING';
+        resultado.warnings.push({
+          tipo: 'PROVINCIA_SIN_APUESTAS',
+          provincia: prov.nombre,
+          codigo: prov.codigo,
+          mensaje: `Provincia ${prov.nombre} está habilitada pero no tiene apuestas`
+        });
+      }
+
+      resultado.provincias.push(estadoProv);
+    }
+
+  } catch (error) {
+    console.error('Error validando programación:', error);
+    resultado.warnings.push({
+      tipo: 'ERROR_VALIDACION',
+      mensaje: 'No se pudo validar contra la programación: ' + error.message
+    });
+  }
+
+  return resultado;
+}
+
+/**
+ * Detectar la modalidad predominante del archivo NTF
+ * @param {object} tiposSorteo - Objeto con tipos de sorteo y sus apuestas
+ * @returns {string} Código de modalidad (A, M, V, U, N)
+ */
+function detectarModalidadPredominante(tiposSorteo) {
+  if (!tiposSorteo || Object.keys(tiposSorteo).length === 0) {
+    return null;
+  }
+
+  let maxApuestas = 0;
+  let modalidadPrincipal = null;
+
+  for (const [modalidad, datos] of Object.entries(tiposSorteo)) {
+    const apuestas = datos.apuestas || 0;
+    if (apuestas > maxApuestas) {
+      maxApuestas = apuestas;
+      modalidadPrincipal = modalidad.trim();
+    }
+  }
+
+  return modalidadPrincipal;
+}
 
 // Procesar archivo ZIP de control previo
 const procesarZip = async (req, res) => {
@@ -143,11 +312,28 @@ const procesarZip = async (req, res) => {
     // Eliminar archivo ZIP subido
     fs.unlinkSync(zipPath);
 
+    // NUEVO: Detectar modalidad predominante del archivo
+    const modalidadPredominante = detectarModalidadPredominante(resultadosTxt.tiposSorteo);
+    
+    // NUEVO: Validar contra programación
+    const validacionProgramacion = await validarContraProgramacion(
+      resultadosTxt.numeroSorteo,
+      resultadosTxt.provincias,
+      modalidadPredominante
+    );
+
     // Preparar respuesta
     const resultado = {
       archivo: req.file.originalname,
       fechaProcesamiento: new Date().toISOString(),
       tipoJuego: 'Quiniela', // Identificar el tipo de juego
+      
+      // NUEVO: Información del sorteo desde programación
+      sorteo: {
+        numero: resultadosTxt.numeroSorteo,
+        modalidad: validacionProgramacion.modalidad,
+        programacion: validacionProgramacion.sorteo
+      },
       
       // Datos del TXT procesado
       datosCalculados: {
@@ -218,7 +404,10 @@ const procesarZip = async (req, res) => {
       erroresAgenciasAmigas: resultadosTxt.erroresAgenciasAmigas,
       
       // NUEVO: Estadísticas de agencias amigas
-      estadisticasAgenciasAmigas: resultadosTxt.estadisticasAgenciasAmigas
+      estadisticasAgenciasAmigas: resultadosTxt.estadisticasAgenciasAmigas,
+      
+      // NUEVO: Validación contra programación
+      validacionProgramacion: validacionProgramacion
     };
 
     return successResponse(res, resultado, 'Archivo procesado correctamente');

@@ -185,6 +185,9 @@ function navigateTo(view) {
     case 'agencias':
       initAgencias();
       break;
+    case 'programacion':
+      initProgramacion();
+      break;
   }
 }
 
@@ -722,6 +725,9 @@ function mostrarResultadosCP(data) {
       document.getElementById('cp-online-anulados').textContent = '0';
     }
   }
+  
+  // NUEVO: Mostrar validación contra programación
+  mostrarValidacionProgramacionCP(data.validacionProgramacion, data.sorteo);
 }
 
 function limpiarControlPrevio() {
@@ -1766,10 +1772,19 @@ function cargarDatosControlPrevio() {
     datosOficiales: cpResultadosActuales.datosOficiales || null,
     comparacion: cpResultadosActuales.comparacion || null
   };
-  cpstNumeroSorteo = cpstDatosControlPrevio.numeroSorteo || cpResultadosActuales.sorteo || '';
+  cpstNumeroSorteo = cpstDatosControlPrevio.numeroSorteo || cpResultadosActuales.sorteo?.numero || '';
   
-  // Detectar modalidad predominante del sorteo (para Quiniela)
-  cpstModalidadSorteo = detectarModalidadSorteo(cpstDatosControlPrevio.tiposSorteo);
+  // Tomar modalidad SOLO de la programación (basado en número de sorteo)
+  // NO usar el código del NTF (SR, etc.) - la programación ya tiene la modalidad correcta
+  const modalidadProgramacion = cpResultadosActuales.sorteo?.modalidad?.codigo;
+  if (modalidadProgramacion) {
+    cpstModalidadSorteo = modalidadProgramacion;
+    console.log(`Modalidad desde programación (sorteo ${cpstNumeroSorteo}): ${modalidadProgramacion} (${cpResultadosActuales.sorteo?.modalidad?.nombre})`);
+  } else {
+    // Sin programación cargada - no se puede filtrar automáticamente
+    cpstModalidadSorteo = '';
+    console.warn(`⚠️ Sorteo ${cpstNumeroSorteo} no encontrado en programación. Cargue la programación primero.`);
+  }
   
   // Cargar los registros parseados del TXT
   cpstRegistrosNTF = cpRegistrosNTF || cpResultadosActuales.registrosNTF || [];
@@ -1780,11 +1795,23 @@ function cargarDatosControlPrevio() {
   document.getElementById('cpst-registros').textContent = formatNumber(cpstDatosControlPrevio.registros || 0);
   document.getElementById('cpst-recaudacion').textContent = '$' + formatNumber(cpstDatosControlPrevio.recaudacion || 0);
   
+  // Mostrar modalidad desde la programación o detectada
+  const modalidadBadge = document.getElementById('cpst-modalidad-badge');
+  if (modalidadBadge) {
+    const modalidadInfo = cpResultadosActuales.sorteo?.modalidad || {};
+    const nombreModalidad = modalidadInfo.nombre || getNombreModalidad(cpstModalidadSorteo) || 'No identificada';
+    modalidadBadge.textContent = nombreModalidad;
+    modalidadBadge.className = `badge badge-${getModalidadColor(modalidadInfo.codigo || cpstModalidadSorteo)}`;
+  }
+  
   // Mostrar juego seleccionado
   const juegoBadge = document.getElementById('cpst-juego-badge');
   if (juegoBadge) {
     juegoBadge.textContent = cpstJuegoSeleccionado;
   }
+  
+  // NUEVO: Mostrar validación de programación
+  mostrarValidacionProgramacion(cpResultadosActuales.validacionProgramacion);
   
   // Mostrar premios si es Poceada y hay datos oficiales
   if (tipoJuegoDetectado === 'Poceada' && cpResultadosActuales.datosOficiales?.premios) {
@@ -1795,6 +1822,225 @@ function cargarDatosControlPrevio() {
   // Mostrar cuántos registros reales hay
   const cantRegistros = cpstRegistrosNTF.length;
   showToast(`Datos cargados: ${formatNumber(cantRegistros)} registros. Juego: ${cpstJuegoSeleccionado}. Al ejecutar escrutinio se procesarán solo registros de este juego.`, 'success');
+}
+
+// Mostrar validación de programación para Control Previo
+function mostrarValidacionProgramacionCP(validacion, sorteoInfo) {
+  const container = document.getElementById('cp-validacion-programacion');
+  const modalidadBadge = document.getElementById('cp-modalidad-badge');
+  
+  if (!container) return;
+  
+  // Mostrar modalidad desde la programación (si existe)
+  if (sorteoInfo && sorteoInfo.modalidad && sorteoInfo.modalidad.codigo) {
+    modalidadBadge.textContent = getNombreModalidad(sorteoInfo.modalidad.codigo) + ' (' + sorteoInfo.modalidad.codigo + ')';
+    modalidadBadge.className = 'badge badge-success';
+  } else if (sorteoInfo && sorteoInfo.modalidad && sorteoInfo.modalidad.detectada) {
+    // Mostrar modalidad detectada del archivo NTF
+    modalidadBadge.textContent = 'Detectado: ' + sorteoInfo.modalidad.detectada;
+    modalidadBadge.className = 'badge badge-warning';
+  } else {
+    modalidadBadge.textContent = 'Sin Modalidad';
+    modalidadBadge.className = 'badge badge-secondary';
+  }
+  
+  if (!validacion) {
+    container.classList.add('hidden');
+    return;
+  }
+  
+  container.classList.remove('hidden');
+  
+  // Estado general
+  const estadoDiv = document.getElementById('cp-validacion-estado');
+  if (validacion.encontrado) {
+    const sorteo = validacion.sorteo;
+    estadoDiv.innerHTML = `
+      <div class="alert alert-success" style="margin-bottom: 0;">
+        <i class="fas fa-check-circle"></i> 
+        <strong>Sorteo encontrado en programación:</strong> 
+        ${sorteo.numero} - ${sorteo.modalidad_nombre || 'Sin modalidad'} 
+        (${formatDate(sorteo.fecha)})
+      </div>
+    `;
+  } else {
+    estadoDiv.innerHTML = `
+      <div class="alert alert-warning" style="margin-bottom: 0;">
+        <i class="fas fa-exclamation-triangle"></i> 
+        <strong>Sorteo no encontrado en programación.</strong> 
+        Cargue la programación del mes para validar provincias.
+      </div>
+    `;
+  }
+  
+  // Tabla de provincias
+  const tbody = document.querySelector('#cp-tabla-validacion-provincias tbody');
+  if (tbody && validacion.provincias) {
+    tbody.innerHTML = validacion.provincias.map(prov => {
+      let estadoClass = '';
+      let estadoIcon = '';
+      if (prov.estado === 'ERROR') {
+        estadoClass = 'text-danger';
+        estadoIcon = '<i class="fas fa-times-circle text-danger"></i> ERROR';
+      } else if (prov.estado === 'WARNING') {
+        estadoClass = 'text-warning';
+        estadoIcon = '<i class="fas fa-exclamation-triangle text-warning"></i> Advertencia';
+      } else {
+        estadoClass = 'text-success';
+        estadoIcon = '<i class="fas fa-check-circle text-success"></i> OK';
+      }
+      
+      return `
+        <tr class="${estadoClass}">
+          <td><strong>${prov.nombre}</strong> <small>(${prov.codigo})</small></td>
+          <td>${prov.habilitada ? '<span class="badge badge-success">Sí</span>' : '<span class="badge badge-secondary">No</span>'}</td>
+          <td>${formatNumber(prov.apuestas)}</td>
+          <td>$${formatNumber(prov.recaudacion)}</td>
+          <td>${estadoIcon}</td>
+        </tr>
+      `;
+    }).join('');
+  }
+  
+  // Errores
+  const erroresDiv = document.getElementById('cp-validacion-errores');
+  if (erroresDiv && validacion.errores && validacion.errores.length > 0) {
+    erroresDiv.classList.remove('hidden');
+    erroresDiv.innerHTML = `
+      <div class="alert alert-error">
+        <strong><i class="fas fa-times-circle"></i> Errores encontrados:</strong>
+        <ul style="margin: 0.5rem 0 0 1rem;">
+          ${validacion.errores.map(e => `<li>${e.mensaje}</li>`).join('')}
+        </ul>
+      </div>
+    `;
+  } else if (erroresDiv) {
+    erroresDiv.classList.add('hidden');
+  }
+  
+  // Warnings
+  const warningsDiv = document.getElementById('cp-validacion-warnings');
+  if (warningsDiv && validacion.warnings && validacion.warnings.length > 0) {
+    warningsDiv.classList.remove('hidden');
+    warningsDiv.innerHTML = `
+      <div class="alert alert-warning">
+        <strong><i class="fas fa-exclamation-triangle"></i> Advertencias:</strong>
+        <ul style="margin: 0.5rem 0 0 1rem;">
+          ${validacion.warnings.map(w => `<li>${w.mensaje}</li>`).join('')}
+        </ul>
+      </div>
+    `;
+  } else if (warningsDiv) {
+    warningsDiv.classList.add('hidden');
+  }
+}
+
+// Mostrar validación de programación (para Control Posterior)
+function mostrarValidacionProgramacion(validacion) {
+  const container = document.getElementById('cpst-validacion-programacion');
+  if (!container) return;
+  
+  if (!validacion) {
+    container.classList.add('hidden');
+    return;
+  }
+  
+  container.classList.remove('hidden');
+  
+  // Estado general
+  const estadoDiv = document.getElementById('cpst-validacion-estado');
+  if (validacion.encontrado) {
+    const sorteo = validacion.sorteo;
+    estadoDiv.innerHTML = `
+      <div class="alert alert-success" style="margin-bottom: 0;">
+        <i class="fas fa-check-circle"></i> 
+        <strong>Sorteo encontrado en programación:</strong> 
+        ${sorteo.numero} - ${sorteo.modalidad_nombre || 'Sin modalidad'} 
+        (${formatDate(sorteo.fecha)})
+      </div>
+    `;
+  } else {
+    estadoDiv.innerHTML = `
+      <div class="alert alert-warning" style="margin-bottom: 0;">
+        <i class="fas fa-exclamation-triangle"></i> 
+        <strong>Sorteo no encontrado en programación.</strong> 
+        Cargue la programación del mes para validar provincias.
+      </div>
+    `;
+  }
+  
+  // Tabla de provincias
+  const tbody = document.querySelector('#cpst-tabla-validacion-provincias tbody');
+  if (tbody && validacion.provincias) {
+    tbody.innerHTML = validacion.provincias.map(prov => {
+      let estadoClass = '';
+      let estadoIcon = '';
+      if (prov.estado === 'ERROR') {
+        estadoClass = 'text-danger';
+        estadoIcon = '<i class="fas fa-times-circle text-danger"></i> ERROR';
+      } else if (prov.estado === 'WARNING') {
+        estadoClass = 'text-warning';
+        estadoIcon = '<i class="fas fa-exclamation-triangle text-warning"></i> Advertencia';
+      } else {
+        estadoClass = 'text-success';
+        estadoIcon = '<i class="fas fa-check-circle text-success"></i> OK';
+      }
+      
+      return `
+        <tr class="${estadoClass}">
+          <td><strong>${prov.nombre}</strong> <small>(${prov.codigo})</small></td>
+          <td>${prov.habilitada ? '<span class="badge badge-success">Sí</span>' : '<span class="badge badge-secondary">No</span>'}</td>
+          <td>${formatNumber(prov.apuestas)}</td>
+          <td>$${formatNumber(prov.recaudacion)}</td>
+          <td>${estadoIcon}</td>
+        </tr>
+      `;
+    }).join('');
+  }
+  
+  // Errores
+  const erroresDiv = document.getElementById('cpst-validacion-errores');
+  if (erroresDiv && validacion.errores && validacion.errores.length > 0) {
+    erroresDiv.classList.remove('hidden');
+    erroresDiv.innerHTML = `
+      <div class="alert alert-error">
+        <strong><i class="fas fa-times-circle"></i> Errores encontrados:</strong>
+        <ul style="margin: 0.5rem 0 0 1rem;">
+          ${validacion.errores.map(e => `<li>${e.mensaje}</li>`).join('')}
+        </ul>
+      </div>
+    `;
+  } else if (erroresDiv) {
+    erroresDiv.classList.add('hidden');
+  }
+  
+  // Warnings
+  const warningsDiv = document.getElementById('cpst-validacion-warnings');
+  if (warningsDiv && validacion.warnings && validacion.warnings.length > 0) {
+    warningsDiv.classList.remove('hidden');
+    warningsDiv.innerHTML = `
+      <div class="alert alert-warning">
+        <strong><i class="fas fa-exclamation-triangle"></i> Advertencias:</strong>
+        <ul style="margin: 0.5rem 0 0 1rem;">
+          ${validacion.warnings.map(w => `<li>${w.mensaje}</li>`).join('')}
+        </ul>
+      </div>
+    `;
+  } else if (warningsDiv) {
+    warningsDiv.classList.add('hidden');
+  }
+}
+
+// Obtener nombre de modalidad
+function getNombreModalidad(codigo) {
+  const nombres = {
+    'R': 'LA PREVIA',
+    'P': 'LA PRIMERA',
+    'M': 'MATUTINA',
+    'V': 'VESPERTINA',
+    'N': 'NOCTURNA'
+  };
+  return nombres[codigo] || codigo;
 }
 
 // Detectar la modalidad predominante del sorteo
@@ -1812,13 +2058,22 @@ function detectarModalidadSorteo(tiposSorteo) {
     'V': 'V',    // V -> Vespertina
     'U': 'P',    // U -> Primera (Uno/Primera)
     'N': 'N',    // N -> Nocturna
-    // Códigos con S (variantes)
+    'R': 'R',    // R -> La Previa
+    'P': 'P',    // P -> Primera
+    // Códigos con S (variantes sábado/domingo/especial)
     'AS': 'R',   // AS -> La Previa
     'MS': 'M',   // MS -> Matutina
     'VS': 'V',   // VS -> Vespertina
     'US': 'P',   // US -> Primera
     'NS': 'N',   // NS -> Nocturna
-    // Códigos extendidos
+    // Códigos SR/SM/SV/SN/SU (Sorteo Regular por modalidad)
+    'SR': 'R',   // SR -> La Previa
+    'SM': 'M',   // SM -> Matutina
+    'SV': 'V',   // SV -> Vespertina
+    'SN': 'N',   // SN -> Nocturna
+    'SU': 'P',   // SU -> Primera
+    'SP': 'P',   // SP -> Primera
+    // Códigos extendidos (2 letras descriptivas)
     'MA': 'M',   // Matutina
     'VE': 'V',   // Vespertina
     'NO': 'N',   // Nocturna
@@ -1826,10 +2081,12 @@ function detectarModalidadSorteo(tiposSorteo) {
     'P1': 'P',   // Primera
     'LP': 'R',   // La Previa
     'LPR': 'R',  // La Previa
-    // Letras solas (ya correctas)
-    'R': 'R',    // La Previa
-    'P': 'P',    // Primera
-    // SR se ignora - no es una modalidad válida
+    // Códigos con números (si existieran)
+    '1': 'R',    // 1ra del día = La Previa
+    '2': 'M',    // 2da del día = Matutina
+    '3': 'V',    // 3ra del día = Vespertina
+    '4': 'P',    // 4ta del día = Primera
+    '5': 'N',    // 5ta del día = Nocturna
   };
   
   // Encontrar la modalidad con más apuestas
@@ -1843,10 +2100,11 @@ function detectarModalidadSorteo(tiposSorteo) {
     }
   }
   
-  // Convertir código NTF a letra XML
-  const modalidadXML = MAPEO_NTF_A_XML[modalidadPrincipal.toUpperCase()];
+  // Convertir código NTF a letra XML (asegurar trim y uppercase)
+  const modalidadNormalizada = modalidadPrincipal.trim().toUpperCase();
+  const modalidadXML = MAPEO_NTF_A_XML[modalidadNormalizada];
   
-  console.log(`Modalidad detectada: NTF="${modalidadPrincipal}" -> XML="${modalidadXML || 'NO RECONOCIDA'}"`);
+  console.log(`Modalidad detectada: NTF="${modalidadPrincipal}" (normalizada="${modalidadNormalizada}") -> XML="${modalidadXML || 'NO RECONOCIDA'}"`);
   console.log('Todos los tipos de sorteo encontrados:', Object.keys(tiposSorteo));
   
   // Si no se reconoce, mostrar warning y devolver vacío para que el usuario elija
@@ -3554,4 +3812,266 @@ function filtrarAgencias() {
   });
   
   renderAgenciasTabla(filtradas);
+}
+
+// ====================================
+// PROGRAMACIÓN DE SORTEOS
+// ====================================
+
+let programacionData = [];
+let programacionPage = 0;
+const programacionLimit = 50;
+
+function initProgramacion() {
+  // Setear mes actual en filtro
+  const mesInput = document.getElementById('programacion-filtro-mes');
+  if (mesInput) {
+    const now = new Date();
+    mesInput.value = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+  }
+  
+  buscarProgramacion();
+  cargarHistorialProgramacion();
+}
+
+async function borrarProgramacion() {
+  const juegoSelect = document.getElementById('programacion-juego');
+  const juego = juegoSelect.value === 'quiniela' ? 'Quiniela' : 'Poceada';
+  
+  if (!confirm(`¿Está seguro de BORRAR TODA la programación de ${juego}?\n\nEsta acción no se puede deshacer.`)) {
+    return;
+  }
+  
+  try {
+    showToast('Borrando programación...', 'info');
+    
+    const response = await fetch(`${API_BASE}/programacion/borrar`, {
+      method: 'DELETE',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${getToken()}`
+      },
+      body: JSON.stringify({ juego })
+    });
+    
+    const data = await response.json();
+    
+    if (data.success) {
+      showToast(`Programación de ${juego} eliminada: ${data.data.sorteosEliminados} sorteos`, 'success');
+      buscarProgramacion();
+      cargarHistorialProgramacion();
+    } else {
+      showToast(data.message || 'Error al borrar', 'error');
+    }
+  } catch (error) {
+    console.error('Error borrando programación:', error);
+    showToast('Error: ' + error.message, 'error');
+  }
+}
+
+async function cargarProgramacionExcel() {
+  const juegoSelect = document.getElementById('programacion-juego');
+  const archivoInput = document.getElementById('programacion-archivo');
+  const resultDiv = document.getElementById('programacion-upload-result');
+  
+  const juego = juegoSelect.value;
+  const archivo = archivoInput.files[0];
+  
+  if (!archivo) {
+    resultDiv.className = 'alert alert-warning';
+    resultDiv.textContent = 'Seleccione un archivo Excel';
+    resultDiv.classList.remove('hidden');
+    return;
+  }
+  
+  try {
+    resultDiv.className = 'alert alert-info';
+    resultDiv.textContent = 'Cargando...';
+    resultDiv.classList.remove('hidden');
+    
+    const formData = new FormData();
+    formData.append('archivo', archivo);
+    
+    const response = await fetch(`${API_BASE}/programacion/cargar/${juego}`, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${getToken()}`
+      },
+      body: formData
+    });
+    
+    const data = await response.json();
+    
+    if (data.success) {
+      resultDiv.className = 'alert alert-success';
+      resultDiv.innerHTML = `
+        <strong>✓ ${data.message}</strong><br>
+        Registros procesados: ${data.data.registrosProcesados}<br>
+        Nuevos: ${data.data.insertados} | Actualizados: ${data.data.actualizados}<br>
+        Mes: ${data.data.mesCarga}
+      `;
+      archivoInput.value = '';
+      buscarProgramacion();
+      cargarHistorialProgramacion();
+    } else {
+      resultDiv.className = 'alert alert-error';
+      resultDiv.textContent = data.message || 'Error al cargar el archivo';
+    }
+  } catch (error) {
+    console.error('Error cargando Excel:', error);
+    resultDiv.className = 'alert alert-error';
+    resultDiv.textContent = 'Error: ' + error.message;
+  }
+}
+
+async function buscarProgramacion() {
+  const mes = document.getElementById('programacion-filtro-mes')?.value;
+  const modalidad = document.getElementById('programacion-filtro-modalidad')?.value;
+  
+  try {
+    const params = new URLSearchParams();
+    params.append('juego', 'Quiniela');
+    if (mes) params.append('mes', mes);
+    if (modalidad) params.append('modalidad', modalidad);
+    params.append('limit', programacionLimit);
+    params.append('offset', programacionPage * programacionLimit);
+    
+    const response = await fetch(`${API_BASE}/programacion?${params}`, {
+      headers: {
+        'Authorization': `Bearer ${getToken()}`
+      }
+    });
+    
+    const data = await response.json();
+    
+    if (data.success) {
+      programacionData = data.data.sorteos || [];
+      renderTablaProgramacion(programacionData);
+      renderPaginacionProgramacion(data.data.total);
+    } else {
+      showToast(data.message || 'Error al buscar programación', 'error');
+    }
+  } catch (error) {
+    console.error('Error buscando programación:', error);
+    showToast('Error: ' + error.message, 'error');
+  }
+}
+
+function renderTablaProgramacion(sorteos) {
+  const tbody = document.querySelector('#table-programacion tbody');
+  if (!tbody) return;
+  
+  if (sorteos.length === 0) {
+    tbody.innerHTML = '<tr><td colspan="11" class="text-center text-muted">No hay sorteos cargados para este período</td></tr>';
+    return;
+  }
+  
+  tbody.innerHTML = sorteos.map(s => `
+    <tr>
+      <td><strong>${s.numero_sorteo}</strong></td>
+      <td>${formatDate(s.fecha_sorteo)}</td>
+      <td>${s.hora_sorteo || '-'}</td>
+      <td><span class="badge badge-${getModalidadColor(s.modalidad_codigo)}">${s.modalidad_nombre || s.modalidad_codigo || '-'}</span></td>
+      <td class="text-center">${s.prov_caba ? '✓' : ''}</td>
+      <td class="text-center">${s.prov_bsas ? '✓' : ''}</td>
+      <td class="text-center">${s.prov_cordoba ? '✓' : ''}</td>
+      <td class="text-center">${s.prov_santafe ? '✓' : ''}</td>
+      <td class="text-center">${s.prov_montevideo ? '✓' : ''}</td>
+      <td class="text-center">${s.prov_mendoza ? '✓' : ''}</td>
+      <td class="text-center">${s.prov_entrerios ? '✓' : ''}</td>
+    </tr>
+  `).join('');
+}
+
+function getModalidadColor(codigo) {
+  const colores = {
+    'R': 'purple',
+    'P': 'blue',
+    'M': 'orange',
+    'V': 'green',
+    'N': 'dark'
+  };
+  return colores[codigo] || 'secondary';
+}
+
+function renderPaginacionProgramacion(total) {
+  const container = document.getElementById('programacion-paginacion');
+  if (!container) return;
+  
+  const totalPages = Math.ceil(total / programacionLimit);
+  if (totalPages <= 1) {
+    container.innerHTML = '';
+    return;
+  }
+  
+  let html = '<div class="pagination-controls">';
+  
+  if (programacionPage > 0) {
+    html += `<button class="btn btn-sm" onclick="cambiarPaginaProgramacion(${programacionPage - 1})"><i class="fas fa-chevron-left"></i></button>`;
+  }
+  
+  html += `<span class="pagination-info">Página ${programacionPage + 1} de ${totalPages}</span>`;
+  
+  if (programacionPage < totalPages - 1) {
+    html += `<button class="btn btn-sm" onclick="cambiarPaginaProgramacion(${programacionPage + 1})"><i class="fas fa-chevron-right"></i></button>`;
+  }
+  
+  html += '</div>';
+  container.innerHTML = html;
+}
+
+function cambiarPaginaProgramacion(newPage) {
+  programacionPage = newPage;
+  buscarProgramacion();
+}
+
+async function cargarHistorialProgramacion() {
+  try {
+    const response = await fetch(`${API_BASE}/programacion/historial?juego=Quiniela&limit=10`, {
+      headers: {
+        'Authorization': `Bearer ${getToken()}`
+      }
+    });
+    
+    const data = await response.json();
+    
+    if (data.success) {
+      renderHistorialProgramacion(data.data);
+    }
+  } catch (error) {
+    console.error('Error cargando historial:', error);
+  }
+}
+
+function renderHistorialProgramacion(cargas) {
+  const tbody = document.querySelector('#table-programacion-cargas tbody');
+  if (!tbody) return;
+  
+  if (!cargas || cargas.length === 0) {
+    tbody.innerHTML = '<tr><td colspan="6" class="text-center text-muted">No hay cargas registradas</td></tr>';
+    return;
+  }
+  
+  tbody.innerHTML = cargas.map(c => `
+    <tr>
+      <td>${formatDateTime(c.created_at)}</td>
+      <td>${c.juego}</td>
+      <td>${c.mes_carga}</td>
+      <td>${c.archivo_nombre || '-'}</td>
+      <td>${c.registros_cargados}</td>
+      <td>${c.registros_actualizados}</td>
+    </tr>
+  `).join('');
+}
+
+function formatDate(dateStr) {
+  if (!dateStr) return '-';
+  const d = new Date(dateStr);
+  return d.toLocaleDateString('es-AR');
+}
+
+function formatDateTime(dateStr) {
+  if (!dateStr) return '-';
+  const d = new Date(dateStr);
+  return d.toLocaleString('es-AR');
 }
