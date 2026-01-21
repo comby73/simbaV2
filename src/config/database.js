@@ -16,7 +16,7 @@ function getDbConfig() {
     host: '127.0.0.1', 
     port: 3306,
     user: 'u870508525_simba',
-    password: 'Casiolv100',
+    password: 'Machu1733*',
     database: 'u870508525_control_loteri'
   };
 }
