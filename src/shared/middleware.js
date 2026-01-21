@@ -1,6 +1,8 @@
 const jwt = require('jsonwebtoken');
 const { query } = require('../config/database');
 
+const JWT_SECRET = process.env.JWT_SECRET || 'control_loterias_secret_key_2024_muy_segura_HARDCODED_BACKUP';
+
 // Middleware de autenticación JWT
 const authenticate = async (req, res, next) => {
   try {
@@ -16,7 +18,8 @@ const authenticate = async (req, res, next) => {
     const token = authHeader.split(' ')[1];
     
     try {
-      const decoded = jwt.verify(token, process.env.JWT_SECRET);
+      // Usamos el mismo secreto hardcodeado que en el login
+      const decoded = jwt.verify(token, JWT_SECRET);
       
       const users = await query(
         `SELECT u.id, u.username, u.nombre, u.rol_id, u.activo, r.codigo as rol
