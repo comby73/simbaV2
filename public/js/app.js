@@ -1259,6 +1259,19 @@ async function imprimirReportePosterior() {
 
   try {
     const token = getToken();
+    
+    // Obtener datos del sorteo desde programación (cpResultadosActuales del Control Previo)
+    const sorteoInfo = cpResultadosActuales?.sorteo || {};
+    const programacionInfo = sorteoInfo.programacion || cpResultadosActuales?.validacionProgramacion?.sorteo || {};
+    const modalidadInfo = sorteoInfo.modalidad || {};
+    
+    // Formatear fecha desde programación
+    let fechaSorteoFormateada = '';
+    if (programacionInfo.fecha) {
+      const fecha = new Date(programacionInfo.fecha);
+      fechaSorteoFormateada = fecha.toLocaleDateString('es-AR', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
+    }
+    
     const response = await fetch(`${API_BASE}/actas/control-posterior/generar`, {
       method: 'POST',
       headers: {
@@ -1267,8 +1280,13 @@ async function imprimirReportePosterior() {
       },
       body: JSON.stringify({
         tipoJuego: cpstJuegoSeleccionado,
-        numeroSorteo: cpstResultados.numeroSorteo || 'S/N',
-        fechaSorteo: cpstResultados.fechaSorteo || '',
+        numeroSorteo: sorteoInfo.numero || cpstNumeroSorteo || cpstResultados.numeroSorteo || 'S/N',
+        fechaSorteo: fechaSorteoFormateada || cpstResultados.fechaSorteo || '',
+        modalidad: {
+          codigo: modalidadInfo.codigo || cpstModalidadSorteo || '',
+          nombre: modalidadInfo.nombre || getNombreModalidad(cpstModalidadSorteo) || ''
+        },
+        programacion: programacionInfo,
         resultado: cpstResultados
       })
     });

@@ -909,40 +909,44 @@ const generarActaControlPosterior = async (req, res) => {
     const horaHoy = new Date().toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit' });
 
     const resData = datos.resultado || {};
-    const numeroSorteoReal = (datos.numeroSorteo && datos.numeroSorteo !== 'S/N') ? datos.numeroSorteo : (resData.numeroSorteo || 'S/N');
-    const fechaSorteoReal = (datos.fechaSorteo && datos.fechaSorteo !== '-') ? datos.fechaSorteo : (resData.fechaSorteo || '-');
+    
+    // Datos del sorteo desde programación (prioridad) o del resultado
+    const programacion = datos.programacion || {};
+    const modalidad = datos.modalidad || {};
+    const numeroSorteoReal = datos.numeroSorteo || programacion.numero || resData.numeroSorteo || 'S/N';
+    const fechaSorteoReal = datos.fechaSorteo || (programacion.fecha ? new Date(programacion.fecha).toLocaleDateString('es-AR', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' }) : resData.fechaSorteo || '-');
+    const modalidadNombre = modalidad.nombre || programacion.modalidad || '';
 
     // ══════════════════════════════════════════════════════════════
     // ENCABEZADO PRINCIPAL
     // ══════════════════════════════════════════════════════════════
-    doc.rect(50, 30, 495, 60).fill('#1e3a5f');
+    doc.rect(50, 30, 495, 70).fill('#1e3a5f');
     doc.fillColor('#ffffff').fontSize(18).font('Helvetica-Bold')
-       .text('ESCRUTINIO - CONTROL POSTERIOR', 60, 45, { align: 'center' });
+       .text('ESCRUTINIO - CONTROL POSTERIOR', 60, 42, { align: 'center' });
     doc.fontSize(14).font('Helvetica')
-       .text(`${tipoJuego.toUpperCase()} - SORTEO N° ${numeroSorteoReal}`, 60, 68, { align: 'center' });
+       .text(`${tipoJuego.toUpperCase()} - SORTEO N° ${numeroSorteoReal}`, 60, 65, { align: 'center' });
+    if (modalidadNombre) {
+      doc.fontSize(11).fillColor('#93c5fd')
+         .text(modalidadNombre.toUpperCase(), 60, 82, { align: 'center' });
+    }
 
     // ══════════════════════════════════════════════════════════════
     // DATOS DEL SORTEO
     // ══════════════════════════════════════════════════════════════
-    let y = 105;
+    let y = 115;
     doc.rect(50, y, 495, 50).stroke('#e2e8f0');
     
     doc.fillColor('#64748b').fontSize(9).font('Helvetica');
     doc.text('FECHA SORTEO', 70, y + 10);
-    doc.fillColor('#1e293b').fontSize(11).font('Helvetica-Bold');
+    doc.fillColor('#1e293b').fontSize(10).font('Helvetica-Bold');
     doc.text(fechaSorteoReal, 70, y + 25);
     
     doc.fillColor('#64748b').fontSize(9).font('Helvetica');
-    doc.text('PROCESADO', 250, y + 10);
-    doc.fillColor('#1e293b').fontSize(10).font('Helvetica');
-    doc.text(`${fechaHoy}`, 250, y + 25);
-    
-    doc.fillColor('#64748b').fontSize(9).font('Helvetica');
-    doc.text('HORA', 450, y + 10);
-    doc.fillColor('#1e293b').fontSize(10).font('Helvetica');
-    doc.text(horaHoy, 450, y + 25);
+    doc.text('PROCESADO', 300, y + 10);
+    doc.fillColor('#1e293b').fontSize(9).font('Helvetica');
+    doc.text(`${fechaHoy} - ${horaHoy}`, 300, y + 25);
 
-    y = 165;
+    y = 175;
 
     // ══════════════════════════════════════════════════════════════
     // QUINIELA - Reporte completo
