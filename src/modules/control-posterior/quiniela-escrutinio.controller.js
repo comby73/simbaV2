@@ -422,10 +422,11 @@ function ejecutarEscrutinio(registros, extractos) {
     // Guardar info de letras para segunda pasada
     // Las letras se buscan en TODOS los extractos donde jugó el ticket
     // pero las letras ganadoras son siempre las de CABA
-    if (reg.letras && reg.letras.length === 4) {
-      const letrasApuesta = reg.letras.toUpperCase();
+    if (reg.letras && reg.letras.trim().length > 0) {
+      // Normalizar letras: quitar espacios y pasar a mayúsculas
+      const letrasApuesta = reg.letras.replace(/\s+/g, '').toUpperCase();
       const ticketKey = `${reg.numeroTicket}_${reg.ordinal || '01'}`;
-      if (!ticketsConLetras.has(ticketKey)) {
+      if (!ticketsConLetras.has(ticketKey) && letrasApuesta.length === 4) {
         // Guardar las loterías jugadas para saber en qué extractos buscar
         ticketsConLetras.set(ticketKey, { 
           letras: letrasApuesta, 
@@ -441,8 +442,30 @@ function ejecutarEscrutinio(registros, extractos) {
   // - Pero se buscan ganadores en TODOS los extractos donde el ticket jugó
   // - Un ticket solo puede ganar UNA vez por letras (no importa cuántos extractos)
   const cabaReporte = reportePorExtracto[0];
-  if (cabaReporte.cargado && cabaReporte.letras && cabaReporte.letras.length >= 4) {
-    const letrasSorteo = cabaReporte.letras.map(l => l.toUpperCase()).join('');
+  
+  // Normalizar letras del sorteo: pueden venir como array ['M','M','Q','Q'] o string
+  let letrasSorteo = '';
+  if (cabaReporte.cargado && cabaReporte.letras) {
+    if (Array.isArray(cabaReporte.letras)) {
+      letrasSorteo = cabaReporte.letras.map(l => l.toUpperCase()).join('');
+    } else if (typeof cabaReporte.letras === 'string') {
+      letrasSorteo = cabaReporte.letras.replace(/\s+/g, '').toUpperCase();
+    }
+  }
+  
+  console.log(`[LETRAS] Letras del sorteo CABA: "${letrasSorteo}"`);
+  console.log(`[LETRAS] Tickets con letras a verificar: ${ticketsConLetras.size}`);
+  
+  // Mostrar algunas letras de ejemplo del NTF para debug
+  let ejemplosLetras = [];
+  for (const [key, data] of ticketsConLetras) {
+    if (ejemplosLetras.length < 5) {
+      ejemplosLetras.push(data.letras);
+    } else break;
+  }
+  console.log(`[LETRAS] Ejemplos de letras en NTF: ${ejemplosLetras.join(', ')}`);
+  
+  if (letrasSorteo.length >= 4) {
     
     // Set para evitar que un ticket gane múltiples veces por letras
     const ticketsYaGanaronLetras = new Set();
