@@ -1804,8 +1804,21 @@ function detectarModalidadSorteo(tiposSorteo) {
   }
   
   // Mapeo de códigos NTF a letras de modalidad XML
+  // Según documentación NTF: A, M, V, U, N, AS, MS, VS, US, NS
   const MAPEO_NTF_A_XML = {
-    'SR': 'M',   // Sorteo Regular -> Matutina (el más común)
+    // Códigos simples (1 letra)
+    'A': 'R',    // A -> La Previa (Anticipado)
+    'M': 'M',    // M -> Matutina
+    'V': 'V',    // V -> Vespertina
+    'U': 'P',    // U -> Primera (Uno/Primera)
+    'N': 'N',    // N -> Nocturna
+    // Códigos con S (variantes)
+    'AS': 'R',   // AS -> La Previa
+    'MS': 'M',   // MS -> Matutina
+    'VS': 'V',   // VS -> Vespertina
+    'US': 'P',   // US -> Primera
+    'NS': 'N',   // NS -> Nocturna
+    // Códigos extendidos
     'MA': 'M',   // Matutina
     'VE': 'V',   // Vespertina
     'NO': 'N',   // Nocturna
@@ -1813,11 +1826,10 @@ function detectarModalidadSorteo(tiposSorteo) {
     'P1': 'P',   // Primera
     'LP': 'R',   // La Previa
     'LPR': 'R',  // La Previa
-    'M': 'M',    // Matutina (si ya viene como letra)
-    'V': 'V',    // Vespertina
-    'N': 'N',    // Nocturna
+    // Letras solas (ya correctas)
     'R': 'R',    // La Previa
     'P': 'P',    // Primera
+    // SR se ignora - no es una modalidad válida
   };
   
   // Encontrar la modalidad con más apuestas
@@ -1832,9 +1844,16 @@ function detectarModalidadSorteo(tiposSorteo) {
   }
   
   // Convertir código NTF a letra XML
-  const modalidadXML = MAPEO_NTF_A_XML[modalidadPrincipal.toUpperCase()] || modalidadPrincipal;
+  const modalidadXML = MAPEO_NTF_A_XML[modalidadPrincipal.toUpperCase()];
   
-  console.log(`Modalidad detectada: NTF="${modalidadPrincipal}" -> XML="${modalidadXML}"`);
+  console.log(`Modalidad detectada: NTF="${modalidadPrincipal}" -> XML="${modalidadXML || 'NO RECONOCIDA'}"`);
+  console.log('Todos los tipos de sorteo encontrados:', Object.keys(tiposSorteo));
+  
+  // Si no se reconoce, mostrar warning y devolver vacío para que el usuario elija
+  if (!modalidadXML) {
+    console.warn(`⚠️ Código de modalidad "${modalidadPrincipal}" no reconocido. Se mostrarán todas las modalidades de XMLs.`);
+    return ''; // Devolver vacío para que no filtre y muestre selector
+  }
   
   return modalidadXML;
 }
