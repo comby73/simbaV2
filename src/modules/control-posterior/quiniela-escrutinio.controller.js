@@ -455,15 +455,31 @@ function ejecutarEscrutinio(registros, extractos) {
   
   console.log(`[LETRAS] Letras del sorteo CABA: "${letrasSorteo}"`);
   console.log(`[LETRAS] Tickets con letras a verificar: ${ticketsConLetras.size}`);
+  console.log(`[LETRAS] Tickets que ganaron por números (excluidos de letras): ${ticketsConPremioNumeros.size}`);
   
   // Mostrar algunas letras de ejemplo del NTF para debug
   let ejemplosLetras = [];
   for (const [key, data] of ticketsConLetras) {
-    if (ejemplosLetras.length < 5) {
+    if (ejemplosLetras.length < 10) {
       ejemplosLetras.push(data.letras);
     } else break;
   }
   console.log(`[LETRAS] Ejemplos de letras en NTF: ${ejemplosLetras.join(', ')}`);
+  
+  // Contar cuántos coinciden exactamente
+  let coincidenciasExactas = 0;
+  let excluidosPorNumeros = 0;
+  for (const [ticketKey, data] of ticketsConLetras) {
+    const ticketNum = ticketKey.split('_')[0];
+    if (data.letras === letrasSorteo) {
+      coincidenciasExactas++;
+      if (ticketsConPremioNumeros.has(ticketNum)) {
+        excluidosPorNumeros++;
+      }
+    }
+  }
+  console.log(`[LETRAS] Tickets con letras coincidentes: ${coincidenciasExactas}`);
+  console.log(`[LETRAS] De esos, excluidos por ganar números: ${excluidosPorNumeros}`);
   
   if (letrasSorteo.length >= 4) {
     
