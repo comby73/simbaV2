@@ -75,8 +75,8 @@ async function initApp() {
   // Generar inputs de números para extractos
   generarInputsExtracto();
   
-  // Cargar datos base (cuando tengamos los endpoints)
-  // await cargarDatosBase();
+  // Cargar Dashboard con sorteos del día
+  cargarDashboard();
 }
 
 function setupEventListeners() {
@@ -170,6 +170,9 @@ function navigateTo(view) {
   
   // Cargar datos según la vista
   switch (view) {
+    case 'dashboard':
+      cargarDashboard();
+      break;
     case 'usuarios':
       loadUsuarios();
       break;
@@ -4074,4 +4077,140 @@ function formatDateTime(dateStr) {
   if (!dateStr) return '-';
   const d = new Date(dateStr);
   return d.toLocaleString('es-AR');
+}
+
+// ====================================
+// DASHBOARD - SORTEOS DEL DÍA
+// ====================================
+
+let dashboardFechaActual = new Date().toISOString().split('T')[0];
+
+async function cargarDashboard() {
+  // Configurar fecha inicial
+  const fechaInput = document.getElementById('dashboard-fecha-input');
+  if (fechaInput) {
+    fechaInput.value = dashboardFechaActual;
+    fechaInput.addEventListener('change', (e) => {
+      dashboardFechaActual = e.target.value;
+      cargarSorteosDelDia();
+    });
+  }
+  
+  // Actualizar título
+  const fechaTitulo = document.getElementById('dashboard-fecha');
+  if (fechaTitulo) {
+    const fechaObj = new Date(dashboardFechaActual + 'T12:00:00');
+    const opciones = { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' };
+    fechaTitulo.textContent = 'Sorteos del ' + fechaObj.toLocaleDateString('es-AR', opciones);
+  }
+  
+  await cargarSorteosDelDia();
+}
+
+async function cargarSorteosDelDia() {
+  const tbody = document.getElementById('tbody-sorteos-dia');
+  const sinProgramacion = document.getElementById('dashboard-sin-programacion');
+  const tablaSorteos = document.getElementById('tabla-sorteos-dia');
+  
+  try {
+    tbody.innerHTML = '<tr><td colspan="8" class="text-center"><i class="fas fa-spinner fa-spin"></i> Cargando...</td></tr>';
+    
+    const response = await fetch(`${API_BASE}/programacion/dia?fecha=${dashboardFechaActual}`, {
+      headers: { 'Authorization': `Bearer ${getToken()}` }
+    });
+    
+    const data = await response.json();
+    
+    if (!data.success) {
+      tbody.innerHTML = '<tr><td colspan="8" class="text-center text-danger">Error cargando sorteos</td></tr>';
+      return;
+    }
+    
+    const { sorteos, estadisticas } = data.data;
+    
+    // Actualizar estadísticas
+    document.getElementById('stat-total-sorteos').textContent = estadisticas.total;
+    document.getElementById('stat-pendientes').textContent = estadisticas.pendientes;
+    document.getElementById('stat-control-previo').textContent = estadisticas.controlPrevio;
+    document.getElementById('stat-escrutados').textContent = estadisticas.escrutados;
+    document.getElementById('stat-recaudacion-total').textContent = '$' + formatNumber(estadisticas.recaudacionTotal || 0);
+    document.getElementById('stat-premios-total').textContent = '$' + formatNumber(estadisticas.premiosTotales || 0);
+    
+    // Mostrar/ocultar según haya sorteos
+    if (sorteos.length === 0) {
+      tablaSorteos.closest('.card').classList.add('hidden');
+      sinProgramacion.classList.remove('hidden');
+      return;
+    }
+    
+    tablaSorteos.closest('.card').classList.remove('hidden');
+    sinProgramacion.classList.add('hidden');
+    
+    // Renderizar tabla
+    tbody.innerHTML = sorteos.map(s => {
+      const estadoBadge = `<span class="badge badge-${s.estadoColor}"><i class="fas fa-${s.estadoIcono}"></i> ${getEstadoNombre(s.estado)}</span>`;
+      
+      const recaudacion = s.controlPrevio ? '$' + formatNumber(s.controlPrevio.recaudacion) : '-';
+      const premios = s.controlPosterior ? '$' + formatNumber(s.controlPosterior.premiosPagados) : '-';
+      
+      // Acciones según estado
+      let acciones = '';
+      if (s.estado === 'pendiente') {
+        acciones = `<button class="btn btn-sm btn-primary" onclick="irAControlPrevio('${s.numero_sorteo}')" title="Cargar Control Previo">
+          <i class="fas fa-clipboard-check"></i>
+        </button>`;
+      } else if (s.estado === 'control_previo') {
+        acciones = `<button class="btn btn-sm btn-success" onclick="irAControlPosterior('${s.numero_sorteo}')" title="Ejecutar Escrutinio">
+          <i class="fas fa-calculator"></i>
+        </button>`;
+      } else {
+        acciones = `<button class="btn btn-sm btn-secondary" onclick="verDetallesSorteo('${s.numero_sorteo}')" title="Ver Detalles">
+          <i class="fas fa-eye"></i>
+        </button>`;
+      }
+      
+      return `
+        <tr>
+          <td><strong>${s.numero_sorteo}</strong></td>
+          <td>${s.juego}</td>
+          <td>${s.hora_sorteo || '-'}</td>
+          <td><span class="badge badge-${getModalidadColor(s.modalidad_codigo)}">${s.modalidad_nombre || '-'}</span></td>
+          <td>${estadoBadge}</td>
+          <td>${recaudacion}</td>
+          <td>${premios}</td>
+          <td>${acciones}</td>
+        </tr>
+      `;
+    }).join('');
+    
+  } catch (error) {
+    console.error('Error cargando dashboard:', error);
+    tbody.innerHTML = '<tr><td colspan="8" class="text-center text-danger">Error de conexión</td></tr>';
+  }
+}
+
+function getEstadoNombre(estado) {
+  const nombres = {
+    'pendiente': 'Pendiente',
+    'control_previo': 'Ctrl. Previo',
+    'escrutado': 'Escrutado'
+  };
+  return nombres[estado] || estado;
+}
+
+function irAControlPrevio(numeroSorteo) {
+  // Guardar número de sorteo para referencia
+  sessionStorage.setItem('sorteoSeleccionado', numeroSorteo);
+  navigateTo('control-previo');
+  showToast(`Cargue el archivo ZIP del sorteo ${numeroSorteo}`, 'info');
+}
+
+function irAControlPosterior(numeroSorteo) {
+  sessionStorage.setItem('sorteoSeleccionado', numeroSorteo);
+  navigateTo('control-posterior');
+  showToast(`Cargue los extractos para el sorteo ${numeroSorteo}`, 'info');
+}
+
+function verDetallesSorteo(numeroSorteo) {
+  showToast(`Sorteo ${numeroSorteo} - Funcionalidad próximamente`, 'info');
 }

@@ -634,6 +634,108 @@ const borrarProgramacion = async (req, res) => {
   }
 };
 
+/**
+ * Obtener sorteos del día para el Dashboard
+ * Incluye estado de procesamiento (pendiente, control previo, escrutado)
+ */
+const getSorteosDelDia = async (req, res) => {
+  try {
+    const { fecha } = req.query;
+    
+    // Usar fecha actual si no se especifica
+    const fechaConsulta = fecha || new Date().toISOString().split('T')[0];
+
+    // Obtener sorteos programados para la fecha
+    const sorteos = await query(`
+      SELECT 
+        ps.*,
+        cp.id as control_previo_id,
+        cp.recaudacion_calculada,
+        cp.registros_procesados,
+        cp.fecha_procesamiento as fecha_control_previo,
+        cpost.id as control_posterior_id,
+        cpost.total_premios_pagados,
+        cpost.fecha_procesamiento as fecha_escrutinio
+      FROM programacion_sorteos ps
+      LEFT JOIN control_previo cp ON ps.numero_sorteo = cp.numero_sorteo AND ps.juego = cp.juego
+      LEFT JOIN control_posterior cpost ON ps.numero_sorteo = cpost.numero_sorteo AND ps.juego = cpost.juego
+      WHERE ps.fecha_sorteo = ? AND ps.activo = 1
+      ORDER BY ps.hora_sorteo ASC, ps.juego ASC
+    `, [fechaConsulta]);
+
+    // Procesar estado de cada sorteo
+    const sorteosConEstado = sorteos.map(s => {
+      let estado = 'pendiente';
+      let estadoColor = 'secondary';
+      let estadoIcono = 'clock';
+      
+      if (s.control_posterior_id) {
+        estado = 'escrutado';
+        estadoColor = 'success';
+        estadoIcono = 'check-double';
+      } else if (s.control_previo_id) {
+        estado = 'control_previo';
+        estadoColor = 'info';
+        estadoIcono = 'clipboard-check';
+      }
+
+      return {
+        id: s.id,
+        numero_sorteo: s.numero_sorteo,
+        juego: s.juego,
+        fecha_sorteo: s.fecha_sorteo,
+        hora_sorteo: s.hora_sorteo,
+        modalidad_codigo: s.modalidad_codigo,
+        modalidad_nombre: s.modalidad_nombre,
+        provincias: {
+          caba: s.prov_caba,
+          bsas: s.prov_bsas,
+          cordoba: s.prov_cordoba,
+          santafe: s.prov_santafe,
+          montevideo: s.prov_montevideo,
+          mendoza: s.prov_mendoza,
+          entrerios: s.prov_entrerios
+        },
+        // Estado de procesamiento
+        estado,
+        estadoColor,
+        estadoIcono,
+        // Datos de Control Previo
+        controlPrevio: s.control_previo_id ? {
+          recaudacion: s.recaudacion_calculada,
+          registros: s.registros_procesados,
+          fecha: s.fecha_control_previo
+        } : null,
+        // Datos de Control Posterior (Escrutinio)
+        controlPosterior: s.control_posterior_id ? {
+          premiosPagados: s.total_premios_pagados,
+          fecha: s.fecha_escrutinio
+        } : null
+      };
+    });
+
+    // Estadísticas
+    const estadisticas = {
+      total: sorteosConEstado.length,
+      pendientes: sorteosConEstado.filter(s => s.estado === 'pendiente').length,
+      controlPrevio: sorteosConEstado.filter(s => s.estado === 'control_previo').length,
+      escrutados: sorteosConEstado.filter(s => s.estado === 'escrutado').length,
+      recaudacionTotal: sorteosConEstado.reduce((sum, s) => sum + (s.controlPrevio?.recaudacion || 0), 0),
+      premiosTotales: sorteosConEstado.reduce((sum, s) => sum + (s.controlPosterior?.premiosPagados || 0), 0)
+    };
+
+    return successResponse(res, {
+      fecha: fechaConsulta,
+      sorteos: sorteosConEstado,
+      estadisticas
+    });
+
+  } catch (error) {
+    console.error('Error obteniendo sorteos del día:', error);
+    return errorResponse(res, 'Error: ' + error.message, 500);
+  }
+};
+
 module.exports = {
   cargarExcelQuiniela,
   getSorteosPorFecha,
@@ -641,5 +743,6 @@ module.exports = {
   listarProgramacion,
   validarProvincias,
   getHistorialCargas,
-  borrarProgramacion
+  borrarProgramacion,
+  getSorteosDelDia
 };

@@ -15,7 +15,8 @@ const {
   listarProgramacion,
   validarProvincias,
   getHistorialCargas,
-  borrarProgramacion
+  borrarProgramacion,
+  getSorteosDelDia
 } = require('./programacion.controller');
 
 // Configuración de multer para upload de Excel
@@ -87,6 +88,12 @@ router.get('/sorteo/:numero',
 router.get('/historial', 
   requirePermission('programacion.ver'),
   getHistorialCargas
+);
+
+// Sorteos del día (para Dashboard)
+router.get('/dia', 
+  requirePermission('programacion.ver'),
+  getSorteosDelDia
 );
 
 // === RUTAS DE VALIDACIÓN ===
