@@ -30,16 +30,21 @@ function getDbConfig() {
   const isProd = isProduction();
 
   if (isProd) {
-    // PRODUCCIÓN (Hostinger): Credenciales hardcodeadas con fallback a .env
+    // PRODUCCIÓN (Hostinger): Usar SOLO variables de entorno configuradas en Hostinger
+    if (!process.env.DB_HOST || !process.env.DB_USER || !process.env.DB_PASSWORD || !process.env.DB_NAME) {
+      console.error('❌ FATAL: Variables de entorno de BD no configuradas en Hostinger');
+      console.error('   Configurá: DB_HOST, DB_USER, DB_PASSWORD, DB_NAME');
+      process.exit(1);
+    }
     return {
-      host: process.env.DB_HOST || 'srv1663.hstgr.io',
+      host: process.env.DB_HOST,
       port: parseInt(process.env.DB_PORT) || 3306,
-      user: process.env.DB_USER || 'u870508525_simba',
-      password: process.env.DB_PASSWORD || 'Casiolvl0',
-      database: process.env.DB_NAME || 'u870508525_control_loteri'
+      user: process.env.DB_USER,
+      password: process.env.DB_PASSWORD,
+      database: process.env.DB_NAME
     };
   } else {
-    // LOCAL (XAMPP): Credenciales hardcodeadas con fallback a .env
+    // LOCAL (XAMPP): Fallback para desarrollo
     return {
       host: process.env.DB_HOST || 'localhost',
       port: parseInt(process.env.DB_PORT) || 3306,
