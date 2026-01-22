@@ -1,7 +1,14 @@
 const jwt = require('jsonwebtoken');
 const { query } = require('../config/database');
 
-const JWT_SECRET = process.env.JWT_SECRET || 'control_loterias_secret_key_2024_muy_segura_HARDCODED_BACKUP';
+// CRÍTICO: JWT_SECRET debe estar definido en variables de entorno
+if (!process.env.JWT_SECRET) {
+  console.error('❌ FATAL: JWT_SECRET no está definido en las variables de entorno');
+  console.error('   Por favor configurá JWT_SECRET en el archivo .env');
+  process.exit(1);
+}
+
+const JWT_SECRET = process.env.JWT_SECRET;
 
 // Middleware de autenticación JWT
 const authenticate = async (req, res, next) => {
@@ -18,7 +25,6 @@ const authenticate = async (req, res, next) => {
     const token = authHeader.split(' ')[1];
     
     try {
-      // Usamos el mismo secreto hardcodeado que en el login
       const decoded = jwt.verify(token, JWT_SECRET);
       
       const users = await query(
