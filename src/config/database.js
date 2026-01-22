@@ -5,47 +5,41 @@ require('dotenv').config({ path: path.join(__dirname, '../../.env') });
 
 let pool;
 
-function isBlank(value) {
-  return value === undefined || value === null || String(value).trim() === '';
-}
-
 // Detectar si estamos en producción (Hostinger) o local (XAMPP/desarrollo)
+// IMPORTANTE: Esto se detecta por el sistema operativo y hostname, NO por variables de entorno
 function isProduction() {
-  // Verificar NODE_ENV primero
-  if (process.env.NODE_ENV === 'production') {
-    return true;
-  }
-
-  // Fallback: detectar por hostname de Hostinger
+  const platform = os.platform();
   const hostname = os.hostname().toLowerCase();
-  const isHostinger = hostname.includes('hostinger') ||
-                      hostname.includes('srv') ||
-                      process.env.DB_USER === 'u870508525_simba';
 
-  if (isHostinger) {
-    console.log('⚠️  Detectado servidor Hostinger sin NODE_ENV=production');
-    return true;
-  }
+  // Windows = desarrollo local
+  // Linux con hostname que contenga 'srv', 'hostinger', 'vps' = producción
+  const isLinux = platform === 'linux';
+  const isHostingerServer = hostname.includes('srv') ||
+                            hostname.includes('hostinger') ||
+                            hostname.includes('vps');
 
-  return false;
+  const isProd = isLinux && isHostingerServer;
+
+  console.log(`🔧 Sistema: ${platform} | Hostname: ${hostname}`);
+  console.log(`🔧 Entorno detectado: ${isProd ? 'PRODUCCIÓN (Hostinger)' : 'LOCAL (XAMPP)'}`);
+
+  return isProd;
 }
 
 function getDbConfig() {
   const isProd = isProduction();
-  
-  console.log(`🔧 Entorno detectado: ${isProd ? 'PRODUCCIÓN (Hostinger)' : 'LOCAL (XAMPP)'}`);
-  
+
   if (isProd) {
-    // PRODUCCIÓN: Credenciales de Hostinger
+    // PRODUCCIÓN (Hostinger): Credenciales hardcodeadas con fallback a .env
     return {
-      host: process.env.DB_HOST || '127.0.0.1',
+      host: process.env.DB_HOST || 'localhost',
       port: parseInt(process.env.DB_PORT) || 3306,
       user: process.env.DB_USER || 'u870508525_simba',
       password: process.env.DB_PASSWORD || 'Machu1733*',
       database: process.env.DB_NAME || 'u870508525_control_loteri'
     };
   } else {
-    // LOCAL: Credenciales de XAMPP
+    // LOCAL (XAMPP): Credenciales hardcodeadas con fallback a .env
     return {
       host: process.env.DB_HOST || 'localhost',
       port: parseInt(process.env.DB_PORT) || 3306,
@@ -56,16 +50,12 @@ function getDbConfig() {
   }
 }
 
-function assertDbConfig(config) {
-  // Desactivamos validación temporalmente
-  return;
-}
+// Eliminamos la validación, las credenciales ya están hardcodeadas según el entorno
 
 function getPool() {
   if (pool) return pool;
 
   const config = getDbConfig();
-  assertDbConfig(config);
 
   pool = mysql.createPool({
     host: config.host,
@@ -83,7 +73,6 @@ function getPool() {
     port: config.port,
     user: config.user,
     database: config.database,
-    nodeEnv: process.env.NODE_ENV || 'development',
   });
 
   return pool;
