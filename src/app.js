@@ -5,6 +5,8 @@ const cors = require('cors');
 const helmet = require('helmet');
 const { testConnection } = require('./config/database');
 
+// v2.1.0 - Sistema actualizado con fix de letras en escrutinio
+
 // Importar rutas
 const authRoutes = require('./modules/auth/auth.routes');
 const usersRoutes = require('./modules/users/users.routes');
