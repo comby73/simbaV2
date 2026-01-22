@@ -32,10 +32,10 @@ function getDbConfig() {
   if (isProd) {
     // PRODUCCIÓN (Hostinger): Credenciales hardcodeadas con fallback a .env
     return {
-      host: process.env.DB_HOST || 'localhost',
+      host: process.env.DB_HOST || 'srv1663.hstgr.io',
       port: parseInt(process.env.DB_PORT) || 3306,
       user: process.env.DB_USER || 'u870508525_simba',
-      password: process.env.DB_PASSWORD || 'Machu1733*',
+      password: process.env.DB_PASSWORD || 'Casiolvl0',
       database: process.env.DB_NAME || 'u870508525_control_loteri'
     };
   } else {
