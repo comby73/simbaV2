@@ -4,13 +4,9 @@ const { query } = require('../../config/database');
 const { successResponse, errorResponse } = require('../../shared/helpers');
 const { registrarAuditoria } = require('../../shared/middleware');
 
-// JWT_SECRET: usar variable de entorno o fallback
-const JWT_SECRET = process.env.JWT_SECRET || 'e7396868f04f94d713e9e64acd1ee1758704350dbd4da311fcbfd8d01ec28658d2a62b5da2f40db9c381401bfe330a8098b98d19948cfbf175146e54f1dbfac7';
-const JWT_EXPIRES_IN = process.env.JWT_EXPIRES_IN || '24h';
-
-if (!process.env.JWT_SECRET) {
-  console.warn('⚠️  JWT_SECRET no está en .env, usando fallback (NO recomendado para producción)');
-}
+// JWT_SECRET: valor fijo simple
+const JWT_SECRET = 'e7396868f04f94d713e9e64acd1ee1758704350dbd4da311fcbfd8d01ec28658d2a62b5da2f40db9c381401bfe330a8098b98d19948cfbf175146e54f1dbfac7';
+const JWT_EXPIRES_IN = '24h';
 
 // Login
 const login = async (req, res) => {

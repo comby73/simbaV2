@@ -10,7 +10,13 @@
       "Bash(set DB_PORT=3306)",
       "Bash(git add:*)",
       "Bash(git commit:*)",
-      "Bash(node:*)"
+      "Bash(node:*)",
+      "Bash(tasklist:*)",
+      "Bash(findstr:*)",
+      "Bash(taskkill:*)",
+      "Bash(npm run dev:*)",
+      "Bash(npm --version)",
+      "Bash(netstat:*)"
     ]
   }
 }

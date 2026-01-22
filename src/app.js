@@ -14,7 +14,7 @@ const actasRoutes = require('./modules/actas/actas.routes');
 const agenciasRoutes = require('./modules/agencias/agencias.routes');
 
 const app = express();
-const PORT = process.env.PORT || 3000;
+const PORT = 3000;
 
 // Middlewares de seguridad
 app.use(helmet({ contentSecurityPolicy: false }));
@@ -46,11 +46,9 @@ app.get('/', (req, res) => {
 
 // Health check
 app.get('/api/health', (req, res) => {
-  res.json({ 
-    status: 'ok', 
-    timestamp: new Date().toISOString(),
-    app: process.env.APP_NAME,
-    version: process.env.APP_VERSION
+  res.json({
+    status: 'ok',
+    timestamp: new Date().toISOString()
   });
 });
 
@@ -79,9 +77,8 @@ async function startServer() {
 
   app.listen(PORT, () => {
     console.log('═══════════════════════════════════════════════════');
-    console.log(`🎰 ${process.env.APP_NAME || 'Control de Loterías'}`);
-    console.log(`🚀 Servidor corriendo en: http://localhost:${PORT}`);
-    console.log(`📊 Ambiente: ${process.env.NODE_ENV || 'development'}`);
+    console.log('🎰 Control de Loterías');
+    console.log(`🚀 Servidor corriendo en puerto ${PORT}`);
     console.log('═══════════════════════════════════════════════════');
   });
 }
