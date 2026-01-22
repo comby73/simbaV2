@@ -11,18 +11,9 @@ function isBlank(value) {
 
 // Detectar si estamos en producción (Hostinger) o local (XAMPP/desarrollo)
 function isProduction() {
-  // Si existe variable de entorno NODE_ENV=production, es producción
-  if (process.env.NODE_ENV === 'production') return true;
-  
-  // Si el hostname no es tu PC local, es producción
-  const hostname = os.hostname().toLowerCase();
-  const localHostnames = ['desktop', 'laptop', 'comby', 'pc', 'localhost'];
-  const isLocal = localHostnames.some(h => hostname.includes(h));
-  
-  // Si no parece local y no es Windows, probablemente es servidor
-  if (!isLocal && process.platform === 'linux') return true;
-  
-  return false;
+  // SOLO verificar NODE_ENV para evitar confusiones
+  // En producción SIEMPRE debe estar NODE_ENV=production
+  return process.env.NODE_ENV === 'production';
 }
 
 function getDbConfig() {
