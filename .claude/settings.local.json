@@ -1,0 +1,16 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(git push:*)",
+      "Bash(node src/app.js:*)",
+      "Bash(set NODE_ENV=production)",
+      "Bash(set DB_HOST=srv1663.hstgr.io)",
+      "Bash(set:*)",
+      "Bash(set DB_PASSWORD=MachuJ733*)",
+      "Bash(set DB_PORT=3306)",
+      "Bash(git add:*)",
+      "Bash(git commit:*)",
+      "Bash(node:*)"
+    ]
+  }
+}
