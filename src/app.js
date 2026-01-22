@@ -14,8 +14,29 @@ const actasRoutes = require('./modules/actas/actas.routes');
 const agenciasRoutes = require('./modules/agencias/agencias.routes');
 const programacionRoutes = require('./modules/programacion/programacion.routes');
 
+const fs = require('fs');
+
+// Redirigir consola a un archivo para Hostinger
+const logFile = fs.createWriteStream(path.join(__dirname, '../debug.log'), { flags: 'a' });
+process.stdout.write = process.stderr.write = logFile.write.bind(logFile);
+
+console.log('--- INICIO DE APLICACIÓN ' + new Date().toISOString() + ' ---');
+
 const app = express();
 const PORT = process.env.PORT || 3000;
+
+// Ruta de diagnóstico para Hostinger
+app.get('/health', async (req, res) => {
+  const { testConnection } = require('./config/database');
+  const dbStatus = await testConnection();
+  res.json({
+    status: 'ok',
+    uptime: process.uptime(),
+    database: dbStatus ? 'connected' : 'error',
+    env: process.env.NODE_ENV,
+    time: new Date().toISOString()
+  });
+});
 
 // Middlewares de seguridad
 app.use(helmet({ contentSecurityPolicy: false }));
@@ -72,23 +93,22 @@ app.use((req, res) => {
 });
 
 // Iniciar servidor
-async function startServer() {
-  const dbConnected = await testConnection();
+console.log('Iniciando servidor Node...');
+
+app.listen(PORT, () => {
+  console.log('Servidor iniciado en puerto ' + PORT);
+  console.log('═══════════════════════════════════════════════════');
+  console.log(`🎰 ${process.env.APP_NAME || 'Control de Loterías'}`);
+  console.log(`📊 Ambiente: ${process.env.NODE_ENV || 'production'}`);
+  console.log('═══════════════════════════════════════════════════');
   
-  if (!dbConnected) {
-    console.warn('⚠️  Servidor iniciando sin conexión a BD');
-  }
-
-  app.listen(PORT, () => {
-    console.log('═══════════════════════════════════════════════════');
-    console.log(`🎰 ${process.env.APP_NAME || 'Control de Loterías'}`);
-    console.log(`🚀 Servidor corriendo en: http://localhost:${PORT}`);
-    console.log(`📊 Ambiente: ${process.env.NODE_ENV || 'development'}`);
-    console.log('═══════════════════════════════════════════════════');
+  // Probamos la conexión en segundo plano para no bloquear el inicio
+  testConnection().then(connected => {
+    if (!connected) {
+      console.error('🚨 ADVERTENCIA: No se pudo conectar a la base de datos.');
+    }
   });
-}
-
-startServer();
+});
 
 // Prevenir que el servidor se caiga por errores no capturados
 process.on('uncaughtException', (err) => {

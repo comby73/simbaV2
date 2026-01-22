@@ -33,11 +33,12 @@ function getDbConfig() {
   if (isProd) {
     // PRODUCCIÓN: Credenciales de Hostinger
     return {
-      host: process.env.DB_HOST || '127.0.0.1',
+      host: process.env.DB_HOST || 'localhost', // Intentar localhost por defecto en Hostinger
       port: parseInt(process.env.DB_PORT) || 3306,
-      user: process.env.DB_USER || 'u870508525_simba',
-      password: process.env.DB_PASSWORD || 'Machu1733*',
-      database: process.env.DB_NAME || 'u870508525_control_loteri'
+      user: process.env.DB_USER,
+      password: process.env.DB_PASSWORD,
+      database: process.env.DB_NAME,
+      connectTimeout: 10000, // 10 segundos de timeout para evitar cuelgues infinitos
     };
   } else {
     // LOCAL: Credenciales de XAMPP
@@ -46,21 +47,24 @@ function getDbConfig() {
       port: parseInt(process.env.DB_PORT) || 3306,
       user: process.env.DB_USER || 'root',
       password: process.env.DB_PASSWORD || '',
-      database: process.env.DB_NAME || 'control_loterias'
+      database: process.env.DB_NAME || 'control_loterias',
+      connectTimeout: 5000
     };
   }
-}
-
-function assertDbConfig(config) {
-  // Desactivamos validación temporalmente
-  return;
 }
 
 function getPool() {
   if (pool) return pool;
 
   const config = getDbConfig();
-  assertDbConfig(config);
+  
+  // LOG CRÍTICO PARA DEBUG EN PRODUCCIÓN (sin mostrar password completa)
+  console.log('🗄️  Intentando conectar a BD:', {
+    host: config.host,
+    user: config.user,
+    database: config.database,
+    hasPassword: !!config.password
+  });
 
   pool = mysql.createPool({
     host: config.host,
@@ -71,14 +75,7 @@ function getPool() {
     waitForConnections: true,
     connectionLimit: 10,
     queueLimit: 0,
-  });
-
-  console.log('🗄️  Config BD:', {
-    host: config.host,
-    port: config.port,
-    user: config.user,
-    database: config.database,
-    nodeEnv: process.env.NODE_ENV || 'development',
+    connectTimeout: config.connectTimeout || 10000
   });
 
   return pool;
@@ -86,12 +83,18 @@ function getPool() {
 
 async function testConnection() {
   try {
-    const connection = await getPool().getConnection();
-    console.log('✅ Conexión a MySQL establecida');
+    const p = getPool();
+    const connection = await p.getConnection();
+    console.log('✅ Conexión a MySQL establecida correctamente');
     connection.release();
     return true;
   } catch (error) {
-    console.error('❌ Error conectando a MySQL:', error.message);
+    console.error('❌ Error crítico de conexión a MySQL:', {
+      mensaje: error.message,
+      codigo: error.code,
+      fatal: error.fatal
+    });
+    // NO bloqueamos la ejecución, permitimos que el servidor inicie
     return false;
   }
 }
