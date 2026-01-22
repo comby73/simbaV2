@@ -11,9 +11,23 @@ function isBlank(value) {
 
 // Detectar si estamos en producción (Hostinger) o local (XAMPP/desarrollo)
 function isProduction() {
-  // SOLO verificar NODE_ENV para evitar confusiones
-  // En producción SIEMPRE debe estar NODE_ENV=production
-  return process.env.NODE_ENV === 'production';
+  // Verificar NODE_ENV primero
+  if (process.env.NODE_ENV === 'production') {
+    return true;
+  }
+
+  // Fallback: detectar por hostname de Hostinger
+  const hostname = os.hostname().toLowerCase();
+  const isHostinger = hostname.includes('hostinger') ||
+                      hostname.includes('srv') ||
+                      process.env.DB_USER === 'u870508525_simba';
+
+  if (isHostinger) {
+    console.log('⚠️  Detectado servidor Hostinger sin NODE_ENV=production');
+    return true;
+  }
+
+  return false;
 }
 
 function getDbConfig() {
