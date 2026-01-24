@@ -6,6 +6,7 @@ const ExcelJS = require('exceljs');
 const PDFDocument = require('pdfkit');
 const { query } = require('../../config/database');
 const { successResponse, errorResponse, today } = require('../../shared/helpers');
+const { guardarEscrutinioQuiniela } = require('../../shared/escrutinio.helper');
 
 // =============================================
 // CONFIGURACIÓN DE QUINIELA (igual que Python)
@@ -27,6 +28,7 @@ const REL_PAGO_2C = 70;
 // Posiciones NTF (0-based)
 const NTF_GENERIC = {
   NUMERO_SORTEO: { start: 4, length: 6 },
+  PROVINCIA: { start: 13, length: 2 },      // Pos 14-15 (código provincia)
   AGENCIA: { start: 15, length: 5 },
   FECHA_CANCELACION: { start: 70, length: 8 },
   NUMERO_TICKET: { start: 86, length: 12 },
@@ -74,6 +76,7 @@ function parsearRegistrosNTF(content) {
       numeroTicket: extraerCampo(line, NTF_GENERIC.NUMERO_TICKET),
       ordinal: extraerCampo(line, NTF_GENERIC.ORDINAL_APUESTA),
       valorApuesta: parseInt(extraerCampo(line, NTF_GENERIC.VALOR_APUESTA)) / 100,
+      provincia: extraerCampo(line, NTF_GENERIC.PROVINCIA),
       agencia: extraerCampo(line, NTF_GENERIC.AGENCIA),
       tipoSorteo: extraerCampo(line, NTF_QUINIELA.TIPO_SORTEO),
       loteriasJugadas: extraerCampo(line, NTF_QUINIELA.LOTERIAS_JUGADAS),
@@ -212,6 +215,8 @@ function ejecutarEscrutinio(registros, extractos) {
             
             ganadoresDetalle.push({
               ticket: reg.numeroTicket,
+              provincia: reg.provincia || '51',
+              agencia: `${reg.provincia || '51'}-${(reg.agencia || '').padStart(5, '0')}`,
               tipo: 'SIMPLE',
               cifras: cifras,
               extracto: reportePorExtracto[idx].nombre,
@@ -398,6 +403,8 @@ function ejecutarEscrutinio(registros, extractos) {
             
             ganadoresDetalle.push({
               ticket: reg.numeroTicket,
+              provincia: reg.provincia || '51',
+              agencia: `${reg.provincia || '51'}-${(reg.agencia || '').padStart(5, '0')}`,
               tipo: 'REDOBLONA',
               cifras: 2,
               extracto: reportePorExtracto[idx].nombre,
@@ -520,8 +527,11 @@ function ejecutarEscrutinio(registros, extractos) {
         reportePorExtracto[extractoAsignado].letras.ganadores++;
         reportePorExtracto[extractoAsignado].letras.aciertos++;
         
+        const regOriginal = data.reg || {};
         ganadoresDetalle.push({
           ticket: ticketNum,
+          provincia: regOriginal.provincia || '51',
+          agencia: `${regOriginal.provincia || '51'}-${(regOriginal.agencia || '').padStart(5, '0')}`,
           tipo: 'LETRAS',
           cifras: 4,
           extracto: reportePorExtracto[extractoAsignado].nombre,
@@ -617,16 +627,28 @@ const ejecutarControlPosterior = async (req, res) => {
       };
     }
     
-    return successResponse(res, {
+    // Preparar respuesta
+    const respuesta = {
       ...resultado,
       comparacion,
       estadisticas: {
-        lineasTXT: registrosNTF.length,           // Total líneas del TXT
-        registrosValidos: registrosValidosPosterior,  // Solo ordinal 01
+        lineasTXT: registrosNTF.length,
+        registrosValidos: registrosValidosPosterior,
         registrosAnulados: registrosAnulados,
-        registrosTotal: totalRegistrosPosterior   // validos + anulados
+        registrosTotal: totalRegistrosPosterior
       }
-    }, 'Escrutinio ejecutado correctamente');
+    };
+
+    // GUARDAR EN BASE DE DATOS (resguardo)
+    try {
+      const resguardo = await guardarEscrutinioQuiniela(resultado, datosControlPrevio, req.user);
+      respuesta.resguardo = resguardo;
+    } catch (errGuardar) {
+      console.error('⚠️ Error guardando escrutinio (no crítico):', errGuardar.message);
+      respuesta.resguardo = { success: false, error: errGuardar.message };
+    }
+
+    return successResponse(res, respuesta, 'Escrutinio ejecutado correctamente');
     
   } catch (error) {
     console.error('Error en control posterior:', error);

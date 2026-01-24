@@ -126,10 +126,22 @@ function setupEventListeners() {
   // Tabs
   document.querySelectorAll('.tab').forEach(tab => {
     tab.addEventListener('click', () => {
-      document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
-      document.querySelectorAll('.tab-content').forEach(c => c.classList.add('hidden'));
+      const parentCard = tab.closest('.card');
+      if (parentCard) {
+        parentCard.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+        parentCard.querySelectorAll('.tab-content').forEach(c => c.classList.add('hidden'));
+      } else {
+        document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+        document.querySelectorAll('.tab-content').forEach(c => c.classList.add('hidden'));
+      }
       tab.classList.add('active');
-      document.getElementById(`tab-${tab.dataset.tab}`).classList.remove('hidden');
+      const tabContent = document.getElementById(`tab-${tab.dataset.tab}`);
+      if (tabContent) tabContent.classList.remove('hidden');
+      
+      // Inicializar filtros de extractos cuando se cambia a la pestaña "ver"
+      if (tab.dataset.tab === 'ver') {
+        initExtractosFiltros();
+      }
     });
   });
 }
@@ -191,6 +203,12 @@ function navigateTo(view) {
     case 'programacion':
       initProgramacion();
       break;
+    case 'reportes':
+      initReportes();
+      break;
+    case 'extractos':
+      initOCRExtractos();
+      break;
   }
 }
 
@@ -227,6 +245,343 @@ function limpiarExtracto() {
 
 function guardarExtracto() {
   showToast('Función en desarrollo', 'info');
+}
+
+// =============================================
+// VER EXTRACTOS
+// =============================================
+
+// Inicializar fecha de hoy en el filtro
+function initExtractosFiltros() {
+  const fechaInput = document.getElementById('extractos-fecha');
+  if (fechaInput && !fechaInput.value) {
+    fechaInput.value = new Date().toISOString().split('T')[0];
+  }
+}
+
+// Buscar extractos según filtros
+async function buscarExtractos() {
+  const fecha = document.getElementById('extractos-fecha').value;
+  const juego = document.getElementById('extractos-filtro-juego').value;
+  const modalidad = document.getElementById('extractos-filtro-modalidad').value;
+  
+  const container = document.getElementById('extractos-resultados');
+  container.innerHTML = '<div class="text-center py-4"><i class="fas fa-spinner fa-spin fa-2x"></i></div>';
+  
+  try {
+    // Usar el nuevo endpoint de extractos
+    let url = `${API_BASE}/extractos?`;
+    if (fecha) url += `fecha=${fecha}&`;
+    if (juego) url += `juego=${juego}&`;
+    if (modalidad) url += `modalidad=${modalidad}&`;
+    
+    const response = await fetch(url, {
+      headers: { 'Authorization': `Bearer ${getToken()}` }
+    });
+    
+    const data = await response.json();
+    
+    if (!data.success || data.data.length === 0) {
+      container.innerHTML = `
+        <div class="text-center text-muted py-4">
+          <i class="fas fa-inbox fa-3x mb-3"></i>
+          <p>No se encontraron extractos para los filtros seleccionados</p>
+          <p class="small">Cargá extractos desde la pestaña "Cargar Extracto" usando OCR o manualmente</p>
+        </div>
+      `;
+      return;
+    }
+    
+    // Renderizar extractos guardados
+    container.innerHTML = renderExtractosGuardados(data.data);
+    
+  } catch (error) {
+    console.error('Error buscando extractos:', error);
+    container.innerHTML = '<div class="text-center text-danger py-4"><i class="fas fa-exclamation-circle"></i> Error buscando extractos</div>';
+  }
+}
+
+// Renderizar lista de extractos guardados
+function renderExtractosGuardados(extractos) {
+  return `
+    <div class="table-responsive">
+      <table class="table table-sm">
+        <thead>
+          <tr>
+            <th>Fecha</th>
+            <th>Provincia</th>
+            <th>Modalidad</th>
+            <th>Números (1-10)</th>
+            <th>Letras</th>
+            <th>Fuente</th>
+            <th>Acciones</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${extractos.map(ext => `
+            <tr>
+              <td>${ext.fecha}</td>
+              <td><span class="badge bg-primary">${ext.provincia_nombre || ext.provincia_codigo || '-'}</span></td>
+              <td>${ext.sorteo_nombre || '-'}</td>
+              <td style="font-family: monospace; font-size: 0.8rem;">
+                ${ext.numeros ? ext.numeros.slice(0, 10).join(' ') : '-'}
+              </td>
+              <td style="font-family: monospace;">
+                ${ext.letras ? (Array.isArray(ext.letras) ? ext.letras.join('') : ext.letras) : '-'}
+              </td>
+              <td><span class="badge bg-secondary">${ext.fuente || 'MANUAL'}</span></td>
+              <td>
+                <button class="btn btn-sm btn-outline-primary" onclick="verDetalleExtracto(${ext.id})" title="Ver detalle">
+                  <i class="fas fa-eye"></i>
+                </button>
+                <button class="btn btn-sm btn-outline-danger" onclick="eliminarExtractoGuardado(${ext.id})" title="Eliminar">
+                  <i class="fas fa-trash"></i>
+                </button>
+              </td>
+            </tr>
+          `).join('')}
+        </tbody>
+      </table>
+    </div>
+  `;
+}
+
+// Ver detalle de extracto
+async function verDetalleExtracto(id) {
+  try {
+    const response = await fetch(`${API_BASE}/extractos/${id}`, {
+      headers: { 'Authorization': `Bearer ${getToken()}` }
+    });
+    const data = await response.json();
+    
+    if (!data.success) {
+      showToast('Error cargando extracto', 'error');
+      return;
+    }
+    
+    const ext = data.data;
+    const numeros = ext.numeros || [];
+    const letras = ext.letras || [];
+    
+    const modal = document.createElement('div');
+    modal.className = 'modal-overlay';
+    modal.innerHTML = `
+      <div class="modal-content" style="max-width: 600px;">
+        <div class="modal-header">
+          <h3>Extracto ${ext.provincia_nombre || ''} - ${ext.sorteo_nombre || ''}</h3>
+          <button class="btn-close" onclick="this.closest('.modal-overlay').remove()">&times;</button>
+        </div>
+        <div class="modal-body">
+          <p><strong>Fecha:</strong> ${ext.fecha} | <strong>Fuente:</strong> ${ext.fuente}</p>
+          <h5>Números (20 posiciones)</h5>
+          <table style="width: 100%; font-family: monospace; margin-bottom: 1rem;">
+            <tr style="background: var(--bg-input);">
+              ${[1,2,3,4,5,6,7,8,9,10].map(i => `<td style="text-align:center; padding: 4px; font-size: 0.7rem; color: var(--text-muted);">${i}</td>`).join('')}
+            </tr>
+            <tr>
+              ${numeros.slice(0, 10).map(n => `<td style="text-align:center; padding: 4px; font-weight: bold;">${n}</td>`).join('')}
+            </tr>
+            <tr style="background: var(--bg-input);">
+              ${[11,12,13,14,15,16,17,18,19,20].map(i => `<td style="text-align:center; padding: 4px; font-size: 0.7rem; color: var(--text-muted);">${i}</td>`).join('')}
+            </tr>
+            <tr>
+              ${numeros.slice(10, 20).map(n => `<td style="text-align:center; padding: 4px; font-weight: bold;">${n}</td>`).join('')}
+            </tr>
+          </table>
+          ${letras.length > 0 ? `
+            <h5>Letras</h5>
+            <p style="font-family: monospace; font-size: 1.5rem; letter-spacing: 0.5rem;">
+              ${Array.isArray(letras) ? letras.join('') : letras}
+            </p>
+          ` : ''}
+        </div>
+        <div class="modal-footer">
+          <button class="btn btn-secondary" onclick="this.closest('.modal-overlay').remove()">Cerrar</button>
+        </div>
+      </div>
+    `;
+    document.body.appendChild(modal);
+    
+  } catch (error) {
+    console.error('Error:', error);
+    showToast('Error cargando extracto', 'error');
+  }
+}
+
+// Eliminar extracto guardado
+async function eliminarExtractoGuardado(id) {
+  if (!confirm('¿Eliminar este extracto?')) return;
+  
+  try {
+    const response = await fetch(`${API_BASE}/extractos/${id}`, {
+      method: 'DELETE',
+      headers: { 'Authorization': `Bearer ${getToken()}` }
+    });
+    
+    const data = await response.json();
+    
+    if (data.success) {
+      showToast('Extracto eliminado', 'success');
+      buscarExtractos(); // Refrescar lista
+    } else {
+      showToast('Error: ' + data.message, 'error');
+    }
+  } catch (error) {
+    console.error('Error:', error);
+    showToast('Error eliminando extracto', 'error');
+  }
+}
+
+// Renderizar una tarjeta de extracto
+function renderExtractoCard(item) {
+  const modalidadNombre = { M: 'Matutina', V: 'Vespertina', N: 'Nocturna' };
+  const juegoColor = item.juego === 'quiniela' ? 'primary' : 'warning';
+  
+  if (item.juego === 'quiniela') {
+    return renderExtractoQuiniela(item, modalidadNombre, juegoColor);
+  } else {
+    return renderExtractoPoceada(item, modalidadNombre, juegoColor);
+  }
+}
+
+// Renderizar extracto de Quiniela (7 provincias)
+function renderExtractoQuiniela(item, modalidadNombre, juegoColor) {
+  const extractos = item.extractos || [];
+  const cargados = extractos.filter(e => e.cargado);
+  
+  if (cargados.length === 0) {
+    return `
+      <div class="card mb-3">
+        <div class="card-header">
+          <div class="d-flex justify-content-between align-items-center">
+            <div>
+              <span class="badge badge-${juegoColor}">QUINIELA</span>
+              <span class="badge badge-secondary">${modalidadNombre[item.modalidad] || item.modalidad}</span>
+              <strong class="ms-2">Sorteo ${item.numero_sorteo}</strong>
+            </div>
+            <span class="text-muted">${formatDate(item.fecha)}</span>
+          </div>
+        </div>
+        <div class="card-body text-center text-muted">
+          <i class="fas fa-info-circle"></i> No hay extractos cargados para este sorteo
+        </div>
+      </div>
+    `;
+  }
+  
+  let html = `
+    <div class="card mb-3">
+      <div class="card-header">
+        <div class="d-flex justify-content-between align-items-center">
+          <div>
+            <span class="badge badge-${juegoColor}">QUINIELA</span>
+            <span class="badge badge-secondary">${modalidadNombre[item.modalidad] || item.modalidad}</span>
+            <strong class="ms-2">Sorteo ${item.numero_sorteo}</strong>
+          </div>
+          <span class="text-muted">${formatDate(item.fecha)}</span>
+        </div>
+      </div>
+      <div class="card-body">
+        <div class="extractos-grid">
+  `;
+  
+  for (const ext of cargados) {
+    const numeros = ext.numeros || [];
+    const letras = ext.letras || [];
+    
+    html += `
+      <div class="extracto-provincia">
+        <h5>${ext.nombre}</h5>
+        <div class="numeros-extracto">
+          ${numeros.slice(0, 20).map((n, i) => `<span class="numero-badge ${i < 5 ? 'top5' : ''}">${String(n).padStart(4, '0')}</span>`).join('')}
+        </div>
+        ${letras.length > 0 ? `<div class="letras-extracto">${letras.map(l => `<span class="letra-badge">${l}</span>`).join('')}</div>` : ''}
+      </div>
+    `;
+  }
+  
+  html += `
+        </div>
+      </div>
+    </div>
+  `;
+  
+  return html;
+}
+
+// Renderizar extracto de Poceada (20 números + 4 letras)
+function renderExtractoPoceada(item, modalidadNombre, juegoColor) {
+  const extracto = item.extracto || {};
+  const numeros = extracto.numeros || [];
+  const letras = extracto.letras || '';
+  
+  if (numeros.length === 0) {
+    return `
+      <div class="card mb-3">
+        <div class="card-header">
+          <div class="d-flex justify-content-between align-items-center">
+            <div>
+              <span class="badge badge-${juegoColor}">POCEADA</span>
+              <strong class="ms-2">Sorteo ${item.numero_sorteo}</strong>
+            </div>
+            <span class="text-muted">${formatDate(item.fecha)}</span>
+          </div>
+        </div>
+        <div class="card-body text-center text-muted">
+          <i class="fas fa-info-circle"></i> No hay extracto cargado para este sorteo
+        </div>
+      </div>
+    `;
+  }
+  
+  // Dividir en grupos: 1-8 (8 aciertos), 9-15 (7 aciertos), 16-20 (6 aciertos)
+  return `
+    <div class="card mb-3">
+      <div class="card-header">
+        <div class="d-flex justify-content-between align-items-center">
+          <div>
+            <span class="badge badge-${juegoColor}">POCEADA</span>
+            <strong class="ms-2">Sorteo ${item.numero_sorteo}</strong>
+          </div>
+          <span class="text-muted">${formatDate(item.fecha)}</span>
+        </div>
+      </div>
+      <div class="card-body">
+        <div class="poceada-extracto">
+          <div class="grupo-numeros">
+            <span class="grupo-label">1er Premio (8 aciertos)</span>
+            <div class="numeros-extracto">
+              ${numeros.slice(0, 8).map(n => `<span class="numero-badge top5">${String(n).padStart(2, '0')}</span>`).join('')}
+            </div>
+          </div>
+          <div class="grupo-numeros">
+            <span class="grupo-label">2do Premio (7 aciertos)</span>
+            <div class="numeros-extracto">
+              ${numeros.slice(8, 15).map(n => `<span class="numero-badge">${String(n).padStart(2, '0')}</span>`).join('')}
+            </div>
+          </div>
+          <div class="grupo-numeros">
+            <span class="grupo-label">3er Premio (6 aciertos)</span>
+            <div class="numeros-extracto">
+              ${numeros.slice(15, 20).map(n => `<span class="numero-badge">${String(n).padStart(2, '0')}</span>`).join('')}
+            </div>
+          </div>
+          ${letras ? `
+            <div class="grupo-numeros">
+              <span class="grupo-label">Letras</span>
+              <div class="letras-extracto">
+                ${letras.split('').map(l => `<span class="letra-badge">${l}</span>`).join('')}
+              </div>
+            </div>
+          ` : ''}
+        </div>
+        <div class="extracto-stats mt-3">
+          <span><i class="fas fa-trophy text-warning"></i> Ganadores: ${formatNumber(item.total_ganadores)}</span>
+          <span class="ms-3"><i class="fas fa-dollar-sign text-success"></i> Premios: $${formatNumber(item.total_premios)}</span>
+        </div>
+      </div>
+    </div>
+  `;
 }
 
 // Archivos
@@ -1245,7 +1600,9 @@ function corregirPozoManualmente() {
 }
 
 function formatNumber(num) {
-  return (num || 0).toLocaleString('es-AR');
+  // Convertir a número si viene como string (común en valores DECIMAL de MySQL)
+  const valor = parseFloat(num) || 0;
+  return valor.toLocaleString('es-AR');
 }
 
 // Imprimir Reporte de Control Posterior (Escrutinio)
@@ -4357,4 +4714,1345 @@ function irAControlPosterior(numeroSorteo) {
 
 function verDetallesSorteo(numeroSorteo) {
   showToast(`Sorteo ${numeroSorteo} - Funcionalidad próximamente`, 'info');
+}
+
+// =============================================
+// REPORTES - INICIALIZACIÓN Y TABS
+// =============================================
+
+let dashboardData = [];
+let dashboardSelectedGames = ['todos'];
+let controlPrevioData = [];
+let escrutiniosData = [];
+
+// Inicializar vista de reportes
+function initReportes() {
+  // Configurar fechas por defecto (últimos 30 días)
+  const hoy = new Date().toISOString().split('T')[0];
+  const hace30Dias = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+  const hace7Dias = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+  
+  // Dashboard
+  document.getElementById('dash-fecha-desde').value = hace30Dias;
+  document.getElementById('dash-fecha-hasta').value = hoy;
+  
+  // Control Previo
+  document.getElementById('cp-fecha-desde').value = hace7Dias;
+  document.getElementById('cp-fecha-hasta').value = hoy;
+  
+  // Escrutinios
+  document.getElementById('esc-fecha-desde').value = hace7Dias;
+  document.getElementById('esc-fecha-hasta').value = hoy;
+  
+  // Configurar tabs
+  document.querySelectorAll('[data-reportes-tab]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      // Cambiar tab activo
+      document.querySelectorAll('[data-reportes-tab]').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      
+      // Mostrar contenido correspondiente
+      const tabId = btn.dataset.reportesTab;
+      document.querySelectorAll('.reportes-tab-content').forEach(content => {
+        content.classList.add('hidden');
+      });
+      document.getElementById(`reportes-tab-${tabId}`).classList.remove('hidden');
+      
+      // Cargar datos del tab si es necesario
+      if (tabId === 'dashboard' && dashboardData.length === 0) {
+        buscarDashboard();
+      } else if (tabId === 'control-previo' && controlPrevioData.length === 0) {
+        buscarControlPrevio();
+      } else if (tabId === 'escrutinios' && escrutiniosData.length === 0) {
+        buscarEscrutinios();
+      }
+    });
+  });
+  
+  // Cargar datos iniciales del dashboard
+  cargarFiltrosDashboard();
+  buscarDashboard();
+}
+
+// =============================================
+// DASHBOARD DE REPORTES
+// =============================================
+
+// Toggle selección de juego en dashboard
+function toggleDashboardGame(gameType) {
+  const checkbox = document.getElementById(`dash-game-${gameType}`);
+  
+  if (gameType === 'todos') {
+    // Si se selecciona "todos", desmarcar los individuales
+    document.getElementById('dash-game-quiniela').checked = false;
+    document.getElementById('dash-game-poceada').checked = false;
+    dashboardSelectedGames = checkbox.checked ? ['todos'] : [];
+  } else {
+    // Si se selecciona un juego individual, desmarcar "todos"
+    document.getElementById('dash-game-todos').checked = false;
+    
+    if (checkbox.checked) {
+      if (!dashboardSelectedGames.includes(gameType)) {
+        dashboardSelectedGames = dashboardSelectedGames.filter(g => g !== 'todos');
+        dashboardSelectedGames.push(gameType);
+      }
+    } else {
+      dashboardSelectedGames = dashboardSelectedGames.filter(g => g !== gameType);
+    }
+    
+    // Si no hay ninguno seleccionado, seleccionar "todos"
+    if (dashboardSelectedGames.length === 0) {
+      document.getElementById('dash-game-todos').checked = true;
+      dashboardSelectedGames = ['todos'];
+    }
+  }
+  
+  // Actualizar indicador
+  updateDashboardGameIndicator();
+}
+
+// Actualizar indicador de juegos seleccionados
+function updateDashboardGameIndicator() {
+  const indicator = document.getElementById('dash-game-indicator');
+  
+  if (dashboardSelectedGames.includes('todos')) {
+    indicator.textContent = 'Todos los juegos';
+    indicator.className = 'badge bg-info';
+  } else if (dashboardSelectedGames.length === 1) {
+    const juego = dashboardSelectedGames[0];
+    indicator.textContent = juego.charAt(0).toUpperCase() + juego.slice(1);
+    indicator.className = `badge ${juego === 'quiniela' ? 'bg-primary' : 'bg-warning'}`;
+  } else {
+    indicator.textContent = dashboardSelectedGames.map(g => g.charAt(0).toUpperCase() + g.slice(1)).join(' + ');
+    indicator.className = 'badge bg-secondary';
+  }
+}
+
+// Cargar filtros disponibles
+async function cargarFiltrosDashboard() {
+  try {
+    const response = await fetch(`${API_BASE}/historial/dashboard/filtros`, {
+      headers: { 'Authorization': `Bearer ${getToken()}` }
+    });
+    
+    const data = await response.json();
+    
+    if (data.success) {
+      // Se podrían usar estos rangos para validación o sugerencias
+      console.log('Filtros dashboard:', data.data);
+    }
+  } catch (error) {
+    console.error('Error cargando filtros:', error);
+  }
+}
+
+// Buscar datos del dashboard
+async function buscarDashboard() {
+  const fechaDesde = document.getElementById('dash-fecha-desde').value;
+  const fechaHasta = document.getElementById('dash-fecha-hasta').value;
+  const sorteoDesde = document.getElementById('dash-sorteo-desde').value;
+  const sorteoHasta = document.getElementById('dash-sorteo-hasta').value;
+  const agencia = document.getElementById('dash-agencia').value;
+  const tipoConsulta = document.getElementById('dash-tipo-consulta').value;
+  
+  // Determinar juego a filtrar
+  let juego = '';
+  if (!dashboardSelectedGames.includes('todos')) {
+    if (dashboardSelectedGames.length === 1) {
+      juego = dashboardSelectedGames[0];
+    }
+  }
+  
+  // Mostrar loading
+  document.getElementById('dash-loading').classList.remove('hidden');
+  document.getElementById('dash-no-data').classList.add('hidden');
+  document.getElementById('table-dashboard-body').innerHTML = '';
+  
+  try {
+    // Mapear tipo de consulta para el backend
+    let tipoBackend = tipoConsulta;
+    if (tipoConsulta === 'agencias') tipoBackend = 'totalizado';
+    if (tipoConsulta === 'agencias_venta') tipoBackend = 'agencias_venta';
+    
+    // Cargar datos y estadísticas en paralelo
+    const [datosResponse, statsResponse] = await Promise.all([
+      fetch(`${API_BASE}/historial/dashboard/datos?` + new URLSearchParams({
+        fechaDesde: fechaDesde || '',
+        fechaHasta: fechaHasta || '',
+        sorteoDesde: sorteoDesde || '',
+        sorteoHasta: sorteoHasta || '',
+        juego: juego || '',
+        agencia: agencia || '',
+        tipoConsulta: tipoBackend
+      }), {
+        headers: { 'Authorization': `Bearer ${getToken()}` }
+      }),
+      fetch(`${API_BASE}/historial/dashboard/stats?` + new URLSearchParams({
+        fechaDesde: fechaDesde || '',
+        fechaHasta: fechaHasta || '',
+        sorteoDesde: sorteoDesde || '',
+        sorteoHasta: sorteoHasta || '',
+        juego: juego || ''
+      }), {
+        headers: { 'Authorization': `Bearer ${getToken()}` }
+      })
+    ]);
+    
+    const datosData = await datosResponse.json();
+    const statsData = await statsResponse.json();
+    
+    document.getElementById('dash-loading').classList.add('hidden');
+    
+    // Actualizar estadísticas
+    if (statsData.success) {
+      actualizarStatsDashboard(statsData.data);
+    }
+    
+    // Actualizar tabla
+    if (datosData.success) {
+      dashboardData = datosData.data.data || [];
+      
+      document.getElementById('dash-results-count').textContent = dashboardData.length;
+      
+      if (dashboardData.length === 0) {
+        document.getElementById('dash-no-data').classList.remove('hidden');
+      } else {
+        renderTablaDashboard(tipoConsulta);
+      }
+    } else {
+      showToast('Error cargando datos: ' + (datosData.error || 'Error desconocido'), 'error');
+      document.getElementById('dash-no-data').classList.remove('hidden');
+    }
+    
+  } catch (error) {
+    console.error('Error buscando dashboard:', error);
+    document.getElementById('dash-loading').classList.add('hidden');
+    document.getElementById('dash-no-data').classList.remove('hidden');
+    showToast('Error de conexión', 'error');
+  }
+}
+
+// Actualizar tarjetas de estadísticas
+function actualizarStatsDashboard(stats) {
+  document.getElementById('dash-stat-recaudacion').textContent = '$' + formatNumber(stats.total_recaudacion || 0);
+  document.getElementById('dash-stat-premios').textContent = '$' + formatNumber(stats.total_premios || 0);
+  document.getElementById('dash-stat-apuestas').textContent = formatNumber(stats.total_apuestas || 0);
+  document.getElementById('dash-stat-tickets').textContent = formatNumber(stats.total_tickets || 0);
+  document.getElementById('dash-stat-sorteos').textContent = formatNumber(stats.total_sorteos || 0);
+  document.getElementById('dash-stat-provincias').textContent = formatNumber(stats.total_provincias_activas || 0);
+  document.getElementById('dash-stat-agencias').textContent = formatNumber(stats.total_agencias_premiadas || 0);
+  
+  // Actualizar agencias con venta si existe el elemento
+  const agenciasVentaEl = document.getElementById('dash-stat-agencias-venta');
+  if (agenciasVentaEl) {
+    agenciasVentaEl.textContent = formatNumber(stats.total_agencias_venta || 0);
+  }
+}
+
+// Renderizar tabla según tipo de consulta
+function renderTablaDashboard(tipoConsulta) {
+  const thead = document.getElementById('table-dashboard-header');
+  const tbody = document.getElementById('table-dashboard-body');
+  
+  if (tipoConsulta === 'agencias' || tipoConsulta === 'totalizado') {
+    // Vista por Agencia - Premios pagados
+    // Agencias 51 se muestran individual, otras provincias agrupadas
+    thead.innerHTML = `
+      <tr>
+        <th>Agencia / Provincia</th>
+        <th>Juego</th>
+        <th class="text-end">Sorteos</th>
+        <th class="text-end">Ganadores</th>
+        <th class="text-end">Premios Pagados</th>
+      </tr>
+    `;
+    
+    // Ordenar por premios de mayor a menor
+    const datosOrdenados = [...dashboardData].sort((a, b) => 
+      parseFloat(b.total_premios || 0) - parseFloat(a.total_premios || 0)
+    );
+    
+    tbody.innerHTML = datosOrdenados.map((item, idx) => {
+      // Si es provincia (no 51), mostrar nombre de provincia
+      const esProvinciaAgrupada = item.codigo_provincia && item.codigo_provincia !== '51';
+      const displayAgencia = esProvinciaAgrupada 
+        ? `<span class="badge bg-secondary">${item.nombre || item.agencia}</span>` 
+        : `<strong>${item.agencia || item.cta_cte || '-'}</strong>`;
+      
+      return `
+        <tr>
+          <td>${displayAgencia}</td>
+          <td><span class="badge game-${item.juego}">${(item.juego || '').toUpperCase()}</span></td>
+          <td class="text-end">${formatNumber(item.total_sorteos || 0)}</td>
+          <td class="text-end">${formatNumber(item.total_ganadores || 0)}</td>
+          <td class="text-end text-success"><strong>$${formatNumber(item.total_premios || 0)}</strong></td>
+        </tr>
+      `;
+    }).join('');
+    
+  } else if (tipoConsulta === 'agencias_venta') {
+    // NUEVO: Vista por Agencia - Ventas/Recaudación
+    thead.innerHTML = `
+      <tr>
+        <th>Agencia / Provincia</th>
+        <th>Juego</th>
+        <th class="text-end">Sorteos</th>
+        <th class="text-end">Tickets</th>
+        <th class="text-end">Apuestas</th>
+        <th class="text-end">Recaudación</th>
+      </tr>
+    `;
+    
+    // Ordenar por recaudación de mayor a menor
+    const datosOrdenados = [...dashboardData].sort((a, b) => 
+      parseFloat(b.total_recaudacion || 0) - parseFloat(a.total_recaudacion || 0)
+    );
+    
+    tbody.innerHTML = datosOrdenados.map((item, idx) => {
+      // Si es provincia (no 51), mostrar nombre de provincia
+      const esProvinciaAgrupada = item.codigo_provincia && item.codigo_provincia !== '51';
+      const displayAgencia = esProvinciaAgrupada 
+        ? `<span class="badge bg-secondary">${item.nombre || item.agencia}</span>` 
+        : `<strong>${item.agencia || item.codigo || '-'}</strong>`;
+      
+      return `
+        <tr>
+          <td>${displayAgencia}</td>
+          <td><span class="badge game-${item.juego}">${(item.juego || '').toUpperCase()}</span></td>
+          <td class="text-end">${formatNumber(item.total_sorteos || 0)}</td>
+          <td class="text-end">${formatNumber(item.total_tickets || 0)}</td>
+          <td class="text-end">${formatNumber(item.total_apuestas || 0)}</td>
+          <td class="text-end text-primary"><strong>$${formatNumber(item.total_recaudacion || 0)}</strong></td>
+        </tr>
+      `;
+    }).join('');
+    
+  } else if (tipoConsulta === 'detallado') {
+    thead.innerHTML = `
+      <tr>
+        <th>Fecha</th>
+        <th>Sorteo</th>
+        <th>Modalidad</th>
+        <th>Juego</th>
+        <th class="text-end">Tickets</th>
+        <th class="text-end">Apuestas</th>
+        <th class="text-end">Anulados</th>
+        <th class="text-end">Recaudación</th>
+        <th class="text-end">Premios</th>
+        <th class="text-end">Ganadores</th>
+      </tr>
+    `;
+    
+    tbody.innerHTML = dashboardData.map(item => `
+      <tr>
+        <td>${formatDate(item.fecha)}</td>
+        <td><strong>${item.sorteo}</strong></td>
+        <td><span class="badge badge-modalidad-${item.modalidad}">${getModalidadNombre(item.modalidad)}</span></td>
+        <td><span class="badge game-${item.juego}">${item.juego.toUpperCase()}</span></td>
+        <td class="text-end">${formatNumber(item.total_tickets || 0)}</td>
+        <td class="text-end">${formatNumber(item.total_apuestas || 0)}</td>
+        <td class="text-end text-warning">${formatNumber(item.total_anulados || 0)}</td>
+        <td class="text-end text-primary"><strong>$${formatNumber(item.recaudacion_total || 0)}</strong></td>
+        <td class="text-end text-success"><strong>$${formatNumber(item.total_premios || 0)}</strong></td>
+        <td class="text-end">${formatNumber(item.total_ganadores || 0)}</td>
+      </tr>
+    `).join('');
+    
+  } else if (tipoConsulta === 'comparativo') {
+    thead.innerHTML = `
+      <tr>
+        <th>Juego</th>
+        <th class="text-end">Sorteos</th>
+        <th class="text-end">Tickets</th>
+        <th class="text-end">Apuestas</th>
+        <th class="text-end">Anulados</th>
+        <th class="text-end">Recaudación</th>
+        <th class="text-end">Premios</th>
+        <th class="text-end">Ganadores</th>
+        <th class="text-end">% Premios</th>
+      </tr>
+    `;
+    
+    tbody.innerHTML = dashboardData.map(item => {
+      const porcentaje = item.total_recaudacion > 0 
+        ? ((item.total_premios / item.total_recaudacion) * 100).toFixed(2) 
+        : 0;
+      return `
+        <tr>
+          <td><span class="badge game-${item.juego}">${item.juego.toUpperCase()}</span></td>
+          <td class="text-end">${formatNumber(item.total_sorteos || 0)}</td>
+          <td class="text-end">${formatNumber(item.total_tickets || 0)}</td>
+          <td class="text-end">${formatNumber(item.total_apuestas || 0)}</td>
+          <td class="text-end text-warning">${formatNumber(item.total_anulados || 0)}</td>
+          <td class="text-end text-primary"><strong>$${formatNumber(item.total_recaudacion || 0)}</strong></td>
+          <td class="text-end text-success"><strong>$${formatNumber(item.total_premios || 0)}</strong></td>
+          <td class="text-end">${formatNumber(item.total_ganadores || 0)}</td>
+          <td class="text-end"><span class="badge bg-info">${porcentaje}%</span></td>
+        </tr>
+      `;
+    }).join('');
+  }
+}
+
+// Obtener nombre de modalidad
+function getModalidadNombre(modalidad) {
+  const nombres = {
+    'R': 'Previa',
+    'P': 'Primera',
+    'M': 'Matutina',
+    'V': 'Vespertina',
+    'N': 'Nocturna'
+  };
+  return nombres[modalidad] || modalidad;
+}
+
+// Limpiar filtros del dashboard
+function limpiarFiltrosDashboard() {
+  const hoy = new Date().toISOString().split('T')[0];
+  const hace30Dias = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+  
+  document.getElementById('dash-fecha-desde').value = hace30Dias;
+  document.getElementById('dash-fecha-hasta').value = hoy;
+  document.getElementById('dash-sorteo-desde').value = '';
+  document.getElementById('dash-sorteo-hasta').value = '';
+  document.getElementById('dash-agencia').value = '';
+  document.getElementById('dash-tipo-consulta').value = 'agencias';
+  
+  // Resetear juegos
+  document.getElementById('dash-game-todos').checked = true;
+  document.getElementById('dash-game-quiniela').checked = false;
+  document.getElementById('dash-game-poceada').checked = false;
+  dashboardSelectedGames = ['todos'];
+  updateDashboardGameIndicator();
+  
+  // Recargar datos
+  buscarDashboard();
+}
+
+// Exportar dashboard a CSV
+function exportarDashboardCSV() {
+  if (dashboardData.length === 0) {
+    showToast('No hay datos para exportar', 'warning');
+    return;
+  }
+  
+  const tipoConsulta = document.getElementById('dash-tipo-consulta').value;
+  let headers, rows;
+  
+  if (tipoConsulta === 'detallado') {
+    headers = ['Fecha', 'Sorteo', 'Modalidad', 'Juego', 'Tickets', 'Apuestas', 'Anulados', 'Recaudación', 'Premios', 'Ganadores'];
+    rows = dashboardData.map(item => [
+      item.fecha,
+      item.sorteo,
+      item.modalidad,
+      item.juego,
+      item.total_tickets || 0,
+      item.total_apuestas || 0,
+      item.total_anulados || 0,
+      item.recaudacion_total || 0,
+      item.total_premios || 0,
+      item.total_ganadores || 0
+    ]);
+  } else if (tipoConsulta === 'totalizado') {
+    headers = ['Agencia', 'Identificación', 'Juego', 'Sorteos', 'Ganadores', 'Premios'];
+    rows = dashboardData.map(item => [
+      item.nombre_display || item.agencia,
+      item.agencia,
+      item.juego,
+      item.total_sorteos || 0,
+      item.total_ganadores || 0,
+      item.total_premios || 0
+    ]);
+  } else {
+    headers = ['Juego', 'Sorteos', 'Tickets', 'Apuestas', 'Anulados', 'Recaudación', 'Premios', 'Ganadores'];
+    rows = dashboardData.map(item => [
+      item.juego,
+      item.total_sorteos || 0,
+      item.total_tickets || 0,
+      item.total_apuestas || 0,
+      item.total_anulados || 0,
+      item.total_recaudacion || 0,
+      item.total_premios || 0,
+      item.total_ganadores || 0
+    ]);
+  }
+  
+  // Generar CSV
+  const csvContent = [headers.join(','), ...rows.map(r => r.join(','))].join('\n');
+  const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `reporte_${tipoConsulta}_${new Date().toISOString().split('T')[0]}.csv`;
+  a.click();
+  
+  URL.revokeObjectURL(url);
+  showToast('Archivo CSV descargado', 'success');
+}
+
+// Cerrar modal del dashboard
+function cerrarModalDashDetalle() {
+  document.getElementById('modal-dash-detalle').classList.add('hidden');
+}
+
+// =============================================
+// HISTORIAL ANTIGUO (conservado para compatibilidad)
+// =============================================
+
+// Buscar historial según filtros (versión legacy)
+async function buscarHistorial() {
+  // Redirigir al nuevo dashboard
+  buscarDashboard();
+}
+
+// Cerrar modal genérico
+function cerrarModal(el) {
+  if (el) el.remove();
+}
+
+// =============================================
+// OCR EXTRACTOS
+// =============================================
+
+let ocrImagenActual = null;
+let ocrPdfActual = null;
+let extractosPendientes = [];
+
+// Inicializar OCR al cargar la vista de extractos
+function initOCRExtractos() {
+  // Verificar estado de API key
+  actualizarEstadoApiKey();
+  
+  // Inicializar OCR tabs
+  document.querySelectorAll('.ocr-tab').forEach(tab => {
+    tab.addEventListener('click', () => {
+      document.querySelectorAll('.ocr-tab').forEach(t => t.classList.remove('active'));
+      document.querySelectorAll('.ocr-tab-content').forEach(c => c.classList.add('hidden'));
+      
+      tab.classList.add('active');
+      const tabId = 'ocr-tab-' + tab.dataset.ocrTab;
+      document.getElementById(tabId)?.classList.remove('hidden');
+    });
+  });
+  
+  // Área de imagen
+  const imagenArea = document.getElementById('extracto-imagen-area');
+  const imagenInput = document.getElementById('extracto-imagen-input');
+  if (imagenArea && imagenInput) {
+    imagenArea.addEventListener('click', () => imagenInput.click());
+    imagenArea.addEventListener('dragover', e => { e.preventDefault(); imagenArea.classList.add('drag-over'); });
+    imagenArea.addEventListener('dragleave', () => imagenArea.classList.remove('drag-over'));
+    imagenArea.addEventListener('drop', e => {
+      e.preventDefault();
+      imagenArea.classList.remove('drag-over');
+      if (e.dataTransfer.files.length) {
+        imagenInput.files = e.dataTransfer.files;
+        cargarImagenPreview(e.dataTransfer.files[0]);
+      }
+    });
+    imagenInput.addEventListener('change', () => {
+      if (imagenInput.files.length) cargarImagenPreview(imagenInput.files[0]);
+    });
+  }
+  
+  // Área de PDF
+  const pdfArea = document.getElementById('extracto-pdf-area');
+  const pdfInput = document.getElementById('extracto-pdf-input');
+  if (pdfArea && pdfInput) {
+    pdfArea.addEventListener('click', () => pdfInput.click());
+    pdfArea.addEventListener('dragover', e => { e.preventDefault(); pdfArea.classList.add('drag-over'); });
+    pdfArea.addEventListener('dragleave', () => pdfArea.classList.remove('drag-over'));
+    pdfArea.addEventListener('drop', e => {
+      e.preventDefault();
+      pdfArea.classList.remove('drag-over');
+      if (e.dataTransfer.files.length) {
+        pdfInput.files = e.dataTransfer.files;
+        cargarPdfPreview(e.dataTransfer.files[0]);
+      }
+    });
+    pdfInput.addEventListener('change', () => {
+      if (pdfInput.files.length) cargarPdfPreview(pdfInput.files[0]);
+    });
+  }
+  
+  // Área de XML
+  const xmlArea = document.getElementById('extracto-xml-area');
+  const xmlInput = document.getElementById('extracto-xml-input');
+  if (xmlArea && xmlInput) {
+    xmlArea.addEventListener('click', () => xmlInput.click());
+    xmlArea.addEventListener('dragover', e => { e.preventDefault(); xmlArea.classList.add('drag-over'); });
+    xmlArea.addEventListener('dragleave', () => xmlArea.classList.remove('drag-over'));
+    xmlArea.addEventListener('drop', e => {
+      e.preventDefault();
+      xmlArea.classList.remove('drag-over');
+      if (e.dataTransfer.files.length) {
+        xmlInput.files = e.dataTransfer.files;
+      }
+    });
+  }
+  
+  // Mostrar/ocultar letras según provincia
+  const provinciaSelect = document.getElementById('extracto-provincia');
+  if (provinciaSelect) {
+    provinciaSelect.addEventListener('change', () => {
+      const letrasContainer = document.getElementById('letras-container');
+      if (letrasContainer) {
+        letrasContainer.style.display = provinciaSelect.value === '51' ? 'block' : 'none';
+      }
+    });
+  }
+  
+  // Cargar API key guardada
+  const savedKey = localStorage.getItem('groq_api_key');
+  if (savedKey) {
+    document.getElementById('groq-api-key').value = savedKey;
+  }
+}
+
+function actualizarEstadoApiKey() {
+  const statusEl = document.getElementById('ocr-key-status');
+  const alertEl = document.getElementById('ocr-api-status');
+  if (!statusEl || !alertEl) return;
+  
+  if (OCRExtractos && OCRExtractos.hasApiKey()) {
+    statusEl.innerHTML = '✅ API key configurada - Listo para usar OCR';
+    alertEl.classList.remove('alert-warning');
+    alertEl.classList.add('alert-success');
+  } else {
+    statusEl.innerHTML = '⚠️ <a href="#" onclick="document.querySelector(\'[data-tab=config-ocr]\').click()">Configurá tu API key de Groq</a> para usar OCR';
+    alertEl.classList.remove('alert-success');
+    alertEl.classList.add('alert-warning');
+  }
+}
+
+function cargarImagenPreview(file) {
+  const reader = new FileReader();
+  reader.onload = (e) => {
+    ocrImagenActual = file;
+    document.getElementById('ocr-preview').classList.remove('hidden');
+    document.getElementById('ocr-preview-img').src = e.target.result;
+    document.getElementById('btn-procesar-ocr').disabled = false;
+  };
+  reader.readAsDataURL(file);
+}
+
+function cargarPdfPreview(file) {
+  ocrPdfActual = file;
+  document.getElementById('pdf-preview').classList.remove('hidden');
+  document.getElementById('pdf-filename').textContent = file.name;
+  document.getElementById('btn-procesar-pdf').disabled = false;
+}
+
+async function capturarPantallaExtracto() {
+  try {
+    showToast('Seleccioná la ventana a capturar...', 'info');
+    const captura = await OCRExtractos.capturarPantalla();
+    
+    ocrImagenActual = { base64: captura.base64, mimeType: captura.mimeType };
+    document.getElementById('ocr-preview').classList.remove('hidden');
+    document.getElementById('ocr-preview-img').src = captura.dataUrl;
+    document.getElementById('btn-procesar-ocr').disabled = false;
+    
+    showToast('Captura realizada', 'success');
+  } catch (error) {
+    showToast('Error en captura: ' + error.message, 'error');
+  }
+}
+
+async function procesarImagenOCR() {
+  if (!ocrImagenActual) {
+    showToast('Primero seleccioná una imagen', 'warning');
+    return;
+  }
+  
+  if (!OCRExtractos.hasApiKey()) {
+    showToast('Configurá tu API key de Groq primero', 'warning');
+    document.querySelector('[data-tab="config-ocr"]').click();
+    return;
+  }
+  
+  const btn = document.getElementById('btn-procesar-ocr');
+  const originalText = btn.innerHTML;
+  btn.disabled = true;
+  btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Procesando con IA...';
+  
+  try {
+    let base64, mimeType;
+    
+    if (ocrImagenActual instanceof File) {
+      const result = await OCRExtractos.imageToBase64(ocrImagenActual);
+      base64 = result.base64;
+      mimeType = result.mimeType;
+    } else {
+      base64 = ocrImagenActual.base64;
+      mimeType = ocrImagenActual.mimeType;
+    }
+    
+    const provinciaHint = document.getElementById('extracto-provincia').value;
+    const resultado = await OCRExtractos.procesarImagenQuiniela(base64, mimeType, provinciaHint);
+    
+    if (resultado.success) {
+      mostrarResultadoOCR(resultado.data);
+      showToast('Imagen procesada correctamente', 'success');
+    } else {
+      showToast('Error procesando imagen', 'error');
+    }
+  } catch (error) {
+    console.error('Error OCR:', error);
+    showToast('Error: ' + error.message, 'error');
+  } finally {
+    btn.disabled = false;
+    btn.innerHTML = originalText;
+  }
+}
+
+async function procesarPdfOCR() {
+  if (!ocrPdfActual) {
+    showToast('Primero seleccioná un PDF', 'warning');
+    return;
+  }
+  
+  if (!OCRExtractos.hasApiKey()) {
+    showToast('Configurá tu API key de Groq primero', 'warning');
+    document.querySelector('[data-tab="config-ocr"]').click();
+    return;
+  }
+  
+  const btn = document.getElementById('btn-procesar-pdf');
+  const originalText = btn.innerHTML;
+  btn.disabled = true;
+  btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Procesando PDF...';
+  
+  try {
+    const { base64, mimeType } = await OCRExtractos.pdfToImage(ocrPdfActual);
+    const provinciaHint = document.getElementById('extracto-provincia').value;
+    const resultado = await OCRExtractos.procesarImagenQuiniela(base64, mimeType, provinciaHint);
+    
+    if (resultado.success) {
+      mostrarResultadoOCR(resultado.data);
+      showToast('PDF procesado correctamente', 'success');
+    } else {
+      showToast('Error procesando PDF', 'error');
+    }
+  } catch (error) {
+    console.error('Error OCR PDF:', error);
+    showToast('Error: ' + error.message, 'error');
+  } finally {
+    btn.disabled = false;
+    btn.innerHTML = originalText;
+  }
+}
+
+function mostrarResultadoOCR(data) {
+  // Agregar a extractos pendientes
+  const provincia = data.provincia || document.getElementById('extracto-provincia').value;
+  const provinciaName = {
+    '51': 'CABA', '53': 'Buenos Aires', '55': 'Córdoba',
+    '72': 'Santa Fe', '59': 'Entre Ríos', '64': 'Mendoza', '00': 'Montevideo'
+  }[provincia] || provincia;
+  
+  const modalidadName = {
+    'R': 'La Previa', 'P': 'La Primera', 'M': 'Matutina', 'V': 'Vespertina', 'N': 'Nocturna'
+  }[data.modalidad] || data.modalidad;
+  
+  const extracto = {
+    id: Date.now(),
+    provincia: provincia,
+    provinciaName: provinciaName,
+    modalidad: data.modalidad || 'M',
+    modalidadName: modalidadName,
+    sorteo: data.sorteo || '',
+    fecha: data.fecha || new Date().toISOString().split('T')[0],
+    hora: data.hora || '',
+    numeros: data.numeros || [],
+    letras: data.letras || ''
+  };
+  
+  extractosPendientes.push(extracto);
+  renderExtractosPendientes();
+  
+  // Mostrar contenedor
+  document.getElementById('extractos-pendientes-container').style.display = 'block';
+}
+
+function renderExtractosPendientes() {
+  const container = document.getElementById('extractos-pendientes-list');
+  
+  container.innerHTML = extractosPendientes.map(ext => `
+    <div class="card mb-2" id="extracto-pending-${ext.id}">
+      <div class="card-body p-3">
+        <div class="d-flex justify-content-between align-items-start mb-2">
+          <div>
+            <span class="badge bg-primary">${ext.provinciaName}</span>
+            <span class="badge bg-secondary">${ext.modalidadName}</span>
+            ${ext.sorteo ? `<span class="badge bg-info">Sorteo ${ext.sorteo}</span>` : ''}
+            <span class="text-muted ms-2">${ext.fecha}</span>
+          </div>
+          <button class="btn btn-sm btn-danger" onclick="eliminarExtractoPendiente(${ext.id})">
+            <i class="fas fa-times"></i>
+          </button>
+        </div>
+        <div class="numeros-preview">
+          ${ext.numeros.slice(0, 10).map((n, i) => `<span class="num-badge">${i+1}: ${n}</span>`).join('')}
+          <span class="text-muted">...</span>
+        </div>
+        ${ext.letras ? `<div class="mt-1"><small>Letras: <strong>${ext.letras}</strong></small></div>` : ''}
+      </div>
+    </div>
+  `).join('');
+}
+
+function eliminarExtractoPendiente(id) {
+  extractosPendientes = extractosPendientes.filter(e => e.id !== id);
+  renderExtractosPendientes();
+  
+  if (extractosPendientes.length === 0) {
+    document.getElementById('extractos-pendientes-container').style.display = 'none';
+  }
+}
+
+function limpiarExtractosPendientes() {
+  extractosPendientes = [];
+  document.getElementById('extractos-pendientes-container').style.display = 'none';
+  document.getElementById('extractos-pendientes-list').innerHTML = '';
+}
+
+async function guardarExtractosPendientes() {
+  if (extractosPendientes.length === 0) {
+    showToast('No hay extractos para guardar', 'warning');
+    return;
+  }
+  
+  const btn = document.querySelector('#extractos-pendientes-container .btn-success');
+  const originalText = btn.innerHTML;
+  btn.disabled = true;
+  btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Guardando...';
+  
+  try {
+    // Preparar datos para el endpoint
+    const extractosData = extractosPendientes.map(ext => ({
+      provincia: ext.provincia,
+      modalidad: ext.modalidad,
+      fecha: ext.fecha,
+      numeros: ext.numeros,
+      letras: ext.letras || '',
+      fuente: 'OCR'
+    }));
+    
+    const response = await fetch('/api/extractos/bulk', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': 'Bearer ' + getToken()
+      },
+      body: JSON.stringify({ extractos: extractosData })
+    });
+    
+    const result = await response.json();
+    
+    if (result.success) {
+      showToast(`${result.data.guardados} extracto(s) guardado(s) correctamente`, 'success');
+      limpiarExtractosPendientes();
+    } else {
+      showToast('Error: ' + result.message, 'error');
+    }
+  } catch (error) {
+    console.error('Error guardando extractos:', error);
+    showToast('Error al guardar: ' + error.message, 'error');
+  } finally {
+    btn.disabled = false;
+    btn.innerHTML = originalText;
+  }
+}
+
+// Config API Key
+function toggleApiKeyVisibility() {
+  const input = document.getElementById('groq-api-key');
+  input.type = input.type === 'password' ? 'text' : 'password';
+}
+
+function guardarApiKey() {
+  const key = document.getElementById('groq-api-key').value.trim();
+  if (!key) {
+    showToast('Ingresá una API key', 'warning');
+    return;
+  }
+  
+  OCRExtractos.setApiKey(key);
+  actualizarEstadoApiKey();
+  showToast('API key guardada', 'success');
+}
+
+async function testApiKey() {
+  const resultEl = document.getElementById('api-test-result');
+  resultEl.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Probando conexión...';
+  
+  try {
+    // Crear una imagen de prueba simple (1x1 pixel blanco)
+    const testImage = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==';
+    
+    const response = await fetch(OCRExtractos.CONFIG.API_URL, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': 'Bearer ' + OCRExtractos.CONFIG.API_KEY
+      },
+      body: JSON.stringify({
+        model: OCRExtractos.CONFIG.MODEL,
+        messages: [{ role: 'user', content: 'test' }],
+        max_tokens: 10
+      })
+    });
+    
+    if (response.ok) {
+      resultEl.innerHTML = '<div class="alert alert-success"><i class="fas fa-check-circle"></i> Conexión exitosa! La API key funciona correctamente.</div>';
+    } else if (response.status === 401) {
+      resultEl.innerHTML = '<div class="alert alert-danger"><i class="fas fa-times-circle"></i> API key inválida. Verificá que esté correcta.</div>';
+    } else {
+      resultEl.innerHTML = `<div class="alert alert-warning"><i class="fas fa-exclamation-triangle"></i> Error ${response.status}</div>`;
+    }
+  } catch (error) {
+    resultEl.innerHTML = `<div class="alert alert-danger"><i class="fas fa-times-circle"></i> Error de conexión: ${error.message}</div>`;
+  }
+}
+
+function cargarExtractoXML() {
+  // TODO: Implementar carga de XML
+  showToast('Función de XML en desarrollo', 'info');
+}
+
+// Exportar historial a CSV (versión legacy)
+function exportarHistorial() {
+  exportarDashboardCSV();
+}
+
+// Formatear fecha/hora
+function formatDateTime(dateStr) {
+  if (!dateStr) return '-';
+  const d = new Date(dateStr);
+  return d.toLocaleString('es-AR');
+}
+
+// =============================================
+// CONTROL PREVIO - TAB
+// =============================================
+
+// Buscar Control Previo
+async function buscarControlPrevio() {
+  const fechaDesde = document.getElementById('cp-fecha-desde').value;
+  const fechaHasta = document.getElementById('cp-fecha-hasta').value;
+  const juego = document.getElementById('cp-juego').value;
+  
+  const tbody = document.querySelector('#table-historial-cp tbody');
+  const emptyMsg = document.getElementById('historial-cp-empty');
+  
+  try {
+    tbody.innerHTML = '<tr><td colspan="10" class="text-center"><i class="fas fa-spinner fa-spin"></i> Cargando...</td></tr>';
+    emptyMsg.classList.add('hidden');
+    
+    let url = `${API_BASE}/historial/control-previo?`;
+    if (fechaDesde) url += `fechaDesde=${fechaDesde}&`;
+    if (fechaHasta) url += `fechaHasta=${fechaHasta}&`;
+    if (juego) url += `juego=${juego}&`;
+    
+    const response = await fetch(url, {
+      headers: { 'Authorization': `Bearer ${getToken()}` }
+    });
+    
+    const data = await response.json();
+    
+    if (!data.success || data.data.length === 0) {
+      tbody.innerHTML = '';
+      emptyMsg.classList.remove('hidden');
+      controlPrevioData = [];
+      return;
+    }
+    
+    controlPrevioData = data.data;
+    emptyMsg.classList.add('hidden');
+    
+    tbody.innerHTML = controlPrevioData.map(item => `
+      <tr>
+        <td>${formatDate(item.fecha)}</td>
+        <td><strong>${item.numero_sorteo}</strong></td>
+        <td><span class="badge badge-modalidad-${item.modalidad || 'N'}">${getModalidadNombre(item.modalidad || 'N')}</span></td>
+        <td><span class="badge game-${item.juego}">${item.juego.toUpperCase()}</span></td>
+        <td class="text-end">${formatNumber(item.total_registros)}</td>
+        <td class="text-end">${formatNumber(item.total_apuestas)}</td>
+        <td class="text-end text-warning">${formatNumber(item.total_anulados || 0)}</td>
+        <td class="text-end text-primary"><strong>$${formatNumber(item.total_recaudacion)}</strong></td>
+        <td>${item.usuario_nombre || '-'}</td>
+        <td>
+          <button class="btn btn-sm btn-secondary" onclick="verDetalleControlPrevio(${item.id}, '${item.juego}')" title="Ver detalle">
+            <i class="fas fa-eye"></i>
+          </button>
+        </td>
+      </tr>
+    `).join('');
+    
+  } catch (error) {
+    console.error('Error cargando control previo:', error);
+    tbody.innerHTML = '<tr><td colspan="10" class="text-center text-danger">Error cargando datos</td></tr>';
+  }
+}
+
+// Ver detalle de Control Previo
+async function verDetalleControlPrevio(id, juego) {
+  try {
+    const response = await fetch(`${API_BASE}/historial/control-previo/${id}?juego=${juego}`, {
+      headers: { 'Authorization': `Bearer ${getToken()}` }
+    });
+    
+    const data = await response.json();
+    
+    if (!data.success) {
+      showToast('Error obteniendo detalle', 'error');
+      return;
+    }
+    
+    const item = data.data;
+    let datosAdicionales = {};
+    try {
+      datosAdicionales = item.datos_adicionales ? JSON.parse(item.datos_adicionales) : {};
+    } catch(e) {}
+    
+    // Mostrar modal con detalles
+    const html = `
+      <div class="modal-overlay" onclick="cerrarModal(this)">
+        <div class="modal-content modal-lg" onclick="event.stopPropagation()">
+          <div class="modal-header">
+            <h3><i class="fas fa-file-import"></i> Control Previo - Sorteo ${item.numero_sorteo}</h3>
+            <button class="btn-close" onclick="cerrarModal(this.closest('.modal-overlay'))">&times;</button>
+          </div>
+          <div class="modal-body">
+            <div class="row mb-4">
+              <div class="col-md-3">
+                <div class="stat-card">
+                  <div class="stat-value">${formatNumber(item.total_registros)}</div>
+                  <div class="stat-label">Registros</div>
+                </div>
+              </div>
+              <div class="col-md-3">
+                <div class="stat-card">
+                  <div class="stat-value">${formatNumber(item.total_apuestas)}</div>
+                  <div class="stat-label">Apuestas</div>
+                </div>
+              </div>
+              <div class="col-md-3">
+                <div class="stat-card">
+                  <div class="stat-value text-warning">${formatNumber(item.total_anulados || 0)}</div>
+                  <div class="stat-label">Anulados</div>
+                </div>
+              </div>
+              <div class="col-md-3">
+                <div class="stat-card">
+                  <div class="stat-value text-success">$${formatNumber(item.total_recaudacion)}</div>
+                  <div class="stat-label">Recaudación</div>
+                </div>
+              </div>
+            </div>
+            <p><strong>Fecha:</strong> ${formatDate(item.fecha)}</p>
+            <p><strong>Modalidad:</strong> ${getModalidadNombre(item.modalidad || 'N')}</p>
+            <p><strong>Archivo:</strong> ${item.nombre_archivo_zip || '-'}</p>
+            <p><strong>Procesado:</strong> ${formatDateTime(item.created_at)}</p>
+            ${datosAdicionales.provincias ? `
+              <h4 class="mt-4">Detalle por Provincia</h4>
+              <table class="table table-sm">
+                <thead><tr><th>Provincia</th><th>Registros</th><th>Apuestas</th><th>Recaudación</th></tr></thead>
+                <tbody>
+                  ${Object.entries(datosAdicionales.provincias).map(([prov, d]) => `
+                    <tr>
+                      <td>${d.nombre || prov}</td>
+                      <td>${formatNumber(d.registros || 0)}</td>
+                      <td>${formatNumber(d.apuestas || 0)}</td>
+                      <td>$${formatNumber(d.recaudacion || 0)}</td>
+                    </tr>
+                  `).join('')}
+                </tbody>
+              </table>
+            ` : ''}
+          </div>
+        </div>
+      </div>
+    `;
+    
+    document.body.insertAdjacentHTML('beforeend', html);
+    
+  } catch (error) {
+    console.error('Error:', error);
+    showToast('Error obteniendo detalle', 'error');
+  }
+}
+
+// Exportar Control Previo a CSV
+function exportarControlPrevioCSV() {
+  if (controlPrevioData.length === 0) {
+    showToast('No hay datos para exportar', 'warning');
+    return;
+  }
+  
+  const headers = ['Fecha', 'Sorteo', 'Modalidad', 'Juego', 'Registros', 'Apuestas', 'Anulados', 'Recaudación', 'Usuario'];
+  const rows = controlPrevioData.map(item => [
+    item.fecha,
+    item.numero_sorteo,
+    item.modalidad || 'N',
+    item.juego,
+    item.total_registros || 0,
+    item.total_apuestas || 0,
+    item.total_anulados || 0,
+    item.total_recaudacion || 0,
+    item.usuario_nombre || ''
+  ]);
+  
+  const csvContent = [headers.join(','), ...rows.map(r => r.join(','))].join('\n');
+  const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `control_previo_${new Date().toISOString().split('T')[0]}.csv`;
+  a.click();
+  
+  URL.revokeObjectURL(url);
+  showToast('Archivo CSV descargado', 'success');
+}
+
+// =============================================
+// ESCRUTINIOS - TAB
+// =============================================
+
+// Buscar Escrutinios
+async function buscarEscrutinios() {
+  const fechaDesde = document.getElementById('esc-fecha-desde').value;
+  const fechaHasta = document.getElementById('esc-fecha-hasta').value;
+  const juego = document.getElementById('esc-juego').value;
+  
+  const tbody = document.querySelector('#table-historial-escrutinio tbody');
+  const emptyMsg = document.getElementById('historial-escrutinio-empty');
+  
+  try {
+    tbody.innerHTML = '<tr><td colspan="8" class="text-center"><i class="fas fa-spinner fa-spin"></i> Cargando...</td></tr>';
+    emptyMsg.classList.add('hidden');
+    
+    let url = `${API_BASE}/historial/escrutinios?`;
+    if (fechaDesde) url += `fechaDesde=${fechaDesde}&`;
+    if (fechaHasta) url += `fechaHasta=${fechaHasta}&`;
+    if (juego) url += `juego=${juego}&`;
+    
+    const response = await fetch(url, {
+      headers: { 'Authorization': `Bearer ${getToken()}` }
+    });
+    
+    const data = await response.json();
+    
+    if (!data.success || data.data.length === 0) {
+      tbody.innerHTML = '';
+      emptyMsg.classList.remove('hidden');
+      escrutiniosData = [];
+      return;
+    }
+    
+    escrutiniosData = data.data;
+    emptyMsg.classList.add('hidden');
+    
+    tbody.innerHTML = escrutiniosData.map(item => `
+      <tr>
+        <td>${formatDate(item.fecha)}</td>
+        <td><strong>${item.numero_sorteo}</strong></td>
+        <td><span class="badge badge-modalidad-${item.modalidad || 'N'}">${getModalidadNombre(item.modalidad || 'N')}</span></td>
+        <td><span class="badge game-${item.juego}">${item.juego.toUpperCase()}</span></td>
+        <td class="text-end">${formatNumber(item.total_ganadores)}</td>
+        <td class="text-end text-success"><strong>$${formatNumber(item.total_premios)}</strong></td>
+        <td>${item.usuario_nombre || '-'}</td>
+        <td>
+          <button class="btn btn-sm btn-secondary" onclick="verDetalleEscrutinio(${item.id}, '${item.juego}')" title="Ver detalle">
+            <i class="fas fa-eye"></i>
+          </button>
+          <button class="btn btn-sm btn-info" onclick="verPremiosPorAgencia(${item.id}, '${item.juego}')" title="Ver por agencia">
+            <i class="fas fa-store"></i>
+          </button>
+        </td>
+      </tr>
+    `).join('');
+    
+  } catch (error) {
+    console.error('Error cargando escrutinios:', error);
+    tbody.innerHTML = '<tr><td colspan="8" class="text-center text-danger">Error cargando datos</td></tr>';
+  }
+}
+
+// Ver detalle de Escrutinio
+async function verDetalleEscrutinio(id, juego) {
+  try {
+    const response = await fetch(`${API_BASE}/historial/escrutinios/${id}?juego=${juego}`, {
+      headers: { 'Authorization': `Bearer ${getToken()}` }
+    });
+    
+    const data = await response.json();
+    
+    if (!data.success) {
+      showToast('Error obteniendo detalle', 'error');
+      return;
+    }
+    
+    const item = data.data;
+    let resumenPremios = {};
+    try {
+      resumenPremios = item.resumen_premios ? JSON.parse(item.resumen_premios) : {};
+    } catch(e) {}
+    
+    const html = `
+      <div class="modal-overlay" onclick="cerrarModal(this)">
+        <div class="modal-content modal-lg" onclick="event.stopPropagation()">
+          <div class="modal-header">
+            <h3><i class="fas fa-trophy"></i> Escrutinio - Sorteo ${item.numero_sorteo}</h3>
+            <button class="btn-close" onclick="cerrarModal(this.closest('.modal-overlay'))">&times;</button>
+          </div>
+          <div class="modal-body">
+            <div class="row mb-4">
+              <div class="col-md-6">
+                <div class="stat-card">
+                  <div class="stat-value">${formatNumber(item.total_ganadores)}</div>
+                  <div class="stat-label">Total Ganadores</div>
+                </div>
+              </div>
+              <div class="col-md-6">
+                <div class="stat-card">
+                  <div class="stat-value text-success">$${formatNumber(item.total_premios)}</div>
+                  <div class="stat-label">Total Premios</div>
+                </div>
+              </div>
+            </div>
+            <p><strong>Fecha:</strong> ${formatDate(item.fecha)}</p>
+            <p><strong>Modalidad:</strong> ${getModalidadNombre(item.modalidad || 'N')}</p>
+            <p><strong>Procesado:</strong> ${formatDateTime(item.created_at)}</p>
+            ${resumenPremios.porTipo ? `
+              <h4 class="mt-4">Desglose por Tipo de Premio</h4>
+              <table class="table table-sm">
+                <thead><tr><th>Tipo</th><th>Ganadores</th><th>Premios</th></tr></thead>
+                <tbody>
+                  ${Object.entries(resumenPremios.porTipo).map(([tipo, d]) => `
+                    <tr>
+                      <td>${tipo}</td>
+                      <td>${formatNumber(d.ganadores || 0)}</td>
+                      <td>$${formatNumber(d.premios || 0)}</td>
+                    </tr>
+                  `).join('')}
+                </tbody>
+              </table>
+            ` : ''}
+          </div>
+        </div>
+      </div>
+    `;
+    
+    document.body.insertAdjacentHTML('beforeend', html);
+    
+  } catch (error) {
+    console.error('Error:', error);
+    showToast('Error obteniendo detalle', 'error');
+  }
+}
+
+// Ver premios por agencia
+async function verPremiosPorAgencia(escrutinioId, juego) {
+  try {
+    const response = await fetch(`${API_BASE}/historial/escrutinios/${escrutinioId}/agencias?juego=${juego}`, {
+      headers: { 'Authorization': `Bearer ${getToken()}` }
+    });
+    
+    const data = await response.json();
+    
+    if (!data.success) {
+      showToast('Error obteniendo datos', 'error');
+      return;
+    }
+    
+    const items = data.data;
+    
+    const html = `
+      <div class="modal-overlay" onclick="cerrarModal(this)">
+        <div class="modal-content modal-xl" onclick="event.stopPropagation()">
+          <div class="modal-header">
+            <h3><i class="fas fa-store"></i> Premios por Agencia/Provincia</h3>
+            <button class="btn-close" onclick="cerrarModal(this.closest('.modal-overlay'))">&times;</button>
+          </div>
+          <div class="modal-body">
+            ${items.length === 0 ? `
+              <div class="text-center text-muted py-4">
+                <i class="fas fa-info-circle fa-2x mb-3"></i>
+                <p>No hay datos de agencias ganadoras para este escrutinio</p>
+              </div>
+            ` : `
+            <div class="table-container" style="max-height: 400px; overflow-y: auto;">
+              <table class="table table-sm">
+                <thead>
+                  <tr>
+                    <th>Provincia</th>
+                    <th>Agencia / Tipo</th>
+                    <th class="text-end">Ganadores</th>
+                    <th class="text-end">Premios</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  ${items.map(item => `
+                    <tr>
+                      <td>${item.provincia_nombre || item.nombre_display || item.codigo_provincia}</td>
+                      <td>${item.tipo_agrupacion === 'provincia' ? '<em>Acumulado Provincia</em>' : (item.codigo_agencia || item.cta_cte)}</td>
+                      <td class="text-end">${formatNumber(item.total_ganadores || 0)}</td>
+                      <td class="text-end text-success"><strong>$${formatNumber(item.total_premios || 0)}</strong></td>
+                    </tr>
+                  `).join('')}
+                </tbody>
+              </table>
+            </div>
+            `}
+          </div>
+        </div>
+      </div>
+    `;
+    
+    document.body.insertAdjacentHTML('beforeend', html);
+    
+  } catch (error) {
+    console.error('Error:', error);
+    showToast('Error obteniendo datos', 'error');
+  }
+}
+
+// Exportar Escrutinios a CSV
+function exportarEscrutiniosCSV() {
+  if (escrutiniosData.length === 0) {
+    showToast('No hay datos para exportar', 'warning');
+    return;
+  }
+  
+  const headers = ['Fecha', 'Sorteo', 'Modalidad', 'Juego', 'Ganadores', 'Premios', 'Usuario'];
+  const rows = escrutiniosData.map(item => [
+    item.fecha,
+    item.numero_sorteo,
+    item.modalidad || 'N',
+    item.juego,
+    item.total_ganadores || 0,
+    item.total_premios || 0,
+    item.usuario_nombre || ''
+  ]);
+  
+  const csvContent = [headers.join(','), ...rows.map(r => r.join(','))].join('\n');
+  const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `escrutinios_${new Date().toISOString().split('T')[0]}.csv`;
+  a.click();
+  
+  URL.revokeObjectURL(url);
+  showToast('Archivo CSV descargado', 'success');
+}
+
+// Cerrar modal genérico
+function cerrarModal(el) {
+  if (el) el.remove();
 }

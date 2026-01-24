@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Control de Loterías</title>
-  <link rel="stylesheet" href="css/styles.css?v=20260121b">
+  <link rel="stylesheet" href="css/styles.css?v=20260122h">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
 </head>
 <body>
@@ -276,50 +276,251 @@
           <div class="tabs">
             <button class="tab active" data-tab="cargar">Cargar Extracto</button>
             <button class="tab" data-tab="ver">Ver Extractos</button>
+            <button class="tab" data-tab="config-ocr">⚙️ Config OCR</button>
           </div>
           
           <div class="tab-content" id="tab-cargar">
-            <div class="form-row">
-              <div class="form-group">
-                <label>Juego</label>
-                <select id="extracto-juego" class="form-control">
-                  <option value="">Seleccione juego</option>
-                </select>
+            <!-- 1. Selección de Provincia/Extracto -->
+            <div class="form-group mb-4">
+              <label>Provincia/Extracto</label>
+              <select id="extracto-provincia" class="form-control">
+                <option value="51">CABA</option>
+                <option value="53">Buenos Aires</option>
+                <option value="55">Córdoba</option>
+                <option value="72">Santa Fe</option>
+                <option value="59">Entre Ríos</option>
+                <option value="64">Mendoza</option>
+                <option value="00">Montevideo</option>
+              </select>
+            </div>
+
+            <!-- 2. Métodos de Carga -->
+            <div class="ocr-tabs mb-4">
+              <button class="ocr-tab active" data-ocr-tab="xml">📄 XML</button>
+              <button class="ocr-tab" data-ocr-tab="imagen">🖼️ Imagen/OCR</button>
+              <button class="ocr-tab" data-ocr-tab="pdf">📑 PDF</button>
+              <button class="ocr-tab" data-ocr-tab="manual">⌨️ Manual</button>
+            </div>
+
+            <!-- Tab XML -->
+            <div class="ocr-tab-content active" id="ocr-tab-xml">
+              <h4>Cargar archivo(s) XML</h4>
+              <div class="file-upload-area" id="extracto-xml-area">
+                <input type="file" id="extracto-xml-input" accept=".xml" multiple class="hidden">
+                <div class="file-upload-content">
+                  <i class="fas fa-file-code fa-3x"></i>
+                  <p>Arrastrá el/los archivo(s) XML aquí o hacé click para seleccionar</p>
+                  <small class="text-muted">Nomenclatura: QNL + Prov(51/53/55/59/64/72/00) + Modal(R/P/M/V/N) + Fecha<br>
+                  Ej: <code>QNL51M20260116.xml</code> = CABA Matutina | Podés cargar varios de una modalidad juntos</small>
+                </div>
               </div>
-              <div class="form-group">
-                <label>Sorteo</label>
-                <select id="extracto-sorteo" class="form-control">
-                  <option value="">Seleccione sorteo</option>
-                </select>
+              <div class="mt-3">
+                <label>O pegar XML directamente</label>
+                <textarea id="extracto-xml-texto" class="form-control" rows="4" placeholder="<extracto>...</extracto>"></textarea>
               </div>
-              <div class="form-group">
-                <label>Fecha</label>
-                <input type="date" id="extracto-fecha" class="form-control">
-              </div>
-              <div class="form-group">
-                <label>Provincia</label>
-                <select id="extracto-provincia" class="form-control">
-                  <option value="">Seleccione provincia</option>
-                </select>
+              <div class="form-actions mt-3">
+                <button class="btn btn-primary" onclick="cargarExtractoXML()">
+                  <i class="fas fa-check"></i> Cargar XML
+                </button>
               </div>
             </div>
-            
-            <h4>Números (20 posiciones)</h4>
-            <div class="numeros-grid" id="extracto-numeros"></div>
-            
-            <h4>Letras</h4>
-            <div class="letras-grid" id="extracto-letras"></div>
-            
-            <div class="form-actions">
-              <button class="btn btn-secondary" onclick="limpiarExtracto()">Limpiar</button>
-              <button class="btn btn-primary" onclick="guardarExtracto()">
-                <i class="fas fa-save"></i> Guardar Extracto
-              </button>
+
+            <!-- Tab Imagen/OCR -->
+            <div class="ocr-tab-content hidden" id="ocr-tab-imagen">
+              <h4>Cargar desde Imagen (OCR con IA)</h4>
+              <div class="alert alert-info mb-3" id="ocr-api-status">
+                <i class="fas fa-key"></i> 
+                <span id="ocr-key-status">Verificando API key...</span>
+              </div>
+              
+              <div class="row g-3">
+                <div class="col-md-6">
+                  <div class="file-upload-area" id="extracto-imagen-area">
+                    <input type="file" id="extracto-imagen-input" accept="image/*" class="hidden">
+                    <div class="file-upload-content">
+                      <i class="fas fa-image fa-3x"></i>
+                      <p>Arrastrá una imagen o hacé click</p>
+                      <small class="text-muted">JPG, PNG, WEBP</small>
+                    </div>
+                  </div>
+                </div>
+                <div class="col-md-6">
+                  <button class="btn btn-lg btn-outline-primary w-100 h-100" onclick="capturarPantallaExtracto()" style="min-height: 120px;">
+                    <i class="fas fa-desktop fa-2x d-block mb-2"></i>
+                    Capturar Pantalla
+                  </button>
+                </div>
+              </div>
+              
+              <div id="ocr-preview" class="hidden mt-3">
+                <h5>Vista previa</h5>
+                <img id="ocr-preview-img" class="img-fluid rounded" style="max-height: 300px;">
+              </div>
+              
+              <div class="form-actions mt-3">
+                <button class="btn btn-primary" id="btn-procesar-ocr" onclick="procesarImagenOCR()" disabled>
+                  <i class="fas fa-magic"></i> Procesar con IA
+                </button>
+              </div>
+            </div>
+
+            <!-- Tab PDF -->
+            <div class="ocr-tab-content hidden" id="ocr-tab-pdf">
+              <h4>Cargar desde PDF (OCR con IA)</h4>
+              <div class="alert alert-info mb-3">
+                <i class="fas fa-info-circle"></i> Se procesará la primera página del PDF con OCR
+              </div>
+              
+              <div class="file-upload-area" id="extracto-pdf-area">
+                <input type="file" id="extracto-pdf-input" accept=".pdf" class="hidden">
+                <div class="file-upload-content">
+                  <i class="fas fa-file-pdf fa-3x"></i>
+                  <p>Arrastrá un PDF o hacé click para seleccionar</p>
+                  <small class="text-muted">Solo PDF de una página con extracto visible</small>
+                </div>
+              </div>
+              
+              <div id="pdf-preview" class="hidden mt-3">
+                <h5>PDF seleccionado: <span id="pdf-filename"></span></h5>
+              </div>
+              
+              <div class="form-actions mt-3">
+                <button class="btn btn-primary" id="btn-procesar-pdf" onclick="procesarPdfOCR()" disabled>
+                  <i class="fas fa-magic"></i> Procesar PDF con IA
+                </button>
+              </div>
+            </div>
+
+            <!-- Tab Manual -->
+            <div class="ocr-tab-content hidden" id="ocr-tab-manual">
+              <div class="form-row">
+                <div class="form-group">
+                  <label>Juego</label>
+                  <select id="extracto-juego" class="form-control">
+                    <option value="quiniela">Quiniela</option>
+                  </select>
+                </div>
+                <div class="form-group">
+                  <label>Sorteo</label>
+                  <select id="extracto-sorteo" class="form-control">
+                    <option value="">Seleccione sorteo</option>
+                  </select>
+                </div>
+                <div class="form-group">
+                  <label>Fecha</label>
+                  <input type="date" id="extracto-fecha" class="form-control">
+                </div>
+                <div class="form-group">
+                  <label>Modalidad</label>
+                  <select id="extracto-modalidad" class="form-control">
+                    <option value="R">La Previa</option>
+                    <option value="P">La Primera</option>
+                    <option value="M">Matutina</option>
+                    <option value="V">Vespertina</option>
+                    <option value="N">Nocturna</option>
+                  </select>
+                </div>
+              </div>
+              
+              <h4>Números (20 posiciones)</h4>
+              <div class="numeros-grid" id="extracto-numeros"></div>
+              
+              <div id="letras-container">
+                <h4>Letras</h4>
+                <div class="letras-grid" id="extracto-letras"></div>
+              </div>
+              
+              <div class="form-actions">
+                <button class="btn btn-secondary" onclick="limpiarExtracto()">Limpiar</button>
+                <button class="btn btn-primary" onclick="guardarExtracto()">
+                  <i class="fas fa-save"></i> Guardar Extracto
+                </button>
+              </div>
+            </div>
+
+            <!-- Extractos Cargados (para agregar) -->
+            <div class="mt-4" id="extractos-pendientes-container" style="display: none;">
+              <h4><i class="fas fa-list"></i> Extractos a guardar</h4>
+              <div id="extractos-pendientes-list"></div>
+              <div class="form-actions mt-3">
+                <button class="btn btn-success btn-lg" onclick="guardarExtractosPendientes()">
+                  <i class="fas fa-save"></i> Guardar Todos los Extractos
+                </button>
+                <button class="btn btn-secondary" onclick="limpiarExtractosPendientes()">
+                  <i class="fas fa-trash"></i> Limpiar
+                </button>
+              </div>
             </div>
           </div>
           
+          <!-- Tab Config OCR -->
+          <div class="tab-content hidden" id="tab-config-ocr">
+            <h4><i class="fas fa-key"></i> Configuración de API Groq</h4>
+            <p class="text-muted">Para usar OCR con IA necesitás una API key de Groq (gratis)</p>
+            
+            <div class="form-group">
+              <label>API Key de Groq</label>
+              <div class="input-group">
+                <input type="password" id="groq-api-key" class="form-control" placeholder="gsk_xxxxxxxxxxxxxxx">
+                <button class="btn btn-secondary" onclick="toggleApiKeyVisibility()">
+                  <i class="fas fa-eye"></i>
+                </button>
+              </div>
+              <small class="text-muted">
+                Obtené tu key gratis en <a href="https://console.groq.com/keys" target="_blank">console.groq.com/keys</a>
+              </small>
+            </div>
+            
+            <div class="form-actions mt-3">
+              <button class="btn btn-primary" onclick="guardarApiKey()">
+                <i class="fas fa-save"></i> Guardar API Key
+              </button>
+              <button class="btn btn-secondary" onclick="testApiKey()">
+                <i class="fas fa-vial"></i> Probar Conexión
+              </button>
+            </div>
+            
+            <div id="api-test-result" class="mt-3"></div>
+          </div>
+
           <div class="tab-content hidden" id="tab-ver">
-            <p class="text-muted">Seleccione fecha y juego para ver extractos cargados.</p>
+            <!-- Filtros -->
+            <div class="row g-3 align-items-end mb-4">
+              <div class="col-md-2">
+                <label class="form-label">Fecha</label>
+                <input type="date" class="form-control" id="extractos-fecha">
+              </div>
+              <div class="col-md-2">
+                <label class="form-label">Juego</label>
+                <select class="form-control" id="extractos-filtro-juego">
+                  <option value="">Todos</option>
+                  <option value="quiniela">Quiniela</option>
+                  <option value="poceada">Poceada</option>
+                </select>
+              </div>
+              <div class="col-md-2">
+                <label class="form-label">Modalidad</label>
+                <select class="form-control" id="extractos-filtro-modalidad">
+                  <option value="">Todas</option>
+                  <option value="M">Matutina</option>
+                  <option value="V">Vespertina</option>
+                  <option value="N">Nocturna</option>
+                </select>
+              </div>
+              <div class="col-md-2">
+                <button class="btn btn-primary w-100" onclick="buscarExtractos()">
+                  <i class="fas fa-search"></i> Buscar
+                </button>
+              </div>
+            </div>
+            
+            <!-- Resultados -->
+            <div id="extractos-resultados">
+              <div class="text-center text-muted py-4">
+                <i class="fas fa-search fa-3x mb-3"></i>
+                <p>Seleccioná una fecha y hacé clic en Buscar para ver los extractos</p>
+              </div>
+            </div>
           </div>
         </div>
       </section>
@@ -1538,11 +1739,310 @@
       <!-- Reportes -->
       <section id="view-reportes" class="view hidden">
         <div class="page-header">
-          <h1>Reportes</h1>
-          <p>Estadísticas y exportación</p>
+          <h1>Reportes e Historial</h1>
+          <p>Análisis de recaudación, premios y consulta de datos procesados</p>
         </div>
-        <div class="card">
-          <p class="text-muted">Módulo de reportes - En desarrollo</p>
+
+        <!-- Tabs de Reportes -->
+        <div class="tabs-container mb-4">
+          <button class="tab-btn active" data-reportes-tab="dashboard">
+            <i class="fas fa-chart-bar"></i> Dashboard
+          </button>
+          <button class="tab-btn" data-reportes-tab="control-previo">
+            <i class="fas fa-file-import"></i> Control Previo
+          </button>
+          <button class="tab-btn" data-reportes-tab="escrutinios">
+            <i class="fas fa-trophy"></i> Escrutinios
+          </button>
+        </div>
+
+        <!-- ========== TAB: DASHBOARD ========== -->
+        <div id="reportes-tab-dashboard" class="reportes-tab-content">
+          <!-- Filtros del Dashboard -->
+          <div class="card mb-4">
+            <div class="card-header">
+              <h3><i class="fas fa-filter"></i> Filtros</h3>
+            </div>
+            <div class="card-body">
+              <!-- Selector de Juegos -->
+              <div class="game-selector mb-3">
+                <label class="form-label fw-bold">Seleccionar Juegos:</label>
+                <div class="game-checkboxes">
+                  <label class="game-checkbox">
+                    <input type="checkbox" id="dash-game-todos" onchange="toggleDashboardGame('todos')" checked>
+                    <span class="checkmark game-todos">📊 TODOS</span>
+                  </label>
+                  <label class="game-checkbox">
+                    <input type="checkbox" id="dash-game-quiniela" onchange="toggleDashboardGame('quiniela')">
+                    <span class="checkmark game-quiniela">🎰 QUINIELA</span>
+                  </label>
+                  <label class="game-checkbox">
+                    <input type="checkbox" id="dash-game-poceada" onchange="toggleDashboardGame('poceada')">
+                    <span class="checkmark game-poceada">🎱 POCEADA</span>
+                  </label>
+                </div>
+              </div>
+
+              <!-- Filtros -->
+              <div class="row g-2 align-items-end">
+                <div class="col-lg-2 col-md-3">
+                  <label class="form-label">Fecha Desde</label>
+                  <input type="date" class="form-control form-control-sm" id="dash-fecha-desde">
+                </div>
+                <div class="col-lg-2 col-md-3">
+                  <label class="form-label">Fecha Hasta</label>
+                  <input type="date" class="form-control form-control-sm" id="dash-fecha-hasta">
+                </div>
+                <div class="col-lg-1 col-md-2">
+                  <label class="form-label">Sorteo Desde</label>
+                  <input type="number" class="form-control form-control-sm" id="dash-sorteo-desde" placeholder="51900">
+                </div>
+                <div class="col-lg-1 col-md-2">
+                  <label class="form-label">Sorteo Hasta</label>
+                  <input type="number" class="form-control form-control-sm" id="dash-sorteo-hasta" placeholder="52000">
+                </div>
+                <div class="col-lg-2 col-md-3">
+                  <label class="form-label">Agencia</label>
+                  <input type="text" class="form-control form-control-sm" id="dash-agencia" placeholder="Ej: 5100001 o vacío=todas">
+                </div>
+                <div class="col-lg-2 col-md-3">
+                  <label class="form-label">Vista</label>
+                  <select class="form-control form-control-sm" id="dash-tipo-consulta">
+                    <option value="agencias">📋 Agencias c/Premio</option>
+                    <option value="agencias_venta">💰 Agencias c/Venta</option>
+                    <option value="detallado">📊 Detallado por Sorteo</option>
+                    <option value="comparativo">⚖️ Comparativo por Juego</option>
+                  </select>
+                </div>
+                <div class="col-lg-2 col-md-3">
+                  <div class="d-flex gap-2">
+                    <button class="btn btn-primary btn-sm flex-grow-1" onclick="buscarDashboard()">
+                      <i class="fas fa-search"></i> Buscar
+                    </button>
+                    <button class="btn btn-secondary btn-sm" onclick="limpiarFiltrosDashboard()" title="Limpiar filtros">
+                      <i class="fas fa-eraser"></i>
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Estadísticas -->
+          <div class="stats-grid mb-4" id="dash-stats-grid">
+            <div class="stat-card recaudacion">
+              <div class="stat-value" id="dash-stat-recaudacion">$0</div>
+              <div class="stat-label">Recaudación Total</div>
+            </div>
+            <div class="stat-card premios">
+              <div class="stat-value" id="dash-stat-premios">$0</div>
+              <div class="stat-label">Premios Pagados</div>
+            </div>
+            <div class="stat-card apuestas">
+              <div class="stat-value" id="dash-stat-apuestas">0</div>
+              <div class="stat-label">Total Apuestas</div>
+            </div>
+            <div class="stat-card tickets">
+              <div class="stat-value" id="dash-stat-tickets">0</div>
+              <div class="stat-label">Total Tickets</div>
+            </div>
+            <div class="stat-card sorteos">
+              <div class="stat-value" id="dash-stat-sorteos">0</div>
+              <div class="stat-label">Sorteos</div>
+            </div>
+            <div class="stat-card provincias">
+              <div class="stat-value" id="dash-stat-provincias">0</div>
+              <div class="stat-label">Provincias c/Apuestas</div>
+            </div>
+            <div class="stat-card agencias">
+              <div class="stat-value" id="dash-stat-agencias">0</div>
+              <div class="stat-label">Agencias c/Premios</div>
+            </div>
+            <div class="stat-card agencias-venta">
+              <div class="stat-value" id="dash-stat-agencias-venta">0</div>
+              <div class="stat-label">Agencias c/Venta</div>
+            </div>
+          </div>
+
+          <!-- Resultados Dashboard -->
+          <div class="card">
+            <div class="card-header dash-results-header">
+              <div class="d-flex justify-content-between align-items-center">
+                <h3><i class="fas fa-table"></i> Resultados <span id="dash-results-count" class="badge bg-secondary ms-2">0</span></h3>
+                <div class="d-flex gap-2">
+                  <span id="dash-game-indicator" class="badge bg-info">Todos los juegos</span>
+                  <button class="btn btn-sm btn-success" onclick="exportarDashboardCSV()">
+                    <i class="fas fa-file-csv"></i> Exportar CSV
+                  </button>
+                </div>
+              </div>
+            </div>
+            <div class="card-body p-0">
+              <div class="table-container" style="max-height: 500px; overflow-y: auto;">
+                <table class="table table-hover mb-0" id="table-dashboard">
+                  <thead id="table-dashboard-header"></thead>
+                  <tbody id="table-dashboard-body"></tbody>
+                </table>
+              </div>
+              <div id="dash-no-data" class="text-center text-muted py-5 hidden">
+                <i class="fas fa-inbox fa-3x mb-3"></i>
+                <p>No hay datos para mostrar. Aplique filtros y presione Buscar.</p>
+              </div>
+              <div id="dash-loading" class="text-center py-5 hidden">
+                <i class="fas fa-spinner fa-spin fa-2x mb-3"></i>
+                <p>Cargando datos...</p>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- ========== TAB: CONTROL PREVIO ========== -->
+        <div id="reportes-tab-control-previo" class="reportes-tab-content hidden">
+          <!-- Filtros Control Previo -->
+          <div class="card mb-4">
+            <div class="card-body">
+              <div class="row g-3 align-items-end">
+                <div class="col-md-3">
+                  <label class="form-label">Fecha Desde</label>
+                  <input type="date" class="form-control" id="cp-fecha-desde">
+                </div>
+                <div class="col-md-3">
+                  <label class="form-label">Fecha Hasta</label>
+                  <input type="date" class="form-control" id="cp-fecha-hasta">
+                </div>
+                <div class="col-md-2">
+                  <label class="form-label">Juego</label>
+                  <select class="form-control" id="cp-juego">
+                    <option value="">Todos</option>
+                    <option value="quiniela">Quiniela</option>
+                    <option value="poceada">Poceada</option>
+                  </select>
+                </div>
+                <div class="col-md-2">
+                  <button class="btn btn-primary w-100" onclick="buscarControlPrevio()">
+                    <i class="fas fa-search"></i> Buscar
+                  </button>
+                </div>
+                <div class="col-md-2">
+                  <button class="btn btn-success w-100" onclick="exportarControlPrevioCSV()">
+                    <i class="fas fa-download"></i> Exportar
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Tabla Control Previo -->
+          <div class="card">
+            <div class="card-header">
+              <h3><i class="fas fa-file-import"></i> Historial de Control Previo</h3>
+            </div>
+            <div class="card-body p-0">
+              <div class="table-container" style="max-height: 500px; overflow-y: auto;">
+                <table class="table table-hover mb-0" id="table-historial-cp">
+                  <thead>
+                    <tr>
+                      <th>Fecha</th>
+                      <th>Sorteo</th>
+                      <th>Modalidad</th>
+                      <th>Juego</th>
+                      <th>Registros</th>
+                      <th>Apuestas</th>
+                      <th>Anulados</th>
+                      <th>Recaudación</th>
+                      <th>Usuario</th>
+                      <th>Acciones</th>
+                    </tr>
+                  </thead>
+                  <tbody></tbody>
+                </table>
+              </div>
+              <div id="historial-cp-empty" class="text-center text-muted py-4 hidden">
+                <i class="fas fa-inbox fa-3x mb-3"></i>
+                <p>No hay registros para mostrar</p>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- ========== TAB: ESCRUTINIOS ========== -->
+        <div id="reportes-tab-escrutinios" class="reportes-tab-content hidden">
+          <!-- Filtros Escrutinios -->
+          <div class="card mb-4">
+            <div class="card-body">
+              <div class="row g-3 align-items-end">
+                <div class="col-md-3">
+                  <label class="form-label">Fecha Desde</label>
+                  <input type="date" class="form-control" id="esc-fecha-desde">
+                </div>
+                <div class="col-md-3">
+                  <label class="form-label">Fecha Hasta</label>
+                  <input type="date" class="form-control" id="esc-fecha-hasta">
+                </div>
+                <div class="col-md-2">
+                  <label class="form-label">Juego</label>
+                  <select class="form-control" id="esc-juego">
+                    <option value="">Todos</option>
+                    <option value="quiniela">Quiniela</option>
+                    <option value="poceada">Poceada</option>
+                  </select>
+                </div>
+                <div class="col-md-2">
+                  <button class="btn btn-primary w-100" onclick="buscarEscrutinios()">
+                    <i class="fas fa-search"></i> Buscar
+                  </button>
+                </div>
+                <div class="col-md-2">
+                  <button class="btn btn-success w-100" onclick="exportarEscrutiniosCSV()">
+                    <i class="fas fa-download"></i> Exportar
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Tabla Escrutinios -->
+          <div class="card">
+            <div class="card-header">
+              <h3><i class="fas fa-trophy"></i> Historial de Escrutinios</h3>
+            </div>
+            <div class="card-body p-0">
+              <div class="table-container" style="max-height: 500px; overflow-y: auto;">
+                <table class="table table-hover mb-0" id="table-historial-escrutinio">
+                  <thead>
+                    <tr>
+                      <th>Fecha</th>
+                      <th>Sorteo</th>
+                      <th>Modalidad</th>
+                      <th>Juego</th>
+                      <th>Total Ganadores</th>
+                      <th>Total Premios</th>
+                      <th>Usuario</th>
+                      <th>Acciones</th>
+                    </tr>
+                  </thead>
+                  <tbody></tbody>
+                </table>
+              </div>
+              <div id="historial-escrutinio-empty" class="text-center text-muted py-4 hidden">
+                <i class="fas fa-inbox fa-3x mb-3"></i>
+                <p>No hay escrutinios para mostrar</p>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Modal Detalle -->
+        <div id="modal-dash-detalle" class="modal-overlay hidden">
+          <div class="modal-container modal-lg">
+            <div class="modal-header">
+              <h2 id="modal-dash-titulo">Detalle</h2>
+              <button class="modal-close" onclick="cerrarModalDashDetalle()">&times;</button>
+            </div>
+            <div class="modal-body" id="modal-dash-contenido">
+              <!-- Contenido dinámico -->
+            </div>
+          </div>
         </div>
       </section>
 
@@ -1593,6 +2093,7 @@
   <div id="toast-container"></div>
 
   <script src="js/api.js?v=20260121b"></script>
-  <script src="js/app.js?v=20260122d"></script>
+  <script src="js/ocr-extractos.js?v=20260123"></script>
+  <script src="js/app.js?v=20260123"></script>
 </body>
 </html>

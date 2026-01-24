@@ -5,6 +5,7 @@ const xml2js = require('xml2js');
 const crypto = require('crypto');
 const { query } = require('../../config/database');
 const { successResponse, errorResponse, PROVINCIAS } = require('../../shared/helpers');
+const { guardarControlPrevioPoceada } = require('../../shared/control-previo.helper');
 
 // Cargar configuración de distribución de juegos
 const CONFIG_PATH = path.join(__dirname, '../../config/distribucion-juegos.json');
@@ -509,6 +510,15 @@ const procesarZip = async (req, res) => {
       },
       registrosNTF: logsTxt.registrosParseados // Para el escrutinio
     };
+
+    // GUARDAR EN BASE DE DATOS (resguardo)
+    try {
+      const resguardo = await guardarControlPrevioPoceada(resultado, req.user, req.file.originalname);
+      resultado.resguardo = resguardo;
+    } catch (errGuardar) {
+      console.error('⚠️ Error guardando resguardo (no crítico):', errGuardar.message);
+      resultado.resguardo = { success: false, error: errGuardar.message };
+    }
 
     return successResponse(res, resultado, 'Poceada procesada correctamente');
 

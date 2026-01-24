@@ -1,5 +1,18 @@
 const path = require('path');
-require('dotenv').config({ path: path.join(__dirname, '../.env') });
+const fs = require('fs');
+
+// Cargar .env.local primero si existe (para desarrollo), sino .env (producción)
+const envLocalPath = path.join(__dirname, '../.env.local');
+const envPath = path.join(__dirname, '../.env');
+
+if (fs.existsSync(envLocalPath)) {
+  require('dotenv').config({ path: envLocalPath });
+  console.log('📁 Usando configuración: .env.local (LOCAL)');
+} else {
+  require('dotenv').config({ path: envPath });
+  console.log('📁 Usando configuración: .env (PRODUCCIÓN)');
+}
+
 const express = require('express');
 const cors = require('cors');
 const helmet = require('helmet');
@@ -15,12 +28,14 @@ const controlPosteriorRoutes = require('./modules/control-posterior/control-post
 const actasRoutes = require('./modules/actas/actas.routes');
 const agenciasRoutes = require('./modules/agencias/agencias.routes');
 const programacionRoutes = require('./modules/programacion/programacion.routes');
+const historialRoutes = require('./modules/historial/historial.routes');
+const extractosRoutes = require('./modules/extractos/extractos.routes');
 
-const fs = require('fs');
-
-// Redirigir consola a un archivo para Hostinger
-const logFile = fs.createWriteStream(path.join(__dirname, '../debug.log'), { flags: 'a' });
-process.stdout.write = process.stderr.write = logFile.write.bind(logFile);
+// Redirigir consola a un archivo solo en Hostinger (producción)
+if (process.env.NODE_ENV === 'production') {
+  const logFile = fs.createWriteStream(path.join(__dirname, '../debug.log'), { flags: 'a' });
+  process.stdout.write = process.stderr.write = logFile.write.bind(logFile);
+}
 
 console.log('--- INICIO DE APLICACIÓN ' + new Date().toISOString() + ' ---');
 
@@ -63,6 +78,8 @@ app.use('/api/control-posterior', controlPosteriorRoutes);
 app.use('/api/actas', actasRoutes);
 app.use('/api/agencias', agenciasRoutes);
 app.use('/api/programacion', programacionRoutes);
+app.use('/api/historial', historialRoutes);
+app.use('/api/extractos', extractosRoutes);
 
 // Ruta principal
 app.get('/', (req, res) => {

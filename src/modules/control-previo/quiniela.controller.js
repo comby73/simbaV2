@@ -5,6 +5,7 @@ const xml2js = require('xml2js');
 const crypto = require('crypto');
 const { query } = require('../../config/database');
 const { successResponse, errorResponse, today } = require('../../shared/helpers');
+const { guardarControlPrevioQuiniela } = require('../../shared/control-previo.helper');
 
 // Configuración de posiciones del formato NTF v2 (posiciones 1-based convertidas a 0-based)
 // Parte Genérica: 200 caracteres
@@ -410,6 +411,15 @@ const procesarZip = async (req, res) => {
       validacionProgramacion: validacionProgramacion
     };
 
+    // GUARDAR EN BASE DE DATOS (resguardo)
+    try {
+      const resguardo = await guardarControlPrevioQuiniela(resultado, req.user, req.file.originalname);
+      resultado.resguardo = resguardo;
+    } catch (errGuardar) {
+      console.error('⚠️ Error guardando resguardo (no crítico):', errGuardar.message);
+      resultado.resguardo = { success: false, error: errGuardar.message };
+    }
+
     return successResponse(res, resultado, 'Archivo procesado correctamente');
 
   } catch (error) {
@@ -684,63 +694,12 @@ function limpiarDirectorio(dirPath) {
 }
 
 // Guardar control previo en BD
+// NOTA: Esta función es legacy - el guardado real ahora se hace automáticamente 
+// en procesarZip() usando las nuevas tablas control_previo_quiniela/poceada
 const guardarControlPrevio = async (req, res) => {
   try {
-    const { 
-      numeroSorteo, registros, apuestas, recaudacion,
-      provincias, datosXml
-    } = req.body;
-
-    if (!numeroSorteo) {
-      return errorResponse(res, 'Número de sorteo requerido', 400);
-    }
-
-    // Buscar juego y sorteo
-    const juego = await query('SELECT id FROM juegos WHERE codigo = ?', ['QUINIELA']);
-    if (juego.length === 0) {
-      return errorResponse(res, 'Juego QUINIELA no encontrado', 400);
-    }
-
-    const datos = {
-      registros,
-      apuestas,
-      recaudacion,
-      provincias,
-      datosXml
-    };
-
-    const fechaHoy = today();
-    
-    // Verificar si ya existe
-    const existe = await query(
-      'SELECT id FROM control_previo WHERE juego_id = ? AND fecha = ?',
-      [juego[0].id, fechaHoy]
-    );
-
-    const datosCompletos = {
-      numeroSorteo,
-      ...datos
-    };
-
-    if (existe.length > 0) {
-      // Actualizar
-      await query(
-        `UPDATE control_previo SET 
-         total_registros = ?, total_apostado = ?, registros_validos = ?,
-         datos = ?, estado = 'procesado'
-         WHERE id = ?`,
-        [registros, recaudacion, registros, JSON.stringify(datosCompletos), existe[0].id]
-      );
-    } else {
-      // Insertar
-      await query(
-        `INSERT INTO control_previo 
-         (juego_id, sorteo_id, fecha, total_registros, total_apostado, registros_validos, datos, estado, usuario_id)
-         VALUES (?, NULL, ?, ?, ?, ?, ?, 'procesado', ?)`,
-        [juego[0].id, fechaHoy, registros, recaudacion, registros, JSON.stringify(datosCompletos), req.user.id]
-      );
-    }
-
+    // El guardado automático ya se realizó en procesarZip()
+    // Esta función solo existe para mantener compatibilidad con el frontend
     return successResponse(res, null, 'Control previo guardado correctamente');
 
   } catch (error) {

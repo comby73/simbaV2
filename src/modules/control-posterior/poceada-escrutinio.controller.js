@@ -4,6 +4,7 @@ const path = require('path');
 const fs = require('fs');
 const { query } = require('../../config/database');
 const { successResponse, errorResponse } = require('../../shared/helpers');
+const { guardarEscrutinioPoceada } = require('../../shared/escrutinio.helper');
 
 /**
  * Código binario para decodificar la secuencia de números
@@ -166,6 +167,15 @@ const ejecutar = async (req, res) => {
     console.log(`  Total ganadores: ${resultado.totalGanadores}`);
     console.log(`${'='.repeat(50)}\n`);
     
+    // GUARDAR EN BASE DE DATOS (resguardo)
+    try {
+      const resguardo = await guardarEscrutinioPoceada(resultado, datosControlPrevio, req.user);
+      resultado.resguardo = resguardo;
+    } catch (errGuardar) {
+      console.error('⚠️ Error guardando escrutinio (no crítico):', errGuardar.message);
+      resultado.resguardo = { success: false, error: errGuardar.message };
+    }
+
     return successResponse(res, resultado, 'Escrutinio Poceada completado correctamente');
   } catch (error) {
     console.error('Error en escrutinio Poceada:', error);

@@ -1,7 +1,19 @@
 const mysql = require('mysql2/promise');
 const path = require('path');
+const fs = require('fs');
 const os = require('os');
-require('dotenv').config({ path: path.join(__dirname, '../../.env') });
+
+// Cargar .env.local primero si existe (para desarrollo), sino .env (producción)
+const envLocalPath = path.join(__dirname, '../../.env.local');
+const envPath = path.join(__dirname, '../../.env');
+
+if (fs.existsSync(envLocalPath)) {
+  require('dotenv').config({ path: envLocalPath });
+  console.log('📁 Usando configuración: .env.local');
+} else {
+  require('dotenv').config({ path: envPath });
+  console.log('📁 Usando configuración: .env');
+}
 
 let pool;
 
