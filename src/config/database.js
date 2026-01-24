@@ -42,15 +42,24 @@ function getDbConfig() {
   
   console.log(`🔧 Entorno detectado: ${isProd ? 'PRODUCCIÓN (Hostinger)' : 'LOCAL (XAMPP)'}`);
   
+  // Debug: mostrar todas las variables de entorno de BD
+  console.log('📋 Variables de entorno BD:', {
+    DB_HOST: process.env.DB_HOST || '(no definido)',
+    DB_USER: process.env.DB_USER || '(no definido)',
+    DB_NAME: process.env.DB_NAME || '(no definido)',
+    DB_PASSWORD: process.env.DB_PASSWORD ? '****' : '(no definido)',
+    NODE_ENV: process.env.NODE_ENV || '(no definido)'
+  });
+  
   if (isProd) {
     // PRODUCCIÓN: Credenciales de Hostinger
     return {
-      host: process.env.DB_HOST || 'localhost', // Intentar localhost por defecto en Hostinger
+      host: process.env.DB_HOST || 'localhost',
       port: parseInt(process.env.DB_PORT) || 3306,
       user: process.env.DB_USER,
       password: process.env.DB_PASSWORD,
       database: process.env.DB_NAME,
-      connectTimeout: 10000, // 10 segundos de timeout para evitar cuelgues infinitos
+      connectTimeout: 10000,
     };
   } else {
     // LOCAL: Credenciales de XAMPP
