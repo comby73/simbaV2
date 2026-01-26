@@ -7,15 +7,28 @@ const OCRExtractos = {
   // Configuración
   CONFIG: {
     API_URL: 'https://api.groq.com/openai/v1/chat/completions',
-    API_KEY: '', // Se configura desde la UI
-    MODEL: 'llama-3.2-90b-vision-preview'
+    API_KEY: '', // Se configura desde config.js o UI
+    MODEL: 'meta-llama/llama-4-maverick-17b-128e-instruct'
   },
 
-  // Inicializar con API key desde localStorage
+  // Inicializar con config global o localStorage
   init() {
+    // 1. Intentar desde config.js (SIMBA_CONFIG)
+    if (window.SIMBA_CONFIG && window.SIMBA_CONFIG.GROQ) {
+      this.CONFIG.API_URL = window.SIMBA_CONFIG.GROQ.API_URL || this.CONFIG.API_URL;
+      this.CONFIG.API_KEY = window.SIMBA_CONFIG.GROQ.API_KEY || this.CONFIG.API_KEY;
+      this.CONFIG.MODEL = window.SIMBA_CONFIG.GROQ.MODEL || this.CONFIG.MODEL;
+    }
+
+    // 2. Sobrescribir con localStorage si existe (preferencia del usuario)
     const savedKey = localStorage.getItem('groq_api_key');
     if (savedKey) {
       this.CONFIG.API_KEY = savedKey;
+    }
+    
+    const savedModel = localStorage.getItem('groq_model');
+    if (savedModel) {
+      this.CONFIG.MODEL = savedModel;
     }
   },
 
@@ -30,43 +43,64 @@ const OCRExtractos = {
     return !!this.CONFIG.API_KEY;
   },
 
-  // Procesar imagen de extracto de Quiniela
-  async procesarImagenQuiniela(imageBase64, mimeType, provinciaHint = '') {
-    const prompt = `Analiza esta imagen de resultados de lotería/quiniela y extrae los datos.
-
+  /**
+   * PROMPT PARA PROVINCIAS Y MONTEVIDEO (GENERAL)
+   */
+  async procesarImagenProvincia(imageBase64, mimeType, provinciaHint = '') {
+    const prompt = `Analiza esta imagen de resultados de lotería y devuelve SOLO un objeto JSON válido.
+        
+REGLAS CRÍTICAS DE EXTRACCIÓN:
+1. Busca la columna 'Ubicación' o 'Puesto' del 1 al 20.
+2. Para cada posición, extrae el número asociado.
+3. Si la provincia es Montevideo (Uruguay), los números son de 3 DÍGITOS. Para el resto son de 4 DÍGITOS.
+4. NORMALIZACIÓN DE MODALIDAD: Si la imagen dice "VESPERTINA" pero la hora es 15:00 o la entidad es Montevideo 15hs, usa "Matutina".
 DATOS A EXTRAER:
-1. sorteo: número de sorteo (si aparece)
-2. fecha: formato YYYY-MM-DD
-3. hora: formato HH:MM (si aparece)
-4. provincia: código numérico según esta lista (usa el hint si es coherente: ${provinciaHint}):
-   - 51: CABA / Ciudad de Buenos Aires
-   - 53: Buenos Aires (Provincia)
-   - 55: Córdoba
-   - 72: Santa Fe
-   - 59: Entre Ríos
-   - 64: Mendoza
-   - 00: Montevideo (Uruguay)
-5. modalidad: R=La Previa, P=La Primera, M=Matutina, V=Vespertina, N=Nocturna
-6. numeros: array de 20 números (cada uno de 4 dígitos, con ceros a la izquierda si es necesario)
-7. letras: string con las 5 letras (solo para CABA, dejar vacío para otras provincias)
-
-IMPORTANTE: 
-- Los números deben ser de 4 dígitos (ej: "0123", "4567")
-- Lee los números REALES de la imagen, no inventes
-- Las letras son 5 caracteres (A-Z) que aparecen generalmente al final
-
-Responde SOLO con este JSON (sin markdown ni explicaciones):
-{
-  "sorteo": "NUMERO",
-  "fecha": "YYYY-MM-DD",
-  "hora": "HH:MM",
-  "provincia": "XX",
-  "modalidad": "X",
-  "numeros": ["0000","0001",...20 números],
-  "letras": "ABCDE"
-}`;
+- sorteo: número de sorteo
+- fecha: formato DD/MM/YY
+- hora: formato HH:MM
+- provincia: código numérico (USA EL HINT SI ES COHERENTE: ${provinciaHint}):
+  - 51: Ciudad / CABA
+  - 53: Buenos Aires (Provincia)
+  - 55: Córdoba
+  - 72: Santa Fe
+  - 59: Entre Ríos
+  - 64: Mendoza
+  - 151: Montevideo (15:00 hs / Vespertina Uruguay)
+  - 211: Montevideo (21:00 hs / Nocturna Uruguay)
+- modalidad: (Vespertina, Matutina, Nocturna, La Primera, La Previa)
+- numeros: array de 20 strings (3 o 4 dígitos según corresponda)
+Responde SOLO con este JSON:
+{"sorteo":"NUMERO","fecha":"DD/MM/YY","hora":"HH:MM","provincia":"XX","modalidad":"NOMBRE","numeros":["num1",...20 números]}`;
 
     return await this.llamarAPI(imageBase64, mimeType, prompt);
+  },
+
+  /**
+   * PROMPT PARA CABA (ESPECÍFICO)
+   */
+  async procesarImagenCABA(imageBase64, mimeType) {
+    const prompt = `Analiza esta imagen de resultados de lotería y extrae EXACTAMENTE:
+1. La fecha en formato DD/MM/YY que aparece en la parte superior
+2. La hora en formato HH:MM que aparece junto a la fecha
+3. La modalidad (NOCTURNA, MATUTINA, VESPERTINA, LA PREVIA, LA PRIMERA)
+4. Los 20 números de la tabla de lotería, cada uno debe tener exactamente 3 dígitos
+La tabla tiene 2 columnas:
+- Columna izquierda: números 1-10 (fondo azul)
+- Columna derecha: números 11-20 (fondo blanco)
+IMPORTANTE: Lee los números REALES de la imagen, no inventes números.
+Responde SOLO con este JSON (sin markdown ni explicaciones):
+{"fecha":"DD/MM/YY","hora":"HH:MM","modalidad":"NOMBRE_MODALIDAD","numeros":["num1","num2",...20 números de 3 dígitos]}`;
+
+    return await this.llamarAPI(imageBase64, mimeType, prompt);
+  },
+
+  // Función genérica que decide qué prompt usar
+  async procesarImagenQuiniela(imageBase64, mimeType, provinciaId = '51') {
+    if (provinciaId === '51') {
+      return await this.procesarImagenCABA(imageBase64, mimeType);
+    } else {
+      return await this.procesarImagenProvincia(imageBase64, mimeType, provinciaId);
+    }
   },
 
   // Llamar a la API de Groq
@@ -154,14 +188,21 @@ Responde SOLO con este JSON (sin markdown ni explicaciones):
       }
     }
 
-    // Validar y limpiar números
+    // Normalizar datos extraídos
     if (parsed.numeros && Array.isArray(parsed.numeros)) {
-      parsed.numeros = this.limpiarNumeros(parsed.numeros, 4);
+      // Si es CABA o Montevideo, son 3 dígitos. Si no, 4.
+      const digitos = (parsed.provincia === '51' || parsed.provincia === '151' || parsed.provincia === '211') ? 3 : 4;
+      parsed.numeros = this.limpiarNumeros(parsed.numeros, digitos);
     }
 
-    // Limpiar letras
-    if (parsed.letras) {
-      parsed.letras = parsed.letras.toUpperCase().replace(/[^A-Z]/g, '').substring(0, 5);
+    // Convertir fechas DD/MM/YY a YYYY-MM-DD
+    if (parsed.fecha && parsed.fecha.includes('/')) {
+      const parts = parsed.fecha.split('/');
+      if (parts.length === 3) {
+        let [day, month, year] = parts;
+        if (year.length === 2) year = '20' + year;
+        parsed.fecha = `${year}-${month.padStart(2, '0')}-${day.padStart(2, '0')}`;
+      }
     }
 
     return {
@@ -207,7 +248,6 @@ Responde SOLO con este JSON (sin markdown ni explicaciones):
 
   // Convertir PDF a imagen (primera página)
   async pdfToImage(file) {
-    // Cargar PDF.js si no está cargado
     if (!window.pdfjsLib) {
       await this.cargarPdfJs();
     }
@@ -216,7 +256,7 @@ Responde SOLO con este JSON (sin markdown ni explicaciones):
     const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
     const page = await pdf.getPage(1);
 
-    const scale = 2; // Mayor calidad
+    const scale = 2;
     const viewport = page.getViewport({ scale });
 
     const canvas = document.createElement('canvas');

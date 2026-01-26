@@ -220,3 +220,23 @@ const agenciasAPI = {
   
   buscar: (numero) => apiRequest(`/agencias/buscar/${numero}`)
 };
+
+// Extractos API
+const extractosAPI = {
+  listar: (params = {}) => {
+    const query = new URLSearchParams(params).toString();
+    return apiRequest(`/extractos${query ? `?${query}` : ''}`);
+  },
+  getById: (id) => apiRequest(`/extractos/${id}`),
+  guardar: (data) => apiRequest('/extractos', {
+    method: 'POST',
+    body: JSON.stringify(data)
+  }),
+  guardarBulk: (extractos) => apiRequest('/extractos/bulk', {
+    method: 'POST',
+    body: JSON.stringify({ extractos })
+  }),
+  eliminar: (id) => apiRequest(`/extractos/${id}`, {
+    method: 'DELETE'
+  })
+};
