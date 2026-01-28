@@ -3734,67 +3734,584 @@ function limpiarExtractoPosterior() {
 }
 
 function renderExtractosList() {
-  const container = document.getElementById('cpst-extractos-lista');
-  if (!container) return;
-
-  if (cpstExtractos.length === 0) {
-    container.innerHTML = '<p class="text-muted">No hay extractos cargados</p>';
-    return;
-  }
-
-  // Contenedor grid para los extractos
-  let html = '<div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 1rem;">';
-
-  html += cpstExtractos.map((ex, idx) => {
-    const nums = ex.numeros || [];
-    const letras = ex.letras || [];
-
-    // Números en formato compacto: 2 filas de 10
-    let numerosHTML = `
-      <table style="width: 100%; font-family: monospace; font-size: 0.7rem; border-collapse: collapse; margin-top: 0.5rem;">
-        <tr style="color: var(--text-muted); font-size: 0.6rem;">
-          ${[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map(n => `<td style="text-align: center; padding: 1px;">${n}</td>`).join('')}
-        </tr>
-        <tr style="background: var(--surface-hover);">
-          ${nums.slice(0, 10).map(n => `<td style="text-align: center; padding: 2px; font-weight: bold;">${n || '-'}</td>`).join('')}
-        </tr>
-        <tr style="color: var(--text-muted); font-size: 0.6rem;">
-          ${[11, 12, 13, 14, 15, 16, 17, 18, 19, 20].map(n => `<td style="text-align: center; padding: 1px;">${n}</td>`).join('')}
-        </tr>
-        <tr style="background: var(--bg-input);">
-          ${nums.slice(10, 20).map(n => `<td style="text-align: center; padding: 2px; font-weight: bold;">${n || '-'}</td>`).join('')}
-        </tr>
-      </table>
-    `;
-
-    // Letras
-    let letrasHTML = '';
-    if (letras.length > 0 && letras.some(l => l)) {
-      letrasHTML = `<div style="margin-top: 0.3rem; text-align: right; font-size: 0.75rem;">
-        Letras: <strong style="font-family: monospace; background: var(--primary); color: white; padding: 2px 6px; border-radius: 4px;">${letras.join(' ')}</strong>
-      </div>`;
-    }
-
-    return `
-      <div style="padding: 0.5rem; background: var(--surface); border-radius: 8px; border: 1px solid var(--border);">
-        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.25rem;">
-          <strong style="color: var(--primary); font-size: 0.85rem;">${ex.nombre}</strong>
-          <button class="btn btn-sm" style="padding: 2px 6px; background: var(--danger); color: white; border: none; border-radius: 4px; cursor: pointer;" onclick="eliminarExtracto(${idx})" title="Eliminar">✕</button>
-        </div>
-        ${numerosHTML}
-        ${letrasHTML}
-      </div>
-    `;
-  }).join('');
-
-  html += '</div>';
-  container.innerHTML = html;
+  // Usar la nueva función de renderizado inteligente
+  renderExtractosListInteligente();
 }
 
 function eliminarExtracto(idx) {
   cpstExtractos.splice(idx, 1);
   renderExtractosList();
 }
+
+// ============================================
+// ZONA DE CARGA INTELIGENTE - Funciones
+// ============================================
+
+// Toggle entre modo inteligente y manual
+function toggleModoManual() {
+  const zonaInteligente = document.getElementById('cpst-zona-inteligente');
+  const modoManual = document.getElementById('cpst-modo-manual');
+  const btnModo = document.getElementById('btn-modo-manual');
+
+  if (modoManual.classList.contains('hidden')) {
+    // Mostrar manual, ocultar inteligente
+    zonaInteligente.classList.add('hidden');
+    modoManual.classList.remove('hidden');
+    btnModo.innerHTML = '<i class="fas fa-magic"></i> Zona Inteligente';
+  } else {
+    // Mostrar inteligente, ocultar manual
+    zonaInteligente.classList.remove('hidden');
+    modoManual.classList.add('hidden');
+    btnModo.innerHTML = '<i class="fas fa-keyboard"></i> Modo Manual';
+  }
+}
+
+// Agregar extracto desde modo manual (renombrada)
+async function agregarExtractoManual() {
+  await agregarExtracto();
+}
+
+// Drag & Drop handlers
+function handleDragOver(event) {
+  event.preventDefault();
+  event.stopPropagation();
+  event.currentTarget.classList.add('drag-over');
+}
+
+function handleDragLeave(event) {
+  event.preventDefault();
+  event.stopPropagation();
+  event.currentTarget.classList.remove('drag-over');
+}
+
+function handleDropInteligente(event) {
+  event.preventDefault();
+  event.stopPropagation();
+  event.currentTarget.classList.remove('drag-over');
+
+  const files = event.dataTransfer.files;
+  if (files.length > 0) {
+    procesarArchivosInteligente(files);
+  }
+}
+
+// Procesar archivos de forma inteligente
+async function procesarArchivosInteligente(files) {
+  if (!files || files.length === 0) return;
+
+  const statusDiv = document.getElementById('cpst-procesamiento-status');
+  const mensajeDiv = document.getElementById('cpst-procesamiento-mensaje');
+  const progressDiv = document.getElementById('cpst-procesamiento-progress');
+
+  statusDiv.classList.remove('hidden');
+  progressDiv.style.width = '0%';
+
+  const archivos = Array.from(files);
+  let procesados = 0;
+  let errores = 0;
+
+  for (let i = 0; i < archivos.length; i++) {
+    const archivo = archivos[i];
+    const extension = archivo.name.split('.').pop().toLowerCase();
+    const progress = Math.round(((i + 1) / archivos.length) * 100);
+
+    mensajeDiv.textContent = `Procesando ${archivo.name} (${i + 1}/${archivos.length})...`;
+    progressDiv.style.width = `${progress * 0.8}%`; // 80% durante el procesamiento
+
+    try {
+      if (extension === 'xml') {
+        await procesarArchivoXMLInteligente(archivo);
+        procesados++;
+      } else if (['jpg', 'jpeg', 'png', 'gif', 'webp'].includes(extension)) {
+        await procesarArchivoImagenInteligente(archivo);
+        procesados++;
+      } else if (extension === 'pdf') {
+        await procesarArchivoPDFInteligente(archivo);
+        procesados++;
+      } else {
+        console.warn(`Tipo de archivo no soportado: ${extension}`);
+        errores++;
+      }
+    } catch (error) {
+      console.error(`Error procesando ${archivo.name}:`, error);
+      errores++;
+      showToast(`Error en ${archivo.name}: ${error.message}`, 'error');
+    }
+  }
+
+  progressDiv.style.width = '100%';
+
+  setTimeout(() => {
+    statusDiv.classList.add('hidden');
+
+    if (procesados > 0) {
+      showToast(`${procesados} archivo(s) procesado(s) correctamente${errores > 0 ? `, ${errores} error(es)` : ''}`,
+        errores > 0 ? 'warning' : 'success');
+    } else if (errores > 0) {
+      showToast(`No se pudo procesar ningún archivo (${errores} error(es))`, 'error');
+    }
+
+    renderExtractosListInteligente();
+  }, 500);
+
+  // Limpiar input para permitir re-selección del mismo archivo
+  document.getElementById('cpst-archivo-universal').value = '';
+}
+
+// Procesar XML inteligente (detecta provincia y modalidad del nombre)
+async function procesarArchivoXMLInteligente(archivo) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+
+    reader.onload = async function(e) {
+      try {
+        const contenido = e.target.result;
+        const parser = new DOMParser();
+        const xmlDoc = parser.parseFromString(contenido, 'text/xml');
+
+        // Detectar provincia y modalidad del nombre del archivo
+        const nombreArchivo = archivo.name.toUpperCase();
+        let provinciaDetectada = null;
+        let modalidadDetectada = null;
+
+        // Patrones: QNL51M20260116.xml
+        const match = nombreArchivo.match(/QNL(\d{2})([RPMVN])/);
+        if (match) {
+          provinciaDetectada = match[1]; // 51, 53, 55, etc.
+          modalidadDetectada = match[2]; // R, P, M, V, N
+        }
+
+        // Verificar que la modalidad coincida con la del sorteo actual
+        if (modalidadDetectada && cpstModalidadSorteo && modalidadDetectada !== cpstModalidadSorteo) {
+          console.log(`XML ${archivo.name} es de modalidad ${modalidadDetectada}, pero el sorteo actual es ${cpstModalidadSorteo}. Ignorando.`);
+          resolve(); // No es error, simplemente no corresponde
+          return;
+        }
+
+        // Extraer números del XML
+        const numeros = [];
+        const numeroNodes = xmlDoc.querySelectorAll('numero');
+        if (numeroNodes.length > 0) {
+          numeroNodes.forEach(node => {
+            const posicion = node.getAttribute('posicion') || node.getAttribute('pos');
+            const valor = node.textContent.trim();
+            if (posicion && valor) {
+              numeros[parseInt(posicion) - 1] = valor.padStart(4, '0');
+            }
+          });
+        } else {
+          // Fallback: buscar otros formatos de XML
+          const extractoNode = xmlDoc.querySelector('extracto, resultado, sorteo');
+          if (extractoNode) {
+            for (let i = 1; i <= 20; i++) {
+              const numNode = extractoNode.querySelector(`num${i}, numero${i}, pos${i}`);
+              if (numNode) {
+                numeros[i - 1] = numNode.textContent.trim().padStart(4, '0');
+              }
+            }
+          }
+        }
+
+        // Rellenar faltantes
+        for (let i = 0; i < 20; i++) {
+          if (!numeros[i]) numeros[i] = '0000';
+        }
+
+        // Extraer letras si existen
+        const letras = [];
+        const letraNodes = xmlDoc.querySelectorAll('letra');
+        letraNodes.forEach(node => {
+          const valor = node.textContent.trim().toUpperCase();
+          if (valor && valor.length === 1) letras.push(valor);
+        });
+
+        // Mapear código de provincia a índice
+        const codigoToIndex = {
+          '51': 0, // CABA
+          '53': 1, // Buenos Aires
+          '55': 2, // Córdoba
+          '72': 3, // Santa Fe
+          '00': 4, // Montevideo
+          '64': 5, // Mendoza
+          '59': 6  // Entre Ríos
+        };
+
+        const provinciaIdx = provinciaDetectada ? codigoToIndex[provinciaDetectada] : null;
+        const provinciaNombres = ['CABA', 'Buenos Aires', 'Córdoba', 'Santa Fe', 'Montevideo', 'Mendoza', 'Entre Ríos'];
+
+        // Guardar en BD y agregar a lista local
+        const fecha = cpResultadosActuales?.sorteo?.fecha || new Date().toISOString().split('T')[0];
+        const modalidad = modalidadDetectada || cpstModalidadSorteo || 'M';
+
+        if (provinciaIdx !== null && provinciaIdx !== undefined) {
+          try {
+            const response = await extractosAPI.guardar({
+              provincia: provinciaDetectada,
+              modalidad: modalidad,
+              fecha: fecha,
+              numeros: numeros,
+              letras: letras.length > 0 ? letras : null,
+              fuente: 'XML'
+            });
+
+            const extracto = {
+              index: provinciaIdx,
+              nombre: provinciaNombres[provinciaIdx],
+              numeros: numeros,
+              letras: letras,
+              fuente: 'xml',
+              archivo: archivo.name,
+              fromDB: response.success,
+              dbId: response.data?.id
+            };
+
+            const existente = cpstExtractos.findIndex(e => e.index === provinciaIdx);
+            if (existente >= 0) {
+              cpstExtractos[existente] = extracto;
+            } else {
+              cpstExtractos.push(extracto);
+            }
+          } catch (error) {
+            console.warn('Error guardando XML en BD:', error);
+            // Igual agregar localmente
+            const extracto = {
+              index: provinciaIdx,
+              nombre: provinciaNombres[provinciaIdx],
+              numeros: numeros,
+              letras: letras,
+              fuente: 'xml',
+              archivo: archivo.name
+            };
+
+            const existente = cpstExtractos.findIndex(e => e.index === provinciaIdx);
+            if (existente >= 0) {
+              cpstExtractos[existente] = extracto;
+            } else {
+              cpstExtractos.push(extracto);
+            }
+          }
+        }
+
+        resolve();
+      } catch (error) {
+        reject(error);
+      }
+    };
+
+    reader.onerror = () => reject(new Error('Error leyendo archivo XML'));
+    reader.readAsText(archivo);
+  });
+}
+
+// Procesar imagen con OCR inteligente
+async function procesarArchivoImagenInteligente(archivo) {
+  if (!window.OCRExtractos || !OCRExtractos.hasApiKey()) {
+    throw new Error('OCR no configurado. Configure la API key de Groq.');
+  }
+
+  const { base64, mimeType } = await OCRExtractos.imageToBase64(archivo);
+  const resultado = await OCRExtractos.procesarImagenQuiniela(base64, mimeType, '');
+
+  if (!resultado.success || !resultado.data) {
+    throw new Error('OCR no pudo extraer datos de la imagen');
+  }
+
+  const data = resultado.data;
+
+  // Mapear código de provincia a índice
+  const codigoToIndex = {
+    '51': 0, '53': 1, '55': 2, '72': 3, '00': 4, '64': 5, '59': 6
+  };
+
+  const provinciaIdx = data.provincia ? codigoToIndex[data.provincia] : null;
+  const provinciaNombres = ['CABA', 'Buenos Aires', 'Córdoba', 'Santa Fe', 'Montevideo', 'Mendoza', 'Entre Ríos'];
+
+  // Verificar modalidad
+  const modalidadMap = { 'Previa': 'R', 'Primera': 'P', 'Matutina': 'M', 'Vespertina': 'V', 'Nocturna': 'N' };
+  const modalidadDetectada = modalidadMap[data.modalidad] || data.modalidad?.[0]?.toUpperCase();
+
+  if (modalidadDetectada && cpstModalidadSorteo && modalidadDetectada !== cpstModalidadSorteo) {
+    console.log(`Imagen detectada como ${data.modalidad}, pero sorteo actual es ${cpstModalidadSorteo}. Ignorando.`);
+    return;
+  }
+
+  const fecha = data.fecha || cpResultadosActuales?.sorteo?.fecha || new Date().toISOString().split('T')[0];
+  const modalidad = modalidadDetectada || cpstModalidadSorteo || 'M';
+
+  if (provinciaIdx !== null && provinciaIdx !== undefined && data.numeros) {
+    try {
+      const response = await extractosAPI.guardar({
+        provincia: data.provincia,
+        modalidad: modalidad,
+        fecha: fecha,
+        numeros: data.numeros,
+        letras: data.letras || null,
+        fuente: 'OCR'
+      });
+
+      const extracto = {
+        index: provinciaIdx,
+        nombre: provinciaNombres[provinciaIdx],
+        numeros: data.numeros,
+        letras: data.letras || [],
+        fuente: 'ocr',
+        archivo: archivo.name,
+        fromDB: response.success,
+        dbId: response.data?.id
+      };
+
+      const existente = cpstExtractos.findIndex(e => e.index === provinciaIdx);
+      if (existente >= 0) {
+        cpstExtractos[existente] = extracto;
+      } else {
+        cpstExtractos.push(extracto);
+      }
+    } catch (error) {
+      console.warn('Error guardando imagen OCR en BD:', error);
+      const extracto = {
+        index: provinciaIdx,
+        nombre: provinciaNombres[provinciaIdx],
+        numeros: data.numeros,
+        letras: data.letras || [],
+        fuente: 'ocr',
+        archivo: archivo.name
+      };
+
+      const existente = cpstExtractos.findIndex(e => e.index === provinciaIdx);
+      if (existente >= 0) {
+        cpstExtractos[existente] = extracto;
+      } else {
+        cpstExtractos.push(extracto);
+      }
+    }
+  } else {
+    throw new Error(`No se pudo detectar provincia de la imagen (detectada: ${data.provincia})`);
+  }
+}
+
+// Procesar PDF con OCR
+async function procesarArchivoPDFInteligente(archivo) {
+  if (!window.OCRExtractos || !OCRExtractos.hasApiKey()) {
+    throw new Error('OCR no configurado. Configure la API key de Groq.');
+  }
+
+  // Convertir PDF a imagen usando el método del módulo OCR
+  const { base64, mimeType } = await OCRExtractos.pdfToImage(archivo);
+
+  // Procesar con OCR
+  const resultado = await OCRExtractos.procesarImagenQuiniela(base64, mimeType, '');
+
+  if (!resultado.success || !resultado.data) {
+    throw new Error('OCR no pudo extraer datos del PDF');
+  }
+
+  const data = resultado.data;
+
+  const codigoToIndex = {
+    '51': 0, '53': 1, '55': 2, '72': 3, '00': 4, '64': 5, '59': 6
+  };
+
+  const provinciaIdx = data.provincia ? codigoToIndex[data.provincia] : null;
+  const provinciaNombres = ['CABA', 'Buenos Aires', 'Córdoba', 'Santa Fe', 'Montevideo', 'Mendoza', 'Entre Ríos'];
+
+  const modalidadMap = { 'Previa': 'R', 'Primera': 'P', 'Matutina': 'M', 'Vespertina': 'V', 'Nocturna': 'N' };
+  const modalidadDetectada = modalidadMap[data.modalidad] || data.modalidad?.[0]?.toUpperCase();
+
+  if (modalidadDetectada && cpstModalidadSorteo && modalidadDetectada !== cpstModalidadSorteo) {
+    console.log(`PDF detectado como ${data.modalidad}, pero sorteo actual es ${cpstModalidadSorteo}. Ignorando.`);
+    return;
+  }
+
+  const fecha = data.fecha || cpResultadosActuales?.sorteo?.fecha || new Date().toISOString().split('T')[0];
+  const modalidad = modalidadDetectada || cpstModalidadSorteo || 'M';
+
+  if (provinciaIdx !== null && provinciaIdx !== undefined && data.numeros) {
+    try {
+      const response = await extractosAPI.guardar({
+        provincia: data.provincia,
+        modalidad: modalidad,
+        fecha: fecha,
+        numeros: data.numeros,
+        letras: data.letras || null,
+        fuente: 'PDF-OCR'
+      });
+
+      const extracto = {
+        index: provinciaIdx,
+        nombre: provinciaNombres[provinciaIdx],
+        numeros: data.numeros,
+        letras: data.letras || [],
+        fuente: 'pdf',
+        archivo: archivo.name,
+        fromDB: response.success,
+        dbId: response.data?.id
+      };
+
+      const existente = cpstExtractos.findIndex(e => e.index === provinciaIdx);
+      if (existente >= 0) {
+        cpstExtractos[existente] = extracto;
+      } else {
+        cpstExtractos.push(extracto);
+      }
+    } catch (error) {
+      console.warn('Error guardando PDF en BD:', error);
+      // Igual agregar localmente
+      const extracto = {
+        index: provinciaIdx,
+        nombre: provinciaNombres[provinciaIdx],
+        numeros: data.numeros,
+        letras: data.letras || [],
+        fuente: 'pdf',
+        archivo: archivo.name
+      };
+
+      const existente = cpstExtractos.findIndex(e => e.index === provinciaIdx);
+      if (existente >= 0) {
+        cpstExtractos[existente] = extracto;
+      } else {
+        cpstExtractos.push(extracto);
+      }
+    }
+  } else {
+    throw new Error(`No se pudo detectar provincia del PDF (detectada: ${data.provincia})`);
+  }
+}
+
+// Render mejorado de la lista de extractos
+function renderExtractosListInteligente() {
+  const container = document.getElementById('cpst-extractos-lista');
+  if (!container) return;
+
+  if (cpstExtractos.length === 0) {
+    container.innerHTML = `
+      <div class="extractos-vacio">
+        <i class="fas fa-inbox" style="font-size: 2rem; margin-bottom: 0.5rem; opacity: 0.5;"></i>
+        <p>No hay extractos cargados</p>
+        <small>Arrastrá archivos a la zona de arriba o usá el modo manual</small>
+      </div>
+    `;
+    return;
+  }
+
+  let html = '';
+
+  // Ordenar por nombre de provincia
+  const extractosOrdenados = [...cpstExtractos].sort((a, b) => a.nombre.localeCompare(b.nombre));
+
+  extractosOrdenados.forEach((ex, idx) => {
+    const nums = ex.numeros || [];
+    const letras = ex.letras || [];
+    const originalIdx = cpstExtractos.findIndex(e => e.index === ex.index);
+
+    // Determinar icono según fuente
+    let iconClass = 'fa-file-alt';
+    let iconType = 'xml';
+    if (ex.fuente === 'ocr') { iconClass = 'fa-image'; iconType = 'imagen'; }
+    else if (ex.fuente === 'pdf') { iconClass = 'fa-file-pdf'; iconType = 'pdf'; }
+    else if (ex.fromDB && !ex.fuente) { iconClass = 'fa-database'; iconType = 'bd'; }
+
+    // Formato compacto de números: mostrar primeros 5 y últimos 2
+    const numerosPreview = `${nums.slice(0, 5).join('-')}...${nums.slice(18).join('-')}`;
+
+    html += `
+      <div class="extracto-card ${ex.fromDB ? 'desde-bd' : ''}">
+        <div class="extracto-icon ${iconType}">
+          <i class="fas ${iconClass}"></i>
+        </div>
+        <div class="extracto-info">
+          <div class="extracto-titulo">
+            ${ex.nombre}
+            <span class="badge-fuente ${ex.fuente || (ex.fromDB ? 'bd' : 'manual')}">${ex.fuente?.toUpperCase() || (ex.fromDB ? 'BD' : 'MANUAL')}</span>
+          </div>
+          <div class="extracto-numeros" title="${nums.join(' | ')}">
+            ${numerosPreview}
+            ${letras.length > 0 ? ` | Letras: ${letras.join('')}` : ''}
+          </div>
+        </div>
+        <div class="extracto-acciones">
+          <button class="btn btn-sm btn-secondary" onclick="verDetalleExtracto(${originalIdx})" title="Ver detalle">
+            <i class="fas fa-eye"></i>
+          </button>
+          <button class="btn btn-sm btn-danger" onclick="eliminarExtracto(${originalIdx})" title="Eliminar">
+            <i class="fas fa-trash"></i>
+          </button>
+        </div>
+      </div>
+    `;
+  });
+
+  container.innerHTML = html;
+}
+
+// Ver detalle de un extracto en modal
+function verDetalleExtracto(idx) {
+  const ex = cpstExtractos[idx];
+  if (!ex) return;
+
+  const nums = ex.numeros || [];
+  const letras = ex.letras || [];
+
+  let numerosHTML = '<table style="width: 100%; font-family: monospace; border-collapse: collapse;">';
+  numerosHTML += '<tr style="color: var(--text-muted); font-size: 0.8rem;">';
+  for (let i = 1; i <= 10; i++) numerosHTML += `<td style="text-align: center; padding: 4px; border: 1px solid var(--border-color);">${i}</td>`;
+  numerosHTML += '</tr><tr>';
+  for (let i = 0; i < 10; i++) numerosHTML += `<td style="text-align: center; padding: 8px; border: 1px solid var(--border-color); font-weight: bold; background: var(--bg-input);">${nums[i] || '-'}</td>`;
+  numerosHTML += '</tr><tr style="color: var(--text-muted); font-size: 0.8rem;">';
+  for (let i = 11; i <= 20; i++) numerosHTML += `<td style="text-align: center; padding: 4px; border: 1px solid var(--border-color);">${i}</td>`;
+  numerosHTML += '</tr><tr>';
+  for (let i = 10; i < 20; i++) numerosHTML += `<td style="text-align: center; padding: 8px; border: 1px solid var(--border-color); font-weight: bold; background: var(--bg-input);">${nums[i] || '-'}</td>`;
+  numerosHTML += '</tr></table>';
+
+  let letrasHTML = '';
+  if (letras.length > 0) {
+    letrasHTML = `<div style="margin-top: 1rem;"><strong>Letras:</strong> <span style="font-family: monospace; font-size: 1.2rem; background: var(--primary); color: white; padding: 4px 12px; border-radius: 6px;">${letras.join(' ')}</span></div>`;
+  }
+
+  const modalContent = `
+    <div style="padding: 1.5rem;">
+      <h3 style="margin-bottom: 1rem; display: flex; align-items: center; gap: 0.5rem;">
+        <i class="fas fa-list-ol"></i> ${ex.nombre}
+        ${ex.fromDB ? '<span class="badge badge-primary" style="font-size: 0.7rem;">Guardado en BD</span>' : ''}
+      </h3>
+      ${ex.archivo ? `<p class="text-muted" style="margin-bottom: 1rem;"><i class="fas fa-file"></i> ${ex.archivo}</p>` : ''}
+      ${numerosHTML}
+      ${letrasHTML}
+    </div>
+  `;
+
+  // Mostrar en un modal simple
+  showModalSimple('Detalle del Extracto', modalContent);
+}
+
+// Modal simple reutilizable
+function showModalSimple(titulo, contenido) {
+  // Remover modal existente si hay
+  const existente = document.getElementById('modal-simple');
+  if (existente) existente.remove();
+
+  const modal = document.createElement('div');
+  modal.id = 'modal-simple';
+  modal.style.cssText = 'position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.8); display: flex; align-items: center; justify-content: center; z-index: 9999;';
+  modal.innerHTML = `
+    <div style="background: var(--bg-card); border-radius: 12px; max-width: 600px; width: 90%; max-height: 80vh; overflow-y: auto; position: relative;">
+      <div style="display: flex; justify-content: space-between; align-items: center; padding: 1rem 1.5rem; border-bottom: 1px solid var(--border-color);">
+        <h3 style="margin: 0;">${titulo}</h3>
+        <button onclick="document.getElementById('modal-simple').remove()" style="background: none; border: none; color: var(--text-primary); font-size: 1.5rem; cursor: pointer; padding: 0.5rem;">&times;</button>
+      </div>
+      ${contenido}
+    </div>
+  `;
+
+  modal.addEventListener('click', (e) => {
+    if (e.target === modal) modal.remove();
+  });
+
+  document.body.appendChild(modal);
+}
+
+// ============================================
+// FIN ZONA INTELIGENTE
+// ============================================
 
 async function ejecutarEscrutinio() {
   // Validaciones según el juego

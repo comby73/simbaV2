@@ -25,7 +25,7 @@ const OCRExtractos = {
     if (savedKey) {
       this.CONFIG.API_KEY = savedKey;
     }
-    
+
     const savedModel = localStorage.getItem('groq_model');
     if (savedModel) {
       this.CONFIG.MODEL = savedModel;
@@ -44,63 +44,43 @@ const OCRExtractos = {
   },
 
   /**
-   * PROMPT PARA PROVINCIAS Y MONTEVIDEO (GENERAL)
+   * PROCESAR IMAGEN DE QUINIELA (TODAS LAS PROVINCIAS)
    */
-  async procesarImagenProvincia(imageBase64, mimeType, provinciaHint = '') {
+  async procesarImagenQuiniela(imageBase64, mimeType, provinciaHint = '') {
     const prompt = `Analiza esta imagen de resultados de lotería y devuelve SOLO un objeto JSON válido.
-        
+
 REGLAS CRÍTICAS DE EXTRACCIÓN:
-1. Busca la columna 'Ubicación' o 'Puesto' del 1 al 20.
-2. Para cada posición, extrae el número asociado.
-3. Si la provincia es Montevideo (Uruguay), los números son de 3 DÍGITOS. Para el resto son de 4 DÍGITOS.
-4. NORMALIZACIÓN DE MODALIDAD: Si la imagen dice "VESPERTINA" pero la hora es 15:00 o la entidad es Montevideo 15hs, usa "Matutina".
-DATOS A EXTRAER:
-- sorteo: número de sorteo
-- fecha: formato DD/MM/YY
-- hora: formato HH:MM
-- provincia: código numérico (USA EL HINT SI ES COHERENTE: ${provinciaHint}):
-  - 51: Ciudad / CABA
-  - 53: Buenos Aires (Provincia)
-  - 55: Córdoba
-  - 72: Santa Fe
-  - 59: Entre Ríos
-  - 64: Mendoza
-  - 151: Montevideo (15:00 hs / Vespertina Uruguay)
-  - 211: Montevideo (21:00 hs / Nocturna Uruguay)
-- modalidad: (Vespertina, Matutina, Nocturna, La Primera, La Previa)
-- numeros: array de 20 strings (3 o 4 dígitos según corresponda)
-Responde SOLO con este JSON:
-{"sorteo":"NUMERO","fecha":"DD/MM/YY","hora":"HH:MM","provincia":"XX","modalidad":"NOMBRE","numeros":["num1",...20 números]}`;
+1. IDENTIFICACIÓN DE PROVINCIA (MUY IMPORTANTE): Lee el encabezado de la imagen para determinar la LOTERÍA/PROVINCIA.
+   - Si dice "CIUDAD", "CABA" o "LOTBA" -> provincia: "51" (4 DÍGITOS por número)
+   - Si dice "PROVINCIA", "BUENOS AIRES" -> provincia: "53" (4 DÍGITOS)
+   - Si dice "CORDOBA" -> provincia: "55" (4 DÍGITOS)
+   - Si dice "SANTA FE" -> provincia: "72" (4 DÍGITOS)
+   - Si dice "ENTRE RIOS" -> provincia: "59" (4 DÍGITOS)
+   - Si dice "MENDOZA" -> provincia: "64" (4 DÍGITOS)
+   - Si dice "MONTEVIDEO", "URUGUAY", "15:00 hs" o "21:00 hs" -> provincia: "00" (3 DÍGITOS por número - ÚNICO CASO DE 3 CIFRAS)
+
+2. CIFRAS POR NÚMERO:
+   - MONTEVIDEO (00): Cada número DEBE tener EXACTAMENTE 3 DÍGITOS.
+   - RESTO DE ARGENTINA (CABA, PBA, etc.): Cada número DEBE tener EXACTAMENTE 4 DÍGITOS.
+
+3. EXTRACCIÓN DE TABLA: Busca las 20 posiciones (puestos 1 al 20) y extrae el número ganador asociado.
+
+4. MODALIDAD: Detecta si es LA PREVIA, LA PRIMERA, MATUTINA, VESPERTINA o NOCTURNA.
+
+5. FECHA Y HORA: Busca la fecha (DD/MM/YY) y la hora del sorteo.
+
+6. LETRAS (MUY IMPORTANTE): Busca la sección "CLAVE DE LETRAS" o "LETRAS" en la imagen.
+   - Generalmente aparece con 4 letras ganadoras (ej: "A", "B", "C", "D")
+   - Las letras válidas son de la A a la P
+   - Si no hay letras visibles, devolver array vacío []
+   - IMPORTANTE: Extraer las 4 letras en orden (1ra, 2da, 3ra, 4ta)
+
+HINT (Referencia): El usuario cree que es la provincia "${provinciaHint}", pero PRIORIZA LO QUE DIGA EL TEXTO DE LA IMAGEN.
+
+Responde SOLO con este JSON (INCLUIR SIEMPRE EL CAMPO "letras"):
+{"sorteo":"NUMERO","fecha":"DD/MM/YY","hora":"HH:MM","provincia":"CODIGO","modalidad":"NOMBRE","numeros":["num1",...20 números],"letras":["A","B","C","D"]}`;
 
     return await this.llamarAPI(imageBase64, mimeType, prompt);
-  },
-
-  /**
-   * PROMPT PARA CABA (ESPECÍFICO)
-   */
-  async procesarImagenCABA(imageBase64, mimeType) {
-    const prompt = `Analiza esta imagen de resultados de lotería y extrae EXACTAMENTE:
-1. La fecha en formato DD/MM/YY que aparece en la parte superior
-2. La hora en formato HH:MM que aparece junto a la fecha
-3. La modalidad (NOCTURNA, MATUTINA, VESPERTINA, LA PREVIA, LA PRIMERA)
-4. Los 20 números de la tabla de lotería, cada uno debe tener exactamente 3 dígitos
-La tabla tiene 2 columnas:
-- Columna izquierda: números 1-10 (fondo azul)
-- Columna derecha: números 11-20 (fondo blanco)
-IMPORTANTE: Lee los números REALES de la imagen, no inventes números.
-Responde SOLO con este JSON (sin markdown ni explicaciones):
-{"fecha":"DD/MM/YY","hora":"HH:MM","modalidad":"NOMBRE_MODALIDAD","numeros":["num1","num2",...20 números de 3 dígitos]}`;
-
-    return await this.llamarAPI(imageBase64, mimeType, prompt);
-  },
-
-  // Función genérica que decide qué prompt usar
-  async procesarImagenQuiniela(imageBase64, mimeType, provinciaId = '51') {
-    if (provinciaId === '51') {
-      return await this.procesarImagenCABA(imageBase64, mimeType);
-    } else {
-      return await this.procesarImagenProvincia(imageBase64, mimeType, provinciaId);
-    }
   },
 
   // Llamar a la API de Groq
@@ -190,9 +170,16 @@ Responde SOLO con este JSON (sin markdown ni explicaciones):
 
     // Normalizar datos extraídos
     if (parsed.numeros && Array.isArray(parsed.numeros)) {
-      // Si es CABA o Montevideo, son 3 dígitos. Si no, 4.
-      const digitos = (parsed.provincia === '51' || parsed.provincia === '151' || parsed.provincia === '211') ? 3 : 4;
+      // ÚNICO CASO DE 3 CIFRAS: Montevideo (00, 151 o 211). Todo lo demás es 4.
+      const digitos = (parsed.provincia === '00' || parsed.provincia === '151' || parsed.provincia === '211') ? 3 : 4;
       parsed.numeros = this.limpiarNumeros(parsed.numeros, digitos);
+    }
+
+    // Normalizar letras extraídas
+    if (parsed.letras && Array.isArray(parsed.letras)) {
+      parsed.letras = this.limpiarLetras(parsed.letras);
+    } else {
+      parsed.letras = []; // Asegurar que siempre exista el campo
     }
 
     // Convertir fechas DD/MM/YY a YYYY-MM-DD
@@ -205,10 +192,35 @@ Responde SOLO con este JSON (sin markdown ni explicaciones):
       }
     }
 
+    console.log('[OCR] Datos extraídos:', {
+      provincia: parsed.provincia,
+      modalidad: parsed.modalidad,
+      numerosCount: parsed.numeros?.length,
+      letras: parsed.letras
+    });
+
     return {
       success: true,
       data: parsed
     };
+  },
+
+  // Limpiar y validar letras
+  limpiarLetras(letras) {
+    const letrasValidas = 'ABCDEFGHIJKLMNOP';
+    const resultado = [];
+
+    for (let i = 0; i < Math.min(letras.length, 4); i++) {
+      let letra = (letras[i] || '').toString().toUpperCase().trim();
+      // Tomar solo el primer caracter si hay más
+      letra = letra.charAt(0);
+      // Validar que sea una letra válida (A-P)
+      if (letra && letrasValidas.includes(letra)) {
+        resultado.push(letra);
+      }
+    }
+
+    return resultado;
   },
 
   // Limpiar y validar números
@@ -340,6 +352,9 @@ Responde SOLO con este JSON (sin markdown ni explicaciones):
         video.onerror = reject;
       });
     } catch (error) {
+      if (error.name === 'NotAllowedError') {
+        throw new Error('Permiso denegado. Debés permitir el acceso a la pantalla para capturar el extracto.');
+      }
       console.error('Error en captura de pantalla:', error);
       throw error;
     }

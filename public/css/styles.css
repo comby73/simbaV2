@@ -1743,3 +1743,142 @@ span.game-poceada {
   from { opacity: 0; }
   to { opacity: 1; }
 }
+
+/* =============================================
+   ZONA DE CARGA INTELIGENTE - Control Posterior
+   ============================================= */
+
+.dropzone-inteligente {
+  border: 2px dashed var(--border-color);
+  border-radius: 12px;
+  padding: 3rem 2rem;
+  text-align: center;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  background: linear-gradient(135deg, var(--bg-input) 0%, var(--bg-card) 100%);
+}
+
+.dropzone-inteligente:hover {
+  border-color: var(--primary);
+  background: linear-gradient(135deg, rgba(37, 99, 235, 0.1) 0%, var(--bg-card) 100%);
+}
+
+.dropzone-inteligente.drag-over {
+  border-color: var(--primary);
+  background: linear-gradient(135deg, rgba(37, 99, 235, 0.2) 0%, var(--bg-card) 100%);
+  transform: scale(1.01);
+}
+
+.dropzone-content h4 {
+  color: var(--text-primary);
+}
+
+.dropzone-content p {
+  color: var(--text-secondary);
+}
+
+.procesamiento-card {
+  padding: 1rem 1.5rem;
+  background: var(--bg-input);
+  border-radius: 8px;
+  border-left: 4px solid var(--primary);
+}
+
+/* Tarjetas de extractos cargados */
+.extracto-card {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  padding: 1rem;
+  background: var(--bg-input);
+  border-radius: 8px;
+  margin-bottom: 0.75rem;
+  border-left: 4px solid var(--success);
+  animation: slideIn 0.3s ease;
+}
+
+.extracto-card.desde-bd {
+  border-left-color: var(--primary);
+}
+
+.extracto-card.editando {
+  border-left-color: var(--warning);
+  background: rgba(245, 158, 11, 0.1);
+}
+
+.extracto-card .extracto-icon {
+  width: 48px;
+  height: 48px;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.5rem;
+  flex-shrink: 0;
+}
+
+.extracto-card .extracto-icon.xml { background: rgba(16, 185, 129, 0.2); color: var(--success); }
+.extracto-card .extracto-icon.imagen { background: rgba(139, 92, 246, 0.2); color: #8b5cf6; }
+.extracto-card .extracto-icon.pdf { background: rgba(239, 68, 68, 0.2); color: var(--danger); }
+.extracto-card .extracto-icon.bd { background: rgba(37, 99, 235, 0.2); color: var(--primary); }
+
+.extracto-card .extracto-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.extracto-card .extracto-titulo {
+  font-weight: 600;
+  margin-bottom: 0.25rem;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.extracto-card .extracto-numeros {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.85rem;
+  color: var(--text-secondary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.extracto-card .extracto-acciones {
+  display: flex;
+  gap: 0.5rem;
+  flex-shrink: 0;
+}
+
+@keyframes slideIn {
+  from {
+    opacity: 0;
+    transform: translateY(-10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* Lista vacía */
+.extractos-vacio {
+  text-align: center;
+  padding: 2rem;
+  color: var(--text-muted);
+}
+
+/* Badge de fuente */
+.badge-fuente {
+  font-size: 0.7rem;
+  padding: 0.2rem 0.5rem;
+  border-radius: 4px;
+  font-weight: 500;
+  text-transform: uppercase;
+}
+
+.badge-fuente.xml { background: rgba(16, 185, 129, 0.2); color: var(--success); }
+.badge-fuente.ocr { background: rgba(139, 92, 246, 0.2); color: #8b5cf6; }
+.badge-fuente.pdf { background: rgba(239, 68, 68, 0.2); color: var(--danger); }
+.badge-fuente.bd { background: rgba(37, 99, 235, 0.2); color: var(--primary); }
+.badge-fuente.manual { background: rgba(100, 116, 139, 0.2); color: var(--secondary); }

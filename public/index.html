@@ -929,121 +929,94 @@
           </div>
         </div>
 
-        <!-- Paso 2: Cargar Extracto (QUINIELA) -->
+        <!-- Paso 2: Cargar Extractos - ZONA INTELIGENTE UNIFICADA -->
         <div class="card" id="cpst-extracto-quiniela-card">
-          <div class="card-header">
-            <h3>2. Extracto (Números Ganadores)</h3>
+          <div class="card-header" style="display: flex; justify-content: space-between; align-items: center;">
+            <h3><i class="fas fa-magic"></i> 2. Extractos</h3>
+            <button class="btn btn-sm btn-secondary" onclick="toggleModoManual()" id="btn-modo-manual">
+              <i class="fas fa-keyboard"></i> Modo Manual
+            </button>
           </div>
-          
-          <div class="form-row">
-            <div class="form-group">
-              <label for="cpst-extracto-provincia">Provincia/Extracto</label>
-              <select id="cpst-extracto-provincia" class="form-control">
-                <option value="0">CABA</option>
-                <option value="1">Buenos Aires</option>
-                <option value="2">Córdoba</option>
-                <option value="3">Santa Fe</option>
-                <option value="4">Montevideo</option>
-                <option value="5">Mendoza</option>
-                <option value="6">Entre Ríos</option>
-              </select>
+
+          <!-- ZONA DE CARGA INTELIGENTE -->
+          <div id="cpst-zona-inteligente">
+            <div
+              id="cpst-dropzone"
+              class="dropzone-inteligente"
+              onclick="document.getElementById('cpst-archivo-universal').click()"
+              ondragover="handleDragOver(event)"
+              ondragleave="handleDragLeave(event)"
+              ondrop="handleDropInteligente(event)"
+            >
+              <div class="dropzone-content">
+                <i class="fas fa-cloud-upload-alt" style="font-size: 3rem; color: var(--primary); margin-bottom: 1rem;"></i>
+                <h4 style="margin: 0 0 0.5rem 0;">Arrastrá tus archivos aquí</h4>
+                <p class="text-muted" style="margin: 0;">
+                  <strong>XML</strong>, <strong>Imágenes</strong> (JPG, PNG) o <strong>PDF</strong><br>
+                  <small>El sistema detecta automáticamente provincia y modalidad</small>
+                </p>
+                <button class="btn btn-primary" style="margin-top: 1rem;" onclick="event.stopPropagation(); document.getElementById('cpst-archivo-universal').click()">
+                  <i class="fas fa-folder-open"></i> Seleccionar Archivos
+                </button>
+              </div>
+              <input type="file" id="cpst-archivo-universal" accept=".xml,.jpg,.jpeg,.png,.gif,.webp,.pdf" multiple hidden onchange="procesarArchivosInteligente(this.files)">
+            </div>
+
+            <!-- Estado de procesamiento -->
+            <div id="cpst-procesamiento-status" class="hidden" style="margin-top: 1rem;">
+              <div class="procesamiento-card">
+                <div style="display: flex; align-items: center; gap: 1rem;">
+                  <i class="fas fa-spinner fa-spin" style="font-size: 1.5rem; color: var(--primary);"></i>
+                  <div style="flex: 1;">
+                    <div id="cpst-procesamiento-mensaje">Procesando archivos...</div>
+                    <div class="progress-bar" style="margin-top: 0.5rem; height: 6px; background: var(--border-color); border-radius: 3px;">
+                      <div id="cpst-procesamiento-progress" style="height: 100%; width: 0%; background: var(--primary); border-radius: 3px; transition: width 0.3s;"></div>
+                    </div>
+                  </div>
+                </div>
+              </div>
             </div>
           </div>
 
-          <!-- Tabs de carga -->
-          <div class="tabs-container" style="margin-top: 1rem;">
-            <div class="tabs" style="display: flex; gap: 0; border-bottom: 2px solid var(--border-color);">
-              <button class="tab active" data-tab="ext-xml" onclick="cambiarTabExtracto('xml')">
-                <i class="fas fa-file-code"></i> XML
-              </button>
-              <button class="tab" data-tab="ext-imagen" onclick="cambiarTabExtracto('imagen')">
-                <i class="fas fa-image"></i> Imagen/OCR
-              </button>
-              <button class="tab" data-tab="ext-pdf" onclick="cambiarTabExtracto('pdf')">
-                <i class="fas fa-file-pdf"></i> PDF
-              </button>
-              <button class="tab" data-tab="ext-manual" onclick="cambiarTabExtracto('manual')">
-                <i class="fas fa-keyboard"></i> Manual
-              </button>
-            </div>
-            
-            <!-- Tab XML (por defecto) -->
-            <div class="tab-content" id="tab-ext-xml">
-              <div style="margin-top: 1rem;">
-                <label>Cargar archivo(s) XML</label>
-                <input type="file" id="cpst-extracto-xml" accept=".xml" class="form-control" multiple onchange="cargarExtractoXML(this)">
-                <small class="text-muted">
-                  Seleccioná uno o varios XMLs. Nomenclatura: <code>QNL + Prov(51/53/55/59/64/72/00) + Modal(R/P/M/V/N) + Fecha</code><br>
-                  Ej: <code>QNL51M20260116.xml</code> = CABA Matutina | Podés cargar todos los de una modalidad juntos
-                </small>
-              </div>
-              <div style="margin-top: 1rem;">
-                <label>O pegar XML directamente</label>
-                <textarea id="cpst-xml-texto" class="form-control" rows="4" placeholder="<extracto>...</extracto>"></textarea>
-                <button class="btn btn-secondary" style="margin-top: 0.5rem;" onclick="cargarExtractoDesdeTextoXML()">
-                  <i class="fas fa-check"></i> Cargar XML
-                </button>
+          <!-- MODO MANUAL (oculto por defecto) -->
+          <div id="cpst-modo-manual" class="hidden">
+            <div class="form-row" style="margin-bottom: 1rem;">
+              <div class="form-group" style="flex: 1;">
+                <label for="cpst-extracto-provincia">Provincia</label>
+                <select id="cpst-extracto-provincia" class="form-control">
+                  <option value="0">CABA</option>
+                  <option value="1">Buenos Aires</option>
+                  <option value="2">Córdoba</option>
+                  <option value="3">Santa Fe</option>
+                  <option value="4">Montevideo</option>
+                  <option value="5">Mendoza</option>
+                  <option value="6">Entre Ríos</option>
+                </select>
               </div>
             </div>
-            
-            <!-- Tab Imagen/OCR -->
-            <div class="tab-content hidden" id="tab-ext-imagen">
-              <div style="margin-top: 1rem;">
-                <label>Cargar imagen del extracto</label>
-                <input type="file" id="cpst-extracto-imagen" accept="image/*" class="form-control" onchange="cargarExtractoImagen(this)">
-                <small class="text-muted">Formatos: JPG, PNG, GIF, WEBP</small>
-              </div>
-              <div id="cpst-imagen-preview" style="margin-top: 1rem; display: none;">
-                <img id="cpst-imagen-img" style="max-width: 100%; max-height: 300px; border-radius: 8px;">
-              </div>
-              <div id="cpst-ocr-status" class="hidden" style="margin-top: 1rem; padding: 1rem; background: var(--bg-input); border-radius: 8px;">
-                <div style="display: flex; align-items: center; gap: 1rem;">
-                  <i class="fas fa-spinner fa-spin"></i>
-                  <span id="cpst-ocr-mensaje">Procesando imagen con OCR...</span>
-                </div>
-                <div class="progress-bar" style="margin-top: 0.5rem; height: 4px; background: var(--border-color); border-radius: 2px;">
-                  <div id="cpst-ocr-progress" style="height: 100%; width: 0%; background: var(--primary); border-radius: 2px; transition: width 0.3s;"></div>
-                </div>
-              </div>
+
+            <div style="margin-top: 1rem;">
+              <label>Números (20 posiciones)</label>
+              <div class="numeros-grid" id="cpst-numeros-grid"></div>
             </div>
-            
-            <!-- Tab PDF -->
-            <div class="tab-content hidden" id="tab-ext-pdf">
-              <div style="margin-top: 1rem;">
-                <label>Cargar PDF del extracto</label>
-                <input type="file" id="cpst-extracto-pdf" accept=".pdf" class="form-control" onchange="cargarExtractoPDF(this)">
-                <small class="text-muted">Se extraerán los números automáticamente</small>
-              </div>
-              <div id="cpst-pdf-status" class="hidden" style="margin-top: 1rem; padding: 1rem; background: var(--bg-input); border-radius: 8px;">
-                <i class="fas fa-spinner fa-spin"></i>
-                <span>Procesando PDF...</span>
-              </div>
+
+            <div style="margin-top: 1rem;">
+              <label>Letras (4)</label>
+              <div class="letras-grid" id="cpst-letras-grid"></div>
             </div>
-            
-            <!-- Tab Manual -->
-            <div class="tab-content hidden" id="tab-ext-manual">
-              <div style="margin-top: 1rem;">
-                <label>Números (20 posiciones) - Ingrese los 4 dígitos</label>
-                <div class="numeros-grid" id="cpst-numeros-grid"></div>
-              </div>
-              
-              <div style="margin-top: 1rem;">
-                <label>Letras (4)</label>
-                <div class="letras-grid" id="cpst-letras-grid"></div>
-              </div>
+
+            <div style="margin-top: 1.5rem; display: flex; gap: 1rem;">
+              <button class="btn btn-primary" onclick="agregarExtractoManual()">
+                <i class="fas fa-plus"></i> Agregar Extracto
+              </button>
+              <button class="btn btn-secondary" onclick="limpiarExtractoPosterior()">
+                <i class="fas fa-eraser"></i> Limpiar
+              </button>
             </div>
           </div>
-          
-          <div style="margin-top: 1.5rem; display: flex; gap: 1rem;">
-            <button class="btn btn-primary" onclick="agregarExtracto()">
-              <i class="fas fa-plus"></i> Agregar Extracto
-            </button>
-            <button class="btn btn-secondary" onclick="limpiarExtractoPosterior()">
-              <i class="fas fa-eraser"></i> Limpiar
-            </button>
-          </div>
-          
-          <div id="cpst-extractos-lista" style="margin-top: 1rem;"></div>
+
+          <!-- Lista de extractos cargados -->
+          <div id="cpst-extractos-lista" style="margin-top: 1.5rem;"></div>
         </div>
 
         <!-- Paso 2: Cargar Extracto (POCEADA) - Oculto por defecto -->
