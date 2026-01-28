@@ -25,23 +25,23 @@ function isBlank(value) {
 function isProduction() {
   // Si existe variable de entorno NODE_ENV=production, es producción
   if (process.env.NODE_ENV === 'production') return true;
-  
+
   // Si el hostname no es tu PC local, es producción
   const hostname = os.hostname().toLowerCase();
   const localHostnames = ['desktop', 'laptop', 'comby', 'pc', 'localhost'];
   const isLocal = localHostnames.some(h => hostname.includes(h));
-  
+
   // Si no parece local y no es Windows, probablemente es servidor
   if (!isLocal && process.platform === 'linux') return true;
-  
+
   return false;
 }
 
 function getDbConfig() {
   const isProd = isProduction();
-  
+
   console.log(`🔧 Entorno detectado: ${isProd ? 'PRODUCCIÓN (Hostinger)' : 'LOCAL (XAMPP)'}`);
-  
+
   // Debug: mostrar todas las variables de entorno de BD
   console.log('📋 Variables de entorno BD:', {
     DB_HOST: process.env.DB_HOST || '(no definido)',
@@ -50,7 +50,7 @@ function getDbConfig() {
     DB_PASSWORD: process.env.DB_PASSWORD ? '****' : '(no definido)',
     NODE_ENV: process.env.NODE_ENV || '(no definido)'
   });
-  
+
   if (isProd) {
     // PRODUCCIÓN: Credenciales de Hostinger
     return {
@@ -78,7 +78,7 @@ function getPool() {
   if (pool) return pool;
 
   const config = getDbConfig();
-  
+
   // LOG CRÍTICO PARA DEBUG EN PRODUCCIÓN (sin mostrar password completa)
   console.log('🗄️  Intentando conectar a BD:', {
     host: config.host,
@@ -140,4 +140,9 @@ async function transaction(callback) {
   }
 }
 
-module.exports = { pool, query, transaction, testConnection };
+module.exports = {
+  get pool() { return getPool(); },
+  query,
+  transaction,
+  testConnection
+};
