@@ -270,21 +270,37 @@ function ejecutarEscrutinio(registros, extractos) {
         
         const ext1Basica = to1 - from1 + 1;
         const ext2Basica = to2 - from2 + 1;
-        
+
         // Calcular extensiones efectivas
         let ext1Efectiva = ext1Basica;
         let ext2Efectiva = ext2Basica;
-        
+
+        // Variables para el rango de búsqueda de la segunda (pueden modificarse por corrimiento)
+        let from2Busq = from2;
+        let to2Busq = to2;
+
+        // Detectar si es cabeza (1-1)
+        const primeraEsCabeza = (from1 === 1 && to1 === 1);
+
         // Corrección: Si primera es exacta (excepto pos 1) y segunda incluye esa pos
         if (from1 === to1 && from1 !== 1 && from2 <= from1 && from1 <= to2) {
           ext2Efectiva = ext2Basica - 1;
         }
-        
-        // Regla del 19: cabeza + 1-20
-        if (from1 === 1 && to1 === 1 && from2 === 1 && to2 === 20) {
+
+        // Regla del 19: cabeza + 1-20 → la segunda busca en 19 posiciones efectivas
+        if (primeraEsCabeza && from2 === 1 && to2 === 20) {
           ext2Efectiva = 19;
         }
-        
+
+        // NUEVO: Regla de corrimiento para cabeza + 1-N donde N < 20
+        // Si es cabeza (1-1) y la segunda empieza en 1 pero NO llega a 20
+        // Ejemplo: cabeza + 1-10 → si acierta cabeza, buscar en 2-11 (misma cantidad de posiciones)
+        if (primeraEsCabeza && from2 === 1 && to2 < 20) {
+          // El corrimiento se aplicará después si acierta la cabeza
+          // ext2Efectiva sigue siendo la misma cantidad (to2 - from2 + 1)
+          // porque el rango se desplaza pero no cambia de tamaño
+        }
+
         // Buscar primera
         let ganoPrimera = false;
         let posPrimera = 0;
@@ -298,20 +314,22 @@ function ejecutarEscrutinio(registros, extractos) {
             break;
           }
         }
-        
+
         // Buscar segunda
         let ganoSegunda = false;
         let posSegunda = 0;
         if (ganoPrimera) {
-          // Aplicar corrimiento si corresponde
-          let from2Busq = from2;
-          let to2Busq = to2;
-          const primeraEsCabeza = (from1 === 1 && to1 === 1);
-          if (primeraEsCabeza && posPrimera === 1 && from2 === 1 && to2 < 20) {
-            from2Busq = from2 + 1;
-            to2Busq = to2 + 1;
+          // Aplicar corrimiento si corresponde:
+          // Si la primera es cabeza (1-1), acertó en pos 1, y la segunda empieza en 1
+          // → desplazar el rango de búsqueda en +1
+          if (primeraEsCabeza && posPrimera === 1 && from2 === 1) {
+            from2Busq = from2 + 1;  // Empieza en 2
+            to2Busq = to2 + 1;       // Termina en N+1 (ej: 10→11, 20→21 pero acotado a 20)
+            if (to2Busq > 20) to2Busq = 20;  // Acotar al máximo
+
+            console.log(`[REDOB CORRIMIENTO] Cabeza acertó en pos 1 → Segunda busca de ${from2Busq} a ${to2Busq} (original: ${from2}-${to2})`);
           }
-          
+
           for (let pos = from2Busq; pos <= to2Busq; pos++) {
             if (pos > numeros.length) continue;
             const drawn = numeros[pos - 1];
@@ -349,7 +367,8 @@ function ejecutarEscrutinio(registros, extractos) {
                 break;
               }
             }
-            for (let pos = from2; pos <= to2; pos++) {
+            // IMPORTANTE: Usar el rango corregido (from2Busq, to2Busq)
+            for (let pos = from2Busq; pos <= to2Busq; pos++) {
               if (pos > numeros.length || pos === primeraAsignadaPos) continue;
               const drawn = numeros[pos - 1];
               const drawnComp = parseInt((drawn || '').slice(-2).padStart(2, '0'));
@@ -365,7 +384,8 @@ function ejecutarEscrutinio(registros, extractos) {
               const drawnComp = parseInt((drawn || '').slice(-2).padStart(2, '0'));
               if (drawnComp === num1) efectivos1++;
             }
-            for (let pos = from2; pos <= to2; pos++) {
+            // IMPORTANTE: Usar el rango corregido (from2Busq, to2Busq) para contar efectivos
+            for (let pos = from2Busq; pos <= to2Busq; pos++) {
               if (pos > numeros.length) continue;
               const drawn = numeros[pos - 1];
               const drawnComp = parseInt((drawn || '').slice(-2).padStart(2, '0'));
