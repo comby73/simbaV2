@@ -1010,8 +1010,15 @@ const generarActaControlPosterior = async (req, res) => {
       y += 25;
       
       const comp = resData.comparacion || {};
+      // Calcular tickets totales
+      const ticketsTotalPrevio = (comp.registros?.controlPrevio || 0) + (comp.registros?.anulados || 0);
+      const ticketsTotalPosterior = (comp.registros?.controlPosterior || 0) + (comp.registros?.anulados || 0);
+      const ticketsTotalOk = ticketsTotalPrevio === ticketsTotalPosterior;
+
       const compRows = [
-        { item: 'Registros Válidos', cp: comp.registros?.controlPrevio, cs: comp.registros?.controlPosterior, ok: comp.registros?.coincide },
+        { item: 'Tickets (Total)', cp: ticketsTotalPrevio, cs: ticketsTotalPosterior, ok: ticketsTotalOk },
+        { item: 'Tickets Válidos', cp: comp.registros?.controlPrevio, cs: comp.registros?.controlPosterior, ok: comp.registros?.coincide },
+        { item: 'Anulados', cp: comp.registros?.anulados || 0, cs: comp.registros?.anulados || 0, ok: true },
         { item: 'Apuestas', cp: comp.apuestas?.controlPrevio, cs: comp.apuestas?.controlPosterior, ok: comp.apuestas?.coincide },
         { item: 'Recaudación', cp: comp.recaudacion?.controlPrevio, cs: comp.recaudacion?.controlPosterior, ok: comp.recaudacion?.coincide, isMoney: true }
       ];
@@ -1184,6 +1191,80 @@ const generarActaControlPosterior = async (req, res) => {
           doc.font('Helvetica');
           y += 14;
         });
+      }
+
+      // ========== EXTRACTOS SORTEADOS (Números) ==========
+      // Nueva página para los extractos
+      doc.addPage();
+      y = 50;
+
+      doc.rect(50, y, 495, 22).fill('#1e3a5f');
+      doc.fillColor('#ffffff').fontSize(10).font('Helvetica-Bold')
+         .text('EXTRACTOS SORTEADOS', 60, y + 6);
+      y += 28;
+
+      // Obtener extractos del request
+      const extractosRaw = datos.extractos || [];
+      const extractosFiltrados = extractosRaw.filter(ext => {
+        if (!ext.numeros || ext.numeros.length === 0) return false;
+        return ext.numeros.some(n => n && n !== '0000' && n !== '----' && n !== '');
+      });
+
+      if (extractosFiltrados.length > 0) {
+        for (const ext of extractosFiltrados) {
+          const nums = ext.numeros || [];
+          const letras = ext.letras || [];
+
+          // Verificar espacio en página
+          if (y > 700) {
+            doc.addPage();
+            y = 50;
+          }
+
+          // Caja del extracto
+          doc.rect(50, y, 495, 50).fill('#f8fafc').stroke('#e2e8f0');
+
+          // Nombre del extracto
+          doc.fillColor('#1e3a5f').fontSize(10).font('Helvetica-Bold');
+          doc.text(ext.nombre || 'Extracto', 60, y + 5);
+
+          // Letras (si hay)
+          if (letras.length > 0 && letras.some(l => l)) {
+            doc.fillColor('#f59e0b').fontSize(12).font('Helvetica-Bold');
+            doc.text(letras.filter(l => l).join('  '), 400, y + 5, { width: 140, align: 'right' });
+          }
+
+          // Números 1-10 (primera fila)
+          doc.font('Helvetica').fillColor('#333').fontSize(9);
+          let numX = 60;
+          for (let i = 0; i < 10; i++) {
+            const num = nums[i] || '----';
+            // Resaltar posición 1 (cabeza)
+            if (i === 0) {
+              doc.rect(numX - 2, y + 18, 42, 14).fill('#fef3c7');
+              doc.fillColor('#92400e').font('Helvetica-Bold');
+            } else {
+              doc.fillColor('#333').font('Helvetica');
+            }
+            doc.text(`${i + 1}: ${num}`, numX, y + 20, { width: 40 });
+            numX += 48;
+          }
+
+          // Números 11-20 (segunda fila)
+          doc.font('Helvetica').fillColor('#666').fontSize(8);
+          numX = 60;
+          for (let i = 10; i < 20; i++) {
+            const num = nums[i] || '----';
+            doc.text(`${i + 1}: ${num}`, numX, y + 36, { width: 40 });
+            numX += 48;
+          }
+
+          y += 58;
+        }
+      } else {
+        doc.fillColor('#666').fontSize(10).font('Helvetica');
+        doc.text('No hay extractos cargados', 60, y);
+        y += 20;
       }
 
     } else {

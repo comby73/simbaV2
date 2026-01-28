@@ -1740,7 +1740,8 @@ async function imprimirReportePosterior() {
           nombre: modalidadInfo.nombre || getNombreModalidad(cpstModalidadSorteo) || ''
         },
         programacion: programacionInfo,
-        resultado: cpstResultados
+        resultado: cpstResultados,
+        extractos: cpstExtractos // Enviar los extractos con sus números y letras
       })
     });
 
