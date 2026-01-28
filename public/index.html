@@ -605,7 +605,7 @@
             </div>
             <div class="stat-card" style="grid-column: span 1;">
               <div class="stat-icon orange"><i class="fas fa-dollar-sign"></i></div>
-              <div class="stat-value" id="cp-recaudacion" style="font-size: 2rem;">$0</div>
+              <div class="stat-value" id="cp-recaudacion" style="font-size: clamp(1rem, 3vw, 1.8rem); word-break: break-word;">$0</div>
               <div class="stat-label">Recaudación Válida</div>
             </div>
             <div class="stat-card">
@@ -1156,7 +1156,26 @@
             </table>
           </div>
 
-          <!-- Resumen -->
+          <!-- Resumen de Tickets -->
+          <div class="stats-grid" style="margin-bottom: 1rem;">
+            <div class="stat-card">
+              <div class="stat-icon blue"><i class="fas fa-ticket-alt"></i></div>
+              <div class="stat-value" id="cpst-tickets-total">0</div>
+              <div class="stat-label">Tickets (Total)</div>
+            </div>
+            <div class="stat-card">
+              <div class="stat-icon green"><i class="fas fa-check-circle"></i></div>
+              <div class="stat-value" id="cpst-tickets-validos">0</div>
+              <div class="stat-label">Tickets Válidos</div>
+            </div>
+            <div class="stat-card">
+              <div class="stat-icon" style="background: rgba(239, 68, 68, 0.2); color: var(--danger);"><i class="fas fa-ban"></i></div>
+              <div class="stat-value" id="cpst-tickets-anulados">0</div>
+              <div class="stat-label">Anulados</div>
+            </div>
+          </div>
+
+          <!-- Resumen de Resultados -->
           <div class="stats-grid">
             <div class="stat-card">
               <div class="stat-icon green"><i class="fas fa-trophy"></i></div>

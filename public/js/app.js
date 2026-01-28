@@ -4412,6 +4412,18 @@ function mostrarResultadosEscrutinioPoceada(resultado) {
   document.getElementById('cpst-detalle-quiniela')?.classList.add('hidden');
   document.getElementById('cpst-detalle-poceada')?.classList.remove('hidden');
 
+  // Tarjetas de Tickets
+  if (resultado.comparacion) {
+    const reg = resultado.comparacion.registros;
+    const ticketsValidos = reg.controlPosterior || 0;
+    const ticketsAnulados = reg.anulados || 0;
+    const ticketsTotal = ticketsValidos + ticketsAnulados;
+
+    document.getElementById('cpst-tickets-total').textContent = formatNumber(ticketsTotal);
+    document.getElementById('cpst-tickets-validos').textContent = formatNumber(ticketsValidos);
+    document.getElementById('cpst-tickets-anulados').textContent = formatNumber(ticketsAnulados);
+  }
+
   // Resumen general
   document.getElementById('cpst-total-ganadores').textContent = formatNumber(resultado.totalGanadores);
   document.getElementById('cpst-total-premios').textContent = '$' + formatNumber(resultado.totalPremios);
@@ -4673,6 +4685,18 @@ function mostrarResultadosEscrutinio(resultado) {
   // Mostrar tabla de Quiniela, ocultar tabla de Poceada
   document.getElementById('cpst-detalle-quiniela')?.classList.remove('hidden');
   document.getElementById('cpst-detalle-poceada')?.classList.add('hidden');
+
+  // Tarjetas de Tickets
+  if (resultado.comparacion) {
+    const reg = resultado.comparacion.registros;
+    const ticketsValidos = reg.controlPosterior || 0;
+    const ticketsAnulados = reg.anulados || 0;
+    const ticketsTotal = ticketsValidos + ticketsAnulados;
+
+    document.getElementById('cpst-tickets-total').textContent = formatNumber(ticketsTotal);
+    document.getElementById('cpst-tickets-validos').textContent = formatNumber(ticketsValidos);
+    document.getElementById('cpst-tickets-anulados').textContent = formatNumber(ticketsAnulados);
+  }
 
   // Resumen
   document.getElementById('cpst-total-ganadores').textContent = formatNumber(resultado.totalGanadores);
