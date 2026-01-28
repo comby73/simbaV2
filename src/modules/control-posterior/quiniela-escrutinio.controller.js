@@ -250,6 +250,11 @@ function ejecutarEscrutinio(registros, extractos) {
         const numero2_2d = rawNumber2.slice(-2).padStart(2, '0');
         const num1 = parseInt(numero1_2d);
         const num2 = parseInt(numero2_2d);
+
+        // DEBUG: Log para redoblonas en extractos que no son CABA
+        if (idx !== 0) {
+          console.log(`[DEBUG REDOB] Procesando redoblona en ${reportePorExtracto[idx].nombre}: ${numero1_2d}-${numero2_2d}, extracto tiene ${numeros.length} números`);
+        }
         
         let desde2 = parseInt(reg.ubicacionDesde2) || 0;
         let hasta2 = parseInt(reg.ubicacionHasta2) || 0;
@@ -321,6 +326,9 @@ function ejecutarEscrutinio(registros, extractos) {
         
         if (ganoPrimera && ganoSegunda) {
           ganoNumeros = true;
+
+          // DEBUG: Redoblona ganadora
+          console.log(`[REDOB GANADORA] ${reportePorExtracto[idx].nombre}: ${numero1_2d} en pos ${posPrimera}, ${numero2_2d} en pos ${posSegunda}`);
           
           // Verificar superposición
           const overlap = !(to1 < from2 || to2 < from1);
@@ -546,9 +554,24 @@ function ejecutarEscrutinio(registros, extractos) {
     }
   }
   
+  // CORREGIR: totalGanadores debe ser la SUMA de todos los ganadores por extracto
+  // No contar tickets únicos, sino aciertos totales (igual que la tabla)
+  const totalGanadoresReal = reportePorExtracto.reduce((sum, rep) => sum + rep.totalGanadores, 0);
+
+  console.log(`[ESCRUTINIO] Total ganadores por tickets únicos: ${totalGanadores}`);
+  console.log(`[ESCRUTINIO] Total ganadores real (suma extractos): ${totalGanadoresReal}`);
+  console.log(`[ESCRUTINIO] Total premios: ${totalPremios}`);
+
+  // Debug redoblonas por extracto
+  for (const rep of reportePorExtracto) {
+    if (rep.redoblona.ganadores > 0) {
+      console.log(`[REDOBLONA] ${rep.nombre}: ${rep.redoblona.ganadores} ganadores, $${rep.redoblona.pagado}`);
+    }
+  }
+
   return {
     totalPremios,
-    totalGanadores,
+    totalGanadores: totalGanadoresReal,  // Usar la suma real de ganadores por extracto
     reportePorExtracto,
     ganadoresDetalle
   };
