@@ -96,21 +96,23 @@ const generarActaControlPrevio = async (req, res) => {
        .text('RESUMEN DE DATOS', 50, y, { underline: true });
     y += 25;
 
-    // Crear cajas de estadísticas (4 en una fila)
-    const boxWidth = 115;
+    // Crear cajas de estadísticas (5 en una fila)
+    const ticketsTotal = (calc.registros || 0) + (calc.registrosAnulados || 0);
+    const boxWidth = 95;
     const boxHeight = 55;
     const boxes = [
-      { label: 'Registros Válidos', value: formatearNumero(calc.registros), color: '#2563eb' },
-      { label: 'Apuestas Totales', value: formatearNumero(calc.apuestasTotal), color: '#10b981' },
-      { label: 'Recaudación', value: formatearMoneda(calc.recaudacion), color: '#f59e0b' },
-      { label: 'Anulados', value: formatearNumero(calc.registrosAnulados), color: '#ef4444' }
+      { label: 'Tickets (Total)', value: formatearNumero(ticketsTotal), color: '#2563eb' },
+      { label: 'Tickets Válidos', value: formatearNumero(calc.registros), color: '#10b981' },
+      { label: 'Anulados', value: formatearNumero(calc.registrosAnulados), color: '#ef4444' },
+      { label: 'Apuestas', value: formatearNumero(calc.apuestasTotal), color: '#7c3aed' },
+      { label: 'Recaudación', value: formatearMoneda(calc.recaudacion), color: '#f59e0b' }
     ];
 
     boxes.forEach((box, i) => {
-      const x = 50 + (i * (boxWidth + 10));
+      const x = 50 + (i * (boxWidth + 5));
       doc.roundedRect(x, y, boxWidth, boxHeight, 3).fillAndStroke('#f1f5f9', '#e2e8f0');
-      doc.fontSize(8).fillColor('#666').text(box.label, x + 10, y + 8, { width: boxWidth - 20 });
-      doc.fontSize(14).fillColor(box.color).text(box.value, x + 10, y + 25, { width: boxWidth - 20 });
+      doc.fontSize(7).fillColor('#666').text(box.label, x + 5, y + 8, { width: boxWidth - 10 });
+      doc.fontSize(12).fillColor(box.color).text(box.value, x + 5, y + 25, { width: boxWidth - 10 });
     });
 
     y += boxHeight + 25;
@@ -187,9 +189,14 @@ const generarActaControlPrevio = async (req, res) => {
       doc.text('Diferencia', 420, y + 5);
       y += 18;
 
+      // Calcular tickets totales
+      const ticketsTotalCalc = (calc.registros || 0) + (calc.registrosAnulados || 0);
+      const ticketsTotalOficial = (oficial.registrosValidos || 0) + (oficial.registrosAnulados || 0);
+
       const comparaciones = [
-        { concepto: 'Registros Válidos', calc: calc.registros, oficial: oficial.registrosValidos },
-        { concepto: 'Registros Anulados', calc: calc.registrosAnulados, oficial: oficial.registrosAnulados },
+        { concepto: 'Tickets (Total)', calc: ticketsTotalCalc, oficial: ticketsTotalOficial },
+        { concepto: 'Tickets Válidos', calc: calc.registros, oficial: oficial.registrosValidos },
+        { concepto: 'Anulados', calc: calc.registrosAnulados, oficial: oficial.registrosAnulados },
         { concepto: 'Apuestas en Sorteo', calc: calc.apuestasTotal, oficial: oficial.apuestasEnSorteo },
         { concepto: 'Recaudación Bruta', calc: calc.recaudacion, oficial: oficial.recaudacionBruta, esMonto: true }
       ];
@@ -512,22 +519,24 @@ async function generarActaControlPrevioPoceada(req, res, datos) {
        .text('RESUMEN DE DATOS', 50, y, { underline: true });
     y += 20;
 
-    // Cajas de estadísticas (5 en una fila)
-    const boxWidth = 95;
+    // Cajas de estadísticas (6 en una fila - con Tickets Total)
+    const ticketsTotalPoceada = (resumen.registros || 0) + (resumen.anulados || 0);
+    const boxWidth = 80;
     const boxHeight = 50;
     const boxes = [
-      { label: 'Registros Válidos', value: formatearNumero(resumen.registros), color: '#7c3aed' },
+      { label: 'Tickets (Total)', value: formatearNumero(ticketsTotalPoceada), color: '#2563eb' },
+      { label: 'Tickets Válidos', value: formatearNumero(resumen.registros), color: '#10b981' },
       { label: 'Anulados', value: formatearNumero(resumen.anulados), color: '#ef4444' },
-      { label: 'Apuestas', value: formatearNumero(resumen.apuestasTotal), color: '#10b981' },
+      { label: 'Apuestas', value: formatearNumero(resumen.apuestasTotal), color: '#7c3aed' },
       { label: 'Recaudación', value: formatearMoneda(resumen.recaudacion), color: '#f59e0b' },
       { label: 'Venta Web', value: formatearNumero(resumen.ventaWeb || 0), color: '#3b82f6' }
     ];
 
     boxes.forEach((box, i) => {
-      const x = 50 + (i * (boxWidth + 5));
+      const x = 50 + (i * (boxWidth + 3));
       doc.roundedRect(x, y, boxWidth, boxHeight, 3).fillAndStroke('#f1f5f9', '#e2e8f0');
-      doc.fontSize(7).fillColor('#666').text(box.label, x + 5, y + 6, { width: boxWidth - 10 });
-      doc.fontSize(12).fillColor(box.color).text(box.value, x + 5, y + 22, { width: boxWidth - 10 });
+      doc.fontSize(6).fillColor('#666').text(box.label, x + 3, y + 6, { width: boxWidth - 6 });
+      doc.fontSize(10).fillColor(box.color).text(box.value, x + 3, y + 22, { width: boxWidth - 6 });
     });
 
     y += boxHeight + 20;
@@ -770,9 +779,14 @@ async function generarActaControlPrevioPoceada(req, res, datos) {
       doc.text('Estado', 450, y + 4);
       y += 16;
 
+      // Calcular tickets totales para Poceada
+      const ticketsTotalCalcPoc = (comparacion.registros?.calculado || 0) + (comparacion.anulados?.calculado || 0);
+      const ticketsTotalOficialPoc = (comparacion.registros?.oficial || 0) + (comparacion.anulados?.oficial || 0);
+
       const items = [
-        { concepto: 'Registros Válidos', calc: comparacion.registros?.calculado, oficial: comparacion.registros?.oficial },
-        { concepto: 'Registros Anulados', calc: comparacion.anulados?.calculado, oficial: comparacion.anulados?.oficial },
+        { concepto: 'Tickets (Total)', calc: ticketsTotalCalcPoc, oficial: ticketsTotalOficialPoc },
+        { concepto: 'Tickets Válidos', calc: comparacion.registros?.calculado, oficial: comparacion.registros?.oficial },
+        { concepto: 'Anulados', calc: comparacion.anulados?.calculado, oficial: comparacion.anulados?.oficial },
         { concepto: 'Apuestas Totales', calc: comparacion.apuestas?.calculado, oficial: comparacion.apuestas?.oficial },
         { concepto: 'Recaudación Bruta', calc: comparacion.recaudacion?.calculado, oficial: comparacion.recaudacion?.oficial, esMonto: true }
       ];
