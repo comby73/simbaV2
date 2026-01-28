@@ -802,31 +802,42 @@ const generarPDFReporte = async (req, res) => {
     const startY = 130;
     
     // Caja de datos
-    doc.rect(50, startY, 495, 80).stroke('#ddd');
+    doc.rect(50, startY, 495, 95).stroke('#ddd');
     doc.rect(50, startY, 495, 25).fill('#f1f5f9');
     doc.fillColor('#334155').fontSize(11).text('DATOS DEL SORTEO', 60, startY + 7);
     
-    const registros = comparacion?.registros?.controlPrevio || datosControlPrevio?.registros || 0;
+    const ticketsValidos = comparacion?.registros?.controlPrevio || datosControlPrevio?.registros || 0;
+    const anulados = comparacion?.registros?.anulados || datosControlPrevio?.registrosAnulados || 0;
+    const ticketsTotal = ticketsValidos + anulados;
     const apuestas = comparacion?.apuestas?.controlPrevio || datosControlPrevio?.apuestasTotal || 0;
     const recaudacion = comparacion?.recaudacion?.controlPrevio || datosControlPrevio?.recaudacion || 0;
-    
+
     doc.fillColor('#333').fontSize(10);
-    doc.text(`Registros:`, 70, startY + 40);
-    doc.font('Helvetica-Bold').text(registros.toLocaleString('es-AR'), 150, startY + 40);
-    
-    doc.font('Helvetica').text(`Apuestas:`, 220, startY + 40);
-    doc.font('Helvetica-Bold').text(apuestas.toLocaleString('es-AR'), 290, startY + 40);
-    
-    doc.font('Helvetica').text(`Recaudación:`, 380, startY + 40);
-    doc.font('Helvetica-Bold').text(`$${recaudacion.toLocaleString('es-AR')}`, 460, startY + 40);
-    
-    doc.font('Helvetica').text(`Fecha:`, 70, startY + 60);
-    doc.text(fechaHoy, 150, startY + 60);
+    // Primera fila: Tickets (Total), Tickets Válidos, Anulados
+    doc.text(`Tickets:`, 70, startY + 35);
+    doc.font('Helvetica-Bold').text(ticketsTotal.toLocaleString('es-AR'), 130, startY + 35);
+
+    doc.font('Helvetica').text(`Válidos:`, 180, startY + 35);
+    doc.font('Helvetica-Bold').text(ticketsValidos.toLocaleString('es-AR'), 230, startY + 35);
+
+    doc.font('Helvetica').text(`Anulados:`, 300, startY + 35);
+    doc.font('Helvetica-Bold').fillColor('#dc2626').text(anulados.toLocaleString('es-AR'), 360, startY + 35);
+
+    // Segunda fila: Apuestas y Recaudación
+    doc.fillColor('#333').font('Helvetica').text(`Apuestas:`, 70, startY + 55);
+    doc.font('Helvetica-Bold').text(apuestas.toLocaleString('es-AR'), 130, startY + 55);
+
+    doc.font('Helvetica').text(`Recaudación:`, 220, startY + 55);
+    doc.font('Helvetica-Bold').text(`$${recaudacion.toLocaleString('es-AR')}`, 300, startY + 55);
+
+    // Tercera fila: Fecha
+    doc.font('Helvetica').text(`Fecha:`, 70, startY + 75);
+    doc.text(fechaHoy, 130, startY + 75);
     
     // ══════════════════════════════════════════════════════════════
     // EXTRACTOS SORTEADOS (Números de cada provincia)
     // ══════════════════════════════════════════════════════════════
-    let extractosY = startY + 95;
+    let extractosY = startY + 110;
     
     // Obtener extractos del request - filtrar solo los que tienen números
     const extractosRaw = req.body.extractos || [];
