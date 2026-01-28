@@ -896,12 +896,17 @@ function mostrarResultadosCP(data) {
     }
   }
 
-  // Resumen principal
-  document.getElementById('cp-registros').textContent = formatNumber(calc.registros);
+  // Resumen principal - Tickets
+  const registrosValidos = calc.registros || 0;
+  const registrosAnulados = calc.anulados || calc.registrosAnulados || 0;
+  const ticketsTotal = registrosValidos + registrosAnulados;
+
+  document.getElementById('cp-tickets-total').textContent = formatNumber(ticketsTotal);
+  document.getElementById('cp-registros').textContent = formatNumber(registrosValidos);
+  document.getElementById('cp-anulados').textContent = formatNumber(registrosAnulados);
   document.getElementById('cp-apuestas').textContent = formatNumber(calc.apuestasTotal || calc.apuestas);
   // Recaudación sin decimales
   document.getElementById('cp-recaudacion').textContent = '$' + formatNumber(Math.round(calc.recaudacion));
-  document.getElementById('cp-anulados').textContent = formatNumber(calc.anulados || calc.registrosAnulados);
 
   // Recaudación anulada (si existe el elemento)
   const recAnuladaEl = document.getElementById('cp-recaudacion-anulada');
@@ -934,9 +939,15 @@ function mostrarResultadosCP(data) {
       console.log('✅ Usando comparación del backend');
       // Usar la comparación pre-calculada del backend
       const comp = data.comparacion;
+      // Calcular tickets totales
+      const ticketsCalc = (comp.registros?.calculado || 0) + (comp.anulados?.calculado || 0);
+      const ticketsOficial = (comp.registros?.oficial || 0) + (comp.anulados?.oficial || 0);
+      const ticketsDiff = ticketsCalc - ticketsOficial;
+
       const comparaciones = [
-        { concepto: 'Registros Válidos', calc: comp.registros?.calculado || 0, oficial: comp.registros?.oficial || 0, diff: comp.registros?.diferencia || 0 },
-        { concepto: 'Registros Anulados', calc: comp.anulados?.calculado || 0, oficial: comp.anulados?.oficial || 0, diff: comp.anulados?.diferencia || 0 },
+        { concepto: 'Tickets (Total)', calc: ticketsCalc, oficial: ticketsOficial, diff: ticketsDiff },
+        { concepto: 'Tickets Válidos', calc: comp.registros?.calculado || 0, oficial: comp.registros?.oficial || 0, diff: comp.registros?.diferencia || 0 },
+        { concepto: 'Anulados', calc: comp.anulados?.calculado || 0, oficial: comp.anulados?.oficial || 0, diff: comp.anulados?.diferencia || 0 },
         { concepto: 'Apuestas en Sorteo', calc: comp.apuestas?.calculado || 0, oficial: comp.apuestas?.oficial || 0, diff: comp.apuestas?.diferencia || 0 },
         { concepto: 'Recaudación Bruta', calc: comp.recaudacion?.calculado || 0, oficial: comp.recaudacion?.oficial || 0, diff: comp.recaudacion?.diferencia || 0, esMonto: true }
       ];
@@ -975,14 +986,24 @@ function mostrarResultadosCP(data) {
         '<span class="badge badge-success">XML Cargado</span>';
     } else if (oficial) {
       // Fallback: calcular manualmente si no viene del backend
+      // Calcular tickets totales para Poceada y Quiniela
+      const calcValidos = isPoceada ? (calc.registros || 0) : (calc.registros || 0);
+      const calcAnulados = isPoceada ? (calc.anulados || 0) : (calc.registrosAnulados || 0);
+      const oficialValidos = oficial.registrosValidos || 0;
+      const oficialAnulados = oficial.registrosAnulados || 0;
+      const ticketsCalcFallback = calcValidos + calcAnulados;
+      const ticketsOficialFallback = oficialValidos + oficialAnulados;
+
       const comparaciones = isPoceada ? [
-        { concepto: 'Registros Válidos', calc: calc.registros || 0, oficial: oficial.registrosValidos || 0 },
-        { concepto: 'Registros Anulados', calc: calc.anulados || 0, oficial: oficial.registrosAnulados || 0 },
+        { concepto: 'Tickets (Total)', calc: ticketsCalcFallback, oficial: ticketsOficialFallback },
+        { concepto: 'Tickets Válidos', calc: calc.registros || 0, oficial: oficial.registrosValidos || 0 },
+        { concepto: 'Anulados', calc: calc.anulados || 0, oficial: oficial.registrosAnulados || 0 },
         { concepto: 'Apuestas en Sorteo', calc: calc.apuestasTotal || 0, oficial: oficial.apuestas || 0 },
         { concepto: 'Recaudación Bruta', calc: calc.recaudacion || 0, oficial: oficial.recaudacion || 0, esMonto: true }
       ] : [
-        { concepto: 'Registros Válidos', calc: calc.registros || 0, oficial: oficial.registrosValidos || 0 },
-        { concepto: 'Registros Anulados', calc: calc.registrosAnulados || 0, oficial: oficial.registrosAnulados || 0 },
+        { concepto: 'Tickets (Total)', calc: ticketsCalcFallback, oficial: ticketsOficialFallback },
+        { concepto: 'Tickets Válidos', calc: calc.registros || 0, oficial: oficial.registrosValidos || 0 },
+        { concepto: 'Anulados', calc: calc.registrosAnulados || 0, oficial: oficial.registrosAnulados || 0 },
         { concepto: 'Apuestas en Sorteo', calc: calc.apuestasTotal || 0, oficial: oficial.apuestasEnSorteo || 0 },
         { concepto: 'Recaudación Bruta', calc: calc.recaudacion || 0, oficial: oficial.recaudacionBruta || 0, esMonto: true }
       ];
@@ -4410,25 +4431,40 @@ function mostrarResultadosEscrutinioPoceada(resultado) {
     const apu = resultado.comparacion.apuestas;
     const rec = resultado.comparacion.recaudacion;
 
+    // Calcular tickets totales (válidos + anulados)
+    const ticketsTotalPrevio = reg.controlPrevio + (reg.anulados || 0);
+    const ticketsTotalPosterior = reg.controlPosterior + (reg.anulados || 0);
+    const ticketsTotalCoincide = ticketsTotalPrevio === ticketsTotalPosterior;
+
+    // Tickets (Total)
     tbody.innerHTML += `
       <tr>
-        <td>Registros (válidos)</td>
+        <td><strong>Tickets (Total)</strong></td>
+        <td>${formatNumber(ticketsTotalPrevio)}</td>
+        <td>${formatNumber(ticketsTotalPosterior)}</td>
+        <td class="${ticketsTotalCoincide ? 'text-success' : 'text-danger'}">${ticketsTotalCoincide ? '✓ OK' : '✗ DIFERENCIA'}</td>
+      </tr>
+    `;
+
+    // Tickets Válidos
+    tbody.innerHTML += `
+      <tr>
+        <td>Tickets Válidos</td>
         <td>${formatNumber(reg.controlPrevio)}</td>
         <td>${formatNumber(reg.controlPosterior)}</td>
         <td class="${reg.coincide ? 'text-success' : 'text-danger'}">${reg.coincide ? '✓ OK' : '✗ DIFERENCIA'}</td>
       </tr>
     `;
 
-    if (reg.anulados > 0) {
-      tbody.innerHTML += `
-        <tr style="background: var(--surface-hover);">
-          <td><small class="text-muted">↳ Anulados (no escrutados)</small></td>
-          <td><small class="text-muted">-</small></td>
-          <td><small class="text-muted">${formatNumber(reg.anulados)}</small></td>
-          <td><small class="text-muted">info</small></td>
-        </tr>
-      `;
-    }
+    // Anulados
+    tbody.innerHTML += `
+      <tr>
+        <td>Anulados</td>
+        <td>${formatNumber(reg.anulados || 0)}</td>
+        <td>${formatNumber(reg.anulados || 0)}</td>
+        <td class="text-success">✓ OK</td>
+      </tr>
+    `;
 
     tbody.innerHTML += `
       <tr>
@@ -4657,27 +4693,40 @@ function mostrarResultadosEscrutinio(resultado) {
     const apu = resultado.comparacion.apuestas;
     const rec = resultado.comparacion.recaudacion;
 
-    // Registros: comparar solo válidos
+    // Calcular tickets totales (válidos + anulados)
+    const ticketsTotalPrevio = reg.controlPrevio + (reg.anulados || 0);
+    const ticketsTotalPosterior = reg.controlPosterior + (reg.anulados || 0);
+    const ticketsTotalCoincide = ticketsTotalPrevio === ticketsTotalPosterior;
+
+    // Tickets (Total)
     tbody.innerHTML += `
       <tr>
-        <td>Registros (válidos)</td>
+        <td><strong>Tickets (Total)</strong></td>
+        <td>${formatNumber(ticketsTotalPrevio)}</td>
+        <td>${formatNumber(ticketsTotalPosterior)}</td>
+        <td class="${ticketsTotalCoincide ? 'text-success' : 'text-danger'}">${ticketsTotalCoincide ? '✓ OK' : '✗ DIFERENCIA'}</td>
+      </tr>
+    `;
+
+    // Tickets Válidos
+    tbody.innerHTML += `
+      <tr>
+        <td>Tickets Válidos</td>
         <td>${formatNumber(reg.controlPrevio)}</td>
         <td>${formatNumber(reg.controlPosterior)}</td>
         <td class="${reg.coincide ? 'text-success' : 'text-danger'}">${reg.coincide ? '✓ OK' : '✗ DIFERENCIA'}</td>
       </tr>
     `;
 
-    // Mostrar anulados como fila informativa si existen
-    if (reg.anulados > 0) {
-      tbody.innerHTML += `
-        <tr style="background: var(--surface-hover);">
-          <td><small class="text-muted">↳ Anulados (no escrutados)</small></td>
-          <td><small class="text-muted">-</small></td>
-          <td><small class="text-muted">${formatNumber(reg.anulados)}</small></td>
-          <td><small class="text-muted">info</small></td>
-        </tr>
-      `;
-    }
+    // Anulados
+    tbody.innerHTML += `
+      <tr>
+        <td>Anulados</td>
+        <td>${formatNumber(reg.anulados || 0)}</td>
+        <td>${formatNumber(reg.anulados || 0)}</td>
+        <td class="text-success">✓ OK</td>
+      </tr>
+    `;
 
     tbody.innerHTML += `
       <tr>
