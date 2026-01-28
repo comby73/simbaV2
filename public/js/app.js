@@ -4412,6 +4412,9 @@ function mostrarResultadosEscrutinioPoceada(resultado) {
   document.getElementById('cpst-detalle-quiniela')?.classList.add('hidden');
   document.getElementById('cpst-detalle-poceada')?.classList.remove('hidden');
 
+  // Mostrar extractos sorteados (números)
+  renderExtractosSorteados();
+
   // Tarjetas de Tickets
   if (resultado.comparacion) {
     const reg = resultado.comparacion.registros;
@@ -4686,6 +4689,9 @@ function mostrarResultadosEscrutinio(resultado) {
   document.getElementById('cpst-detalle-quiniela')?.classList.remove('hidden');
   document.getElementById('cpst-detalle-poceada')?.classList.add('hidden');
 
+  // Mostrar extractos sorteados (números)
+  renderExtractosSorteados();
+
   // Tarjetas de Tickets
   if (resultado.comparacion) {
     const reg = resultado.comparacion.registros;
@@ -4897,6 +4903,57 @@ function mostrarResultadosEscrutinio(resultado) {
       🎯 <strong>Aciertos</strong> = Coincidencias contra el extracto (un ticket puede tener múltiples aciertos si jugó a varias posiciones)
     </div>
   `;
+}
+
+// Renderizar los números de los extractos sorteados
+function renderExtractosSorteados() {
+  const container = document.getElementById('cpst-extractos-numeros');
+  if (!container) return;
+
+  // Filtrar solo extractos con números cargados
+  const extractosCargados = cpstExtractos.filter(ext => {
+    if (!ext.numeros || ext.numeros.length === 0) return false;
+    return ext.numeros.some(n => n && n !== '0000' && n !== '----' && n !== '');
+  });
+
+  if (extractosCargados.length === 0) {
+    container.innerHTML = '<div class="extractos-vacio">No hay extractos cargados</div>';
+    return;
+  }
+
+  let html = '';
+  for (const ext of extractosCargados) {
+    const letrasStr = (ext.letras || []).filter(l => l).join(' ');
+
+    html += `
+      <div class="extracto-sorteado">
+        <div class="extracto-sorteado-header">
+          <span class="extracto-sorteado-nombre">${ext.nombre || 'Extracto'}</span>
+          ${letrasStr ? `<span class="extracto-sorteado-letras">${letrasStr}</span>` : ''}
+        </div>
+        <div class="extracto-fila-label">Posiciones 1-10</div>
+        <div class="extracto-sorteado-numeros">
+          ${(ext.numeros || []).slice(0, 10).map((num, i) => `
+            <div class="extracto-numero ${i === 0 ? 'pos-cabeza' : ''}">
+              <span class="extracto-numero-pos">${i + 1}</span>
+              ${num || '----'}
+            </div>
+          `).join('')}
+        </div>
+        <div class="extracto-fila-label">Posiciones 11-20</div>
+        <div class="extracto-sorteado-numeros">
+          ${(ext.numeros || []).slice(10, 20).map((num, i) => `
+            <div class="extracto-numero">
+              <span class="extracto-numero-pos">${i + 11}</span>
+              ${num || '----'}
+            </div>
+          `).join('')}
+        </div>
+      </div>
+    `;
+  }
+
+  container.innerHTML = html;
 }
 
 async function descargarExcel() {
