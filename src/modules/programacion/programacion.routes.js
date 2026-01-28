@@ -16,7 +16,8 @@ const {
   validarProvincias,
   getHistorialCargas,
   borrarProgramacion,
-  getSorteosDelDia
+  getSorteosDelDia,
+  verificarSorteo
 } = require('./programacion.controller');
 
 // Configuración de multer para upload de Excel
@@ -98,8 +99,14 @@ router.get('/dia',
 
 // === RUTAS DE VALIDACIÓN ===
 
+// Verificar si existe sorteo por fecha y modalidad
+router.get('/verificar',
+  requirePermission('programacion.ver'),
+  verificarSorteo
+);
+
 // Validar provincias de un sorteo vs datos NTF
-router.post('/validar-provincias', 
+router.post('/validar-provincias',
   requirePermission('control-previo.ver'),
   validarProvincias
 );

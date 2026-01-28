@@ -268,3 +268,20 @@ const extractosAPI = {
     method: 'DELETE'
   })
 };
+
+// Programación API
+const programacionAPI = {
+  verificarSorteo: (fecha, modalidad, juego = 'Quiniela') => {
+    return apiRequest(`/programacion/verificar?fecha=${fecha}&modalidad=${modalidad}&juego=${juego}`);
+  },
+  getSorteosPorFecha: (fecha, juego) => {
+    let url = `/programacion/fecha?fecha=${fecha}`;
+    if (juego) url += `&juego=${juego}`;
+    return apiRequest(url);
+  },
+  getSorteoPorNumero: (numero, juego) => {
+    let url = `/programacion/sorteo/${numero}`;
+    if (juego) url += `?juego=${juego}`;
+    return apiRequest(url);
+  }
+};

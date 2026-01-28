@@ -720,6 +720,82 @@ const getSorteosDelDia = async (req, res) => {
   }
 };
 
+/**
+ * Verificar sorteo por fecha y modalidad
+ * GET /api/programacion/verificar?fecha=YYYY-MM-DD&modalidad=R&juego=Quiniela
+ * Devuelve el sorteo programado si existe, o error si no
+ */
+const verificarSorteo = async (req, res) => {
+  try {
+    const { fecha, modalidad, juego = 'Quiniela' } = req.query;
+
+    if (!fecha || !modalidad) {
+      return errorResponse(res, 'Fecha y modalidad son requeridos', 400);
+    }
+
+    // Buscar sorteo en programación por fecha y modalidad
+    const sorteos = await query(`
+      SELECT * FROM programacion_sorteos
+      WHERE fecha_sorteo = ?
+        AND modalidad_codigo = ?
+        AND juego = ?
+        AND activo = 1
+    `, [fecha, modalidad, juego]);
+
+    if (sorteos.length === 0) {
+      // No encontrado - buscar qué modalidades SÍ hay para esa fecha
+      const disponibles = await query(`
+        SELECT modalidad_codigo, modalidad_nombre, numero_sorteo
+        FROM programacion_sorteos
+        WHERE fecha_sorteo = ? AND juego = ? AND activo = 1
+        ORDER BY hora_sorteo
+      `, [fecha, juego]);
+
+      const modalidadNombre = {
+        'R': 'LA PREVIA', 'P': 'LA PRIMERA', 'M': 'MATUTINA',
+        'V': 'VESPERTINA', 'N': 'NOCTURNA'
+      }[modalidad] || modalidad;
+
+      return successResponse(res, {
+        encontrado: false,
+        mensaje: `No hay sorteo de ${modalidadNombre} programado para ${fecha}`,
+        modalidadesProgramadas: disponibles.map(d => ({
+          codigo: d.modalidad_codigo,
+          nombre: d.modalidad_nombre,
+          numeroSorteo: d.numero_sorteo
+        }))
+      });
+    }
+
+    const sorteo = sorteos[0];
+
+    return successResponse(res, {
+      encontrado: true,
+      sorteo: {
+        id: sorteo.id,
+        numeroSorteo: sorteo.numero_sorteo,
+        fecha: sorteo.fecha_sorteo,
+        hora: sorteo.hora_sorteo,
+        modalidad_codigo: sorteo.modalidad_codigo,
+        modalidad_nombre: sorteo.modalidad_nombre,
+        provincias: {
+          caba: sorteo.prov_caba,
+          bsas: sorteo.prov_bsas,
+          cordoba: sorteo.prov_cordoba,
+          santafe: sorteo.prov_santafe,
+          montevideo: sorteo.prov_montevideo,
+          mendoza: sorteo.prov_mendoza,
+          entrerios: sorteo.prov_entrerios
+        }
+      }
+    });
+
+  } catch (error) {
+    console.error('Error verificando sorteo:', error);
+    return errorResponse(res, 'Error: ' + error.message, 500);
+  }
+};
+
 module.exports = {
   cargarExcelQuiniela,
   getSorteosPorFecha,
@@ -728,5 +804,6 @@ module.exports = {
   validarProvincias,
   getHistorialCargas,
   borrarProgramacion,
-  getSorteosDelDia
+  getSorteosDelDia,
+  verificarSorteo
 };

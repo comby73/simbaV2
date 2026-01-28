@@ -2973,17 +2973,36 @@ async function procesarMultiplesXML(files) {
   const archivosInfo = [];
   const modalidades = {};
 
-  // Primero analizar todos los nombres
+  // Primero analizar todos los archivos - LEER CONTENIDO para obtener modalidad real
   for (const file of files) {
     const info = parsearNombreArchivoXML(file.name);
     if (info) {
-      archivosInfo.push({ file, info });
+      // Leer el contenido del archivo para obtener la modalidad real del XML
+      try {
+        const contenido = await leerArchivoComoTexto(file);
+        const datosXML = extraerDatosXML(contenido);
 
-      // Agrupar por modalidad
-      if (!modalidades[info.modalidad]) {
-        modalidades[info.modalidad] = [];
+        // PRIORIDAD: Usar modalidad del CONTENIDO del XML si existe, sino la del nombre
+        const modalidadReal = datosXML?.modalidad || info.modalidad;
+
+        if (datosXML?.modalidad && datosXML.modalidad !== info.modalidad) {
+          console.log(`📝 ${file.name}: Modalidad del nombre (${info.modalidad}) difiere del contenido (${datosXML.modalidad}). Usando: ${modalidadReal}`);
+        }
+
+        // Actualizar info con la modalidad real
+        info.modalidadOriginal = info.modalidad; // Guardar la del nombre
+        info.modalidad = modalidadReal; // Usar la del contenido
+
+        archivosInfo.push({ file, info, datosXML });
+
+        // Agrupar por modalidad REAL (del contenido)
+        if (!modalidades[modalidadReal]) {
+          modalidades[modalidadReal] = [];
+        }
+        modalidades[modalidadReal].push({ file, info, datosXML });
+      } catch (error) {
+        console.error(`Error leyendo ${file.name}:`, error);
       }
-      modalidades[info.modalidad].push({ file, info });
     } else {
       console.warn(`⚠️ Archivo no reconocido (formato esperado QNLxxY...): ${file.name}`);
     }
@@ -3050,25 +3069,24 @@ async function procesarMultiplesXML(files) {
   // Limpiar extractos anteriores para esta carga masiva
   cpstExtractos = [];
 
-  // Procesar cada archivo
+  // Procesar cada archivo (ya tenemos los datos XML extraídos)
   let procesados = 0;
   let errores = 0;
 
-  for (const { file, info } of archivosModalidad) {
+  for (const { file, info, datosXML } of archivosModalidad) {
     try {
-      const contenido = await leerArchivoComoTexto(file);
-      const resultado = extraerDatosXML(contenido);
-
-      if (resultado) {
+      // Ya tenemos datosXML del primer paso, no necesitamos leer de nuevo
+      if (datosXML && datosXML.numeros) {
         // Agregar extracto con la provincia correcta
         cpstExtractos.push({
           index: info.provincia.index,
           nombre: info.provincia.nombre,
-          numeros: resultado.numeros,
-          letras: resultado.letras
+          numeros: datosXML.numeros,
+          letras: datosXML.letras
         });
         procesados++;
       } else {
+        console.warn(`⚠️ ${file.name}: No se pudieron extraer datos del XML`);
         errores++;
       }
     } catch (error) {
@@ -3099,7 +3117,7 @@ function leerArchivoComoTexto(file) {
   });
 }
 
-// Extraer datos del XML (números y letras)
+// Extraer datos del XML (números, letras y modalidad)
 function extraerDatosXML(xmlString) {
   try {
     const parser = new DOMParser();
@@ -3110,6 +3128,24 @@ function extraerDatosXML(xmlString) {
 
     let numeros = [];
     let letras = [];
+    let modalidad = null;
+
+    // Extraer modalidad del contenido del XML
+    const modalidadNode = xml.querySelector('Modalidad') || xml.querySelector('modalidad');
+    if (modalidadNode) {
+      const modalidadTexto = modalidadNode.textContent.trim().toUpperCase();
+      console.log(`[XML] Modalidad encontrada en XML: "${modalidadTexto}"`);
+      // Mapear nombre de modalidad a código
+      const modalidadMap = {
+        'LA PREVIA': 'R', 'PREVIA': 'R',
+        'LA PRIMERA': 'P', 'PRIMERA': 'P',
+        'MATUTINA': 'M',
+        'VESPERTINA': 'V',
+        'NOCTURNA': 'N'
+      };
+      modalidad = modalidadMap[modalidadTexto] || null;
+      console.log(`[XML] Modalidad mapeada: ${modalidadTexto} -> ${modalidad}`);
+    }
 
     // Formato Quiniela: <N01>, <N02>, etc. dentro de <Suerte>
     const suerteNode = xml.querySelector('Suerte');
@@ -3154,7 +3190,7 @@ function extraerDatosXML(xmlString) {
 
     if (numeros.filter(n => n).length === 0) return null;
 
-    return { numeros, letras };
+    return { numeros, letras, modalidad };
   } catch (error) {
     return null;
   }
@@ -3899,14 +3935,7 @@ async function procesarArchivoXMLInteligente(archivo) {
         }
 
         const provinciaDetectada = info.codigoProvincia;
-        const modalidadDetectada = info.modalidad;
-
-        // Verificar que la modalidad coincida con la del sorteo actual
-        if (modalidadDetectada && cpstModalidadSorteo && modalidadDetectada !== cpstModalidadSorteo) {
-          console.log(`XML ${archivo.name} es de modalidad ${modalidadDetectada}, pero el sorteo actual es ${cpstModalidadSorteo}. Ignorando.`);
-          resolve(); // No es error, simplemente no corresponde
-          return;
-        }
+        const modalidadNombreArchivo = info.modalidad;
 
         // Usar la función existente que ya sabe parsear los XMLs correctamente
         const resultado = extraerDatosXML(contenido);
@@ -3914,6 +3943,19 @@ async function procesarArchivoXMLInteligente(archivo) {
         if (!resultado || resultado.numeros.filter(n => n).length === 0) {
           console.warn(`⚠️ No se pudieron extraer números del XML: ${archivo.name}`);
           resolve();
+          return;
+        }
+
+        // PRIORIDAD: Usar modalidad del CONTENIDO del XML si existe, sino la del nombre del archivo
+        const modalidadDelContenido = resultado.modalidad;
+        const modalidadFinal = modalidadDelContenido || modalidadNombreArchivo;
+
+        console.log(`[XML] ${archivo.name}: Modalidad nombre archivo=${modalidadNombreArchivo}, contenido XML=${modalidadDelContenido}, usando=${modalidadFinal}`);
+
+        // Verificar que la modalidad coincida con la del sorteo actual
+        if (modalidadFinal && cpstModalidadSorteo && modalidadFinal !== cpstModalidadSorteo) {
+          console.log(`XML ${archivo.name} es de modalidad ${modalidadFinal}, pero el sorteo actual es ${cpstModalidadSorteo}. Ignorando.`);
+          resolve(); // No es error, simplemente no corresponde
           return;
         }
 
@@ -3926,9 +3968,36 @@ async function procesarArchivoXMLInteligente(archivo) {
 
         // Guardar en BD y agregar a lista local
         const fecha = cpResultadosActuales?.sorteo?.fecha || new Date().toISOString().split('T')[0];
-        const modalidad = modalidadDetectada || cpstModalidadSorteo || 'M';
+        const modalidad = modalidadFinal || cpstModalidadSorteo || 'M';
 
         console.log(`[XML] Procesando ${archivo.name}: Provincia=${provinciaNombre}, Modalidad=${modalidad}, Números=${numeros.filter(n=>n).length}, Letras=${letras.length}`);
+
+        // VERIFICAR CONTRA PROGRAMACIÓN antes de guardar
+        try {
+          const verificacion = await programacionAPI.verificarSorteo(fecha, modalidad, 'Quiniela');
+          if (verificacion.success && verificacion.data) {
+            if (!verificacion.data.encontrado) {
+              // No existe sorteo programado para esa fecha/modalidad
+              const modalidadNombre = { 'R': 'LA PREVIA', 'P': 'LA PRIMERA', 'M': 'MATUTINA', 'V': 'VESPERTINA', 'N': 'NOCTURNA' }[modalidad] || modalidad;
+              console.warn(`⚠️ ${archivo.name}: No hay sorteo de ${modalidadNombre} programado para ${fecha}`);
+              if (verificacion.data.modalidadesProgramadas?.length > 0) {
+                const disponibles = verificacion.data.modalidadesProgramadas.map(m => m.nombre).join(', ');
+                console.warn(`   Modalidades disponibles: ${disponibles}`);
+                showToast(`XML ${archivo.name}: No hay ${modalidadNombre} programada para ${fecha}. Disponibles: ${disponibles}`, 'warning');
+              } else {
+                showToast(`XML ${archivo.name}: No hay sorteos programados para ${fecha}`, 'warning');
+              }
+              resolve();
+              return;
+            } else {
+              // Sorteo encontrado - mostrar info
+              console.log(`✓ ${archivo.name}: Verificado contra programación - Sorteo #${verificacion.data.sorteo.numeroSorteo} (${verificacion.data.sorteo.modalidad_nombre})`);
+            }
+          }
+        } catch (verError) {
+          console.warn('No se pudo verificar contra programación:', verError.message);
+          // Continuar sin verificar (puede no tener programación cargada)
+        }
 
         if (provinciaIdx !== null && provinciaIdx !== undefined) {
           try {

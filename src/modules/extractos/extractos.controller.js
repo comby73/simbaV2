@@ -29,14 +29,21 @@ const guardarExtracto = async (req, res, next) => {
     const [juegoRows] = await conn.query('SELECT id FROM juegos WHERE nombre LIKE ? OR codigo = ?', ['%Quiniela%', 'QUINIELA']);
     const juegoId = juegoRows.length > 0 ? juegoRows[0].id : 1;
 
-    // 3. Sorteo
-    const modMap = { 'R': 'Previa', 'P': 'Primera', 'M': 'Matutina', 'V': 'Vespertina', 'N': 'Nocturna' };
-    const modalidadNombre = modMap[modalidad] || modalidad;
+    // 3. Sorteo - Mapeo de código de modalidad a nombre y código de sorteo
+    const modMap = {
+      'R': { nombre: 'Previa', codigo: 'PREV' },
+      'P': { nombre: 'Primera', codigo: 'PRIM' },
+      'M': { nombre: 'Matutina', codigo: 'MAT' },
+      'V': { nombre: 'Vespertina', codigo: 'VESP' },
+      'N': { nombre: 'Nocturna', codigo: 'NOCT' }
+    };
+    const modalidadInfo = modMap[modalidad] || { nombre: modalidad, codigo: modalidad };
     const [sorteoRows] = await conn.query(
-      `SELECT id FROM sorteos WHERE juego_id = ? AND (nombre LIKE ? OR codigo LIKE ?)`,
-      [juegoId, `%${modalidadNombre}%`, `%${modalidad}%`]
+      `SELECT id FROM sorteos WHERE juego_id = ? AND (nombre = ? OR codigo = ?)`,
+      [juegoId, modalidadInfo.nombre, modalidadInfo.codigo]
     );
     const sorteoId = sorteoRows.length > 0 ? sorteoRows[0].id : 1;
+    console.log(`[EXTRACTOS] Modalidad: ${modalidad} -> Buscando sorteo: nombre="${modalidadInfo.nombre}", codigo="${modalidadInfo.codigo}" -> sorteo_id=${sorteoId}`);
 
     // 4. Letras
     let letrasJson = null;
@@ -117,13 +124,19 @@ const guardarExtractosBulk = async (req, res, next) => {
         const [juegoRows] = await conn.query('SELECT id FROM juegos WHERE nombre LIKE ? OR codigo = ?', ['%Quiniela%', 'QUINIELA']);
         const juegoId = juegoRows.length > 0 ? juegoRows[0].id : 1;
 
-        // 3. Mapeo de Sorteo
-        const modMap = { 'R': 'Previa', 'P': 'Primera', 'M': 'Matutina', 'V': 'Vespertina', 'N': 'Nocturna' };
-        const modalidadNombre = modMap[modalidad] || modalidad;
+        // 3. Mapeo de Sorteo - Búsqueda exacta por nombre o código
+        const modMap = {
+          'R': { nombre: 'Previa', codigo: 'PREV' },
+          'P': { nombre: 'Primera', codigo: 'PRIM' },
+          'M': { nombre: 'Matutina', codigo: 'MAT' },
+          'V': { nombre: 'Vespertina', codigo: 'VESP' },
+          'N': { nombre: 'Nocturna', codigo: 'NOCT' }
+        };
+        const modalidadInfo = modMap[modalidad] || { nombre: modalidad, codigo: modalidad };
 
         const [sorteoRows] = await conn.query(
-          `SELECT id FROM sorteos WHERE juego_id = ? AND (nombre LIKE ? OR codigo LIKE ?)`,
-          [juegoId, `%${modalidadNombre}%`, `%${modalidad}%`]
+          `SELECT id FROM sorteos WHERE juego_id = ? AND (nombre = ? OR codigo = ?)`,
+          [juegoId, modalidadInfo.nombre, modalidadInfo.codigo]
         );
         const sorteoId = sorteoRows.length > 0 ? sorteoRows[0].id : 1;
 
