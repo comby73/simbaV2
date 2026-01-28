@@ -3866,20 +3866,18 @@ async function procesarArchivoXMLInteligente(archivo) {
     reader.onload = async function(e) {
       try {
         const contenido = e.target.result;
-        const parser = new DOMParser();
-        const xmlDoc = parser.parseFromString(contenido, 'text/xml');
 
-        // Detectar provincia y modalidad del nombre del archivo
-        const nombreArchivo = archivo.name.toUpperCase();
-        let provinciaDetectada = null;
-        let modalidadDetectada = null;
+        // Detectar provincia y modalidad del nombre del archivo usando la función existente
+        const info = parsearNombreArchivoXML(archivo.name);
 
-        // Patrones: QNL51M20260116.xml
-        const match = nombreArchivo.match(/QNL(\d{2})([RPMVN])/);
-        if (match) {
-          provinciaDetectada = match[1]; // 51, 53, 55, etc.
-          modalidadDetectada = match[2]; // R, P, M, V, N
+        if (!info) {
+          console.warn(`⚠️ Archivo XML no reconocido: ${archivo.name}`);
+          resolve(); // No es error crítico
+          return;
         }
+
+        const provinciaDetectada = info.codigoProvincia;
+        const modalidadDetectada = info.modalidad;
 
         // Verificar que la modalidad coincida con la del sorteo actual
         if (modalidadDetectada && cpstModalidadSorteo && modalidadDetectada !== cpstModalidadSorteo) {
@@ -3888,60 +3886,27 @@ async function procesarArchivoXMLInteligente(archivo) {
           return;
         }
 
-        // Extraer números del XML
-        const numeros = [];
-        const numeroNodes = xmlDoc.querySelectorAll('numero');
-        if (numeroNodes.length > 0) {
-          numeroNodes.forEach(node => {
-            const posicion = node.getAttribute('posicion') || node.getAttribute('pos');
-            const valor = node.textContent.trim();
-            if (posicion && valor) {
-              numeros[parseInt(posicion) - 1] = valor.padStart(4, '0');
-            }
-          });
-        } else {
-          // Fallback: buscar otros formatos de XML
-          const extractoNode = xmlDoc.querySelector('extracto, resultado, sorteo');
-          if (extractoNode) {
-            for (let i = 1; i <= 20; i++) {
-              const numNode = extractoNode.querySelector(`num${i}, numero${i}, pos${i}`);
-              if (numNode) {
-                numeros[i - 1] = numNode.textContent.trim().padStart(4, '0');
-              }
-            }
-          }
+        // Usar la función existente que ya sabe parsear los XMLs correctamente
+        const resultado = extraerDatosXML(contenido);
+
+        if (!resultado || resultado.numeros.filter(n => n).length === 0) {
+          console.warn(`⚠️ No se pudieron extraer números del XML: ${archivo.name}`);
+          resolve();
+          return;
         }
 
-        // Rellenar faltantes
-        for (let i = 0; i < 20; i++) {
-          if (!numeros[i]) numeros[i] = '0000';
-        }
+        const numeros = resultado.numeros;
+        const letras = resultado.letras || [];
 
-        // Extraer letras si existen
-        const letras = [];
-        const letraNodes = xmlDoc.querySelectorAll('letra');
-        letraNodes.forEach(node => {
-          const valor = node.textContent.trim().toUpperCase();
-          if (valor && valor.length === 1) letras.push(valor);
-        });
-
-        // Mapear código de provincia a índice
-        const codigoToIndex = {
-          '51': 0, // CABA
-          '53': 1, // Buenos Aires
-          '55': 2, // Córdoba
-          '72': 3, // Santa Fe
-          '00': 4, // Montevideo
-          '64': 5, // Mendoza
-          '59': 6  // Entre Ríos
-        };
-
-        const provinciaIdx = provinciaDetectada ? codigoToIndex[provinciaDetectada] : null;
-        const provinciaNombres = ['CABA', 'Buenos Aires', 'Córdoba', 'Santa Fe', 'Montevideo', 'Mendoza', 'Entre Ríos'];
+        // Usar la info de provincia del parser
+        const provinciaIdx = info.provincia.index;
+        const provinciaNombre = info.provincia.nombre;
 
         // Guardar en BD y agregar a lista local
         const fecha = cpResultadosActuales?.sorteo?.fecha || new Date().toISOString().split('T')[0];
         const modalidad = modalidadDetectada || cpstModalidadSorteo || 'M';
+
+        console.log(`[XML] Procesando ${archivo.name}: Provincia=${provinciaNombre}, Modalidad=${modalidad}, Números=${numeros.filter(n=>n).length}, Letras=${letras.length}`);
 
         if (provinciaIdx !== null && provinciaIdx !== undefined) {
           try {
@@ -3956,7 +3921,7 @@ async function procesarArchivoXMLInteligente(archivo) {
 
             const extracto = {
               index: provinciaIdx,
-              nombre: provinciaNombres[provinciaIdx],
+              nombre: provinciaNombre,
               numeros: numeros,
               letras: letras,
               fuente: 'xml',
@@ -3976,7 +3941,7 @@ async function procesarArchivoXMLInteligente(archivo) {
             // Igual agregar localmente
             const extracto = {
               index: provinciaIdx,
-              nombre: provinciaNombres[provinciaIdx],
+              nombre: provinciaNombre,
               numeros: numeros,
               letras: letras,
               fuente: 'xml',
