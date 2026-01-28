@@ -1,15 +1,17 @@
-// API Client
 // Detectar el entorno: producción, Apache local (XAMPP), Node.js directo, o archivo
 const isFile = window.location.protocol === 'file:' || window.location.protocol === 'null:';
-const isProduction = window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1';
-const isApache = (window.location.port === '' || window.location.port === '80') && !isFile && !isProduction;
+const isLocal = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1' || window.location.hostname.startsWith('192.168.') || window.location.hostname.startsWith('10.');
+const isProduction = !isLocal;
+const isApache = (window.location.port === '' || window.location.port === '80') && !isFile && isLocal;
 
 // Configurar API_BASE según el entorno:
 // - Producción (Hostinger): /api
-// - Apache local (XAMPP): /simbaV2/public/api  
-// - Node.js directo: /api
-// - Archivo local: http://localhost:3000/api
-const API_BASE = isFile ? 'http://localhost:3000/api' : (isProduction ? '/api' : (isApache ? '/simbaV2/public/api' : '/api'));
+// - Apache local (XAMPP/WAMP): /simbaV2/public/api  
+// - Servidor de desarrollo (Vite/Node/Puerto 3000): /api
+// - Archivo local: http://localhost/simbaV2/public/api
+const API_BASE = isFile ? 'http://localhost/simbaV2/public/api' : (isProduction ? '/api' : (isApache ? '/simbaV2/public/api' : '/api'));
+
+console.log(`[SIMBA] Entorno detectado: ${isProduction ? 'Producción' : 'Desarrollo'} | API_BASE: ${API_BASE}`);
 
 const getToken = () => localStorage.getItem('cl_token');
 const setToken = (token) => localStorage.setItem('cl_token', token);
@@ -25,7 +27,7 @@ const removeUser = () => localStorage.removeItem('cl_user');
 async function apiRequest(endpoint, options = {}) {
   const url = `${API_BASE}${endpoint}`;
   const token = getToken();
-  
+
   const config = {
     headers: {
       'Content-Type': 'application/json',
@@ -35,20 +37,42 @@ async function apiRequest(endpoint, options = {}) {
     ...options
   };
 
+  // Timeout de 30 segundos para evitar colgaduras infinitas
+  const controller = new AbortController();
+  const id = setTimeout(() => controller.abort(), 30000);
+  config.signal = controller.signal;
+
   try {
+    console.log(`[SIMBA] Solicitud API: ${url}`, options.body ? JSON.parse(options.body) : '');
     const response = await fetch(url, config);
-    const data = await response.json();
-    
+    clearTimeout(id);
+
+    // Intentar parsear JSON solo si hay contenido
+    const contentType = response.headers.get("content-type");
+    let data;
+    if (contentType && contentType.includes("application/json")) {
+      data = await response.json();
+    } else {
+      const text = await response.text();
+      data = { success: response.ok, message: text || 'Respuesta sin formato JSON' };
+    }
+
     if (!response.ok) {
       if (response.status === 401) {
+        console.warn('[SIMBA] Sesión expirada o no autorizada (401)');
         handleLogout();
       }
-      throw new Error(data.message || 'Error en la solicitud');
+      throw new Error(data.message || `Error del servidor (${response.status})`);
     }
-    
+
     return data;
   } catch (error) {
-    console.error('API Error:', error);
+    clearTimeout(id);
+    if (error.name === 'AbortError') {
+      console.error('[SIMBA] La solicitud excedió el tiempo límite (30s)');
+      throw new Error('Tiempo de espera agotado. El servidor no responde.');
+    }
+    console.error('[SIMBA] Error en apiRequest:', error);
     throw error;
   }
 }
@@ -66,11 +90,11 @@ const authAPI = {
     }
     return response;
   },
-  
+
   getProfile: () => apiRequest('/auth/profile'),
   verify: () => apiRequest('/auth/verify'),
-  
-  changePassword: (currentPassword, newPassword) => 
+
+  changePassword: (currentPassword, newPassword) =>
     apiRequest('/auth/change-password', {
       method: 'POST',
       body: JSON.stringify({ currentPassword, newPassword })
@@ -82,17 +106,17 @@ const usersAPI = {
   getAll: () => apiRequest('/users'),
   getById: (id) => apiRequest(`/users/${id}`),
   getRoles: () => apiRequest('/users/roles'),
-  
+
   create: (data) => apiRequest('/users', {
     method: 'POST',
     body: JSON.stringify(data)
   }),
-  
+
   update: (id, data) => apiRequest(`/users/${id}`, {
     method: 'PUT',
     body: JSON.stringify(data)
   }),
-  
+
   resetPassword: (id, newPassword) => apiRequest(`/users/${id}/reset-password`, {
     method: 'POST',
     body: JSON.stringify({ newPassword })
@@ -110,7 +134,7 @@ const controlPrevioAPI = {
   procesarQuiniela: async (file) => {
     const formData = new FormData();
     formData.append('archivo', file);
-    
+
     const token = getToken();
     const response = await fetch(`${API_BASE}/control-previo/quiniela/procesar`, {
       method: 'POST',
@@ -119,7 +143,7 @@ const controlPrevioAPI = {
       },
       body: formData
     });
-    
+
     const data = await response.json();
     if (!response.ok) {
       throw new Error(data.message || 'Error procesando archivo');
@@ -130,7 +154,7 @@ const controlPrevioAPI = {
   procesarPoceada: async (file) => {
     const formData = new FormData();
     formData.append('archivo', file);
-    
+
     const token = getToken();
     const response = await fetch(`${API_BASE}/control-previo/poceada/procesar-zip`, {
       method: 'POST',
@@ -139,14 +163,14 @@ const controlPrevioAPI = {
       },
       body: formData
     });
-    
+
     const data = await response.json();
     if (!response.ok) {
       throw new Error(data.message || 'Error procesando Poceada');
     }
     return data;
   },
-  
+
   guardarQuiniela: (datos) => apiRequest('/control-previo/quiniela/guardar', {
     method: 'POST',
     body: JSON.stringify(datos)
@@ -158,7 +182,7 @@ const controlPrevioAPI = {
   }),
 
   buscarPozoPoceada: (sorteo) => apiRequest(`/control-previo/poceada/buscar-pozo/${sorteo}`),
-  
+
   getHistorial: (params = {}) => {
     const query = new URLSearchParams(params).toString();
     return apiRequest(`/control-previo/historial${query ? `?${query}` : ''}`);
@@ -196,7 +220,7 @@ const agenciasAPI = {
     const formData = new FormData();
     formData.append('excel', file);
     formData.append('reemplazar', reemplazar);
-    
+
     const token = getToken();
     const response = await fetch(`${API_BASE}/agencias/cargar-excel`, {
       method: 'POST',
@@ -205,19 +229,19 @@ const agenciasAPI = {
       },
       body: formData
     });
-    
+
     const data = await response.json();
     if (!response.ok) {
       throw new Error(data.message || 'Error cargando Excel');
     }
     return data;
   },
-  
+
   obtenerTodas: (params = {}) => {
     const query = new URLSearchParams(params).toString();
     return apiRequest(`/agencias${query ? `?${query}` : ''}`);
   },
-  
+
   buscar: (numero) => apiRequest(`/agencias/buscar/${numero}`)
 };
 
@@ -235,6 +259,10 @@ const extractosAPI = {
   guardarBulk: (extractos) => apiRequest('/extractos/bulk', {
     method: 'POST',
     body: JSON.stringify({ extractos })
+  }),
+  actualizar: (id, data) => apiRequest(`/extractos/${id}`, {
+    method: 'PUT',
+    body: JSON.stringify(data)
   }),
   eliminar: (id) => apiRequest(`/extractos/${id}`, {
     method: 'DELETE'

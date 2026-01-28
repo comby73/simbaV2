@@ -22,6 +22,10 @@ router.post('/', extractosController.guardarExtracto);
 // POST /api/extractos/bulk
 router.post('/bulk', extractosController.guardarExtractosBulk);
 
+// Actualizar extracto (edición de números)
+// PUT /api/extractos/:id
+router.put('/:id', extractosController.actualizarExtracto);
+
 // Eliminar extracto
 // DELETE /api/extractos/:id
 router.delete('/:id', extractosController.eliminarExtracto);
