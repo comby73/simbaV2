@@ -57,7 +57,13 @@ app.get('/health', async (req, res) => {
     uptime: process.uptime(),
     database: dbStatus ? 'connected' : 'error',
     env: process.env.NODE_ENV,
-    time: new Date().toISOString()
+    time: new Date().toISOString(),
+    db_config: {
+      host: process.env.DB_HOST || '(vacío)',
+      user: process.env.DB_USER || '(vacío)',
+      name: process.env.DB_NAME || '(vacío)',
+      hasPassword: !!process.env.DB_PASSWORD
+    }
   });
 });
 
