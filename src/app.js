@@ -84,23 +84,7 @@ app.use(express.urlencoded({ extended: true, limit: '200mb' }));
 // Archivos estáticos
 app.use(express.static(path.join(__dirname, '../public')));
 
-// Rutas de la API
-app.use('/api/auth', authRoutes);
-app.use('/api/users', usersRoutes);
-app.use('/api/control-previo', controlPrevioRoutes);
-app.use('/api/control-posterior', controlPosteriorRoutes);
-app.use('/api/actas', actasRoutes);
-app.use('/api/agencias', agenciasRoutes);
-app.use('/api/programacion', programacionRoutes);
-app.use('/api/historial', historialRoutes);
-app.use('/api/extractos', extractosRoutes);
-
-// Ruta principal
-app.get('/', (req, res) => {
-  res.sendFile(path.join(__dirname, '../public/index.html'));
-});
-
-// Health check y versión
+// Health check y versión (ANTES de las rutas de módulos para que siempre respondan)
 app.get('/api/health', (req, res) => {
   res.json({
     status: 'ok',
@@ -116,6 +100,22 @@ app.get('/api/version', (req, res) => {
     app: 'SIMBA V2',
     environment: process.env.NODE_ENV || 'development'
   });
+});
+
+// Rutas de la API
+app.use('/api/auth', authRoutes);
+app.use('/api/users', usersRoutes);
+app.use('/api/control-previo', controlPrevioRoutes);
+app.use('/api/control-posterior', controlPosteriorRoutes);
+app.use('/api/actas', actasRoutes);
+app.use('/api/agencias', agenciasRoutes);
+app.use('/api/programacion', programacionRoutes);
+app.use('/api/historial', historialRoutes);
+app.use('/api/extractos', extractosRoutes);
+
+// Ruta principal
+app.get('/', (req, res) => {
+  res.sendFile(path.join(__dirname, '../public/index.html'));
 });
 
 // Manejo de errores
