@@ -611,10 +611,143 @@ Los siguientes archivos en `simba/public_html/` contienen lógica de referencia:
 
 ---
 
-**Última actualización**: 17 de Enero, 2026  
-**Estado**: 
+---
+
+## 🆕 Actualizaciones Enero 2026 (Últimas)
+
+### Extractos - Detección de Modalidad desde XML
+
+**Problema resuelto:** Los archivos XML tenían nombres con una modalidad (ej: `QNL51P...` = Primera) pero el contenido XML decía otra modalidad (`<Modalidad>LA PREVIA</Modalidad>`).
+
+**Solución implementada:**
+1. El sistema ahora lee la modalidad del **contenido XML**, no del nombre del archivo
+2. La función `extraerDatosXML()` extrae `<Modalidad>` del XML y la retorna junto con números y letras
+3. Se prioriza la modalidad del contenido sobre la del nombre del archivo
+
+**Mapeo de modalidades:**
+| Código | Nombre XML | Nombre BD | Código Sorteo |
+|--------|------------|-----------|---------------|
+| R | LA PREVIA | Previa | PREV |
+| P | LA PRIMERA | Primera | PRIM |
+| M | MATUTINA | Matutina | MAT |
+| V | VESPERTINA | Vespertina | VESP |
+| N | NOCTURNA | Nocturna | NOCT |
+
+**Archivos modificados:**
+- `public/js/app.js`: `extraerDatosXML()`, `procesarArchivoXMLInteligente()`, `procesarMultiplesXML()`
+- `src/modules/extractos/extractos.controller.js`: Búsqueda exacta de sorteo (sin LIKE)
+
+### Validación contra Programación
+
+**Nueva funcionalidad:** Antes de guardar un extracto, el sistema verifica que exista un sorteo programado para esa fecha + modalidad.
+
+**Endpoint nuevo:**
+```
+GET /api/programacion/verificar?fecha=YYYY-MM-DD&modalidad=R&juego=Quiniela
+```
+
+**Respuesta si existe:**
+```json
+{
+  "encontrado": true,
+  "sorteo": {
+    "numeroSorteo": "51957",
+    "fecha": "2026-01-28",
+    "modalidad_nombre": "LA PREVIA",
+    "provincias": { "caba": 1, "bsas": 1, ... }
+  }
+}
+```
+
+**Respuesta si NO existe:**
+```json
+{
+  "encontrado": false,
+  "mensaje": "No hay sorteo de LA PREVIA programado para 2026-01-28",
+  "modalidadesProgramadas": [
+    { "codigo": "P", "nombre": "LA PRIMERA", "numeroSorteo": "51958" }
+  ]
+}
+```
+
+**Archivos modificados:**
+- `src/modules/programacion/programacion.controller.js`: Nueva función `verificarSorteo()`
+- `src/modules/programacion/programacion.routes.js`: Nueva ruta `/verificar`
+- `public/js/api.js`: Nueva API `programacionAPI.verificarSorteo()`
+
+### Breakdown de Tickets en Reportes
+
+**Nueva funcionalidad:** Los reportes ahora muestran:
+- **Tickets (Total)**: Incluye anulados
+- **Tickets Válidos**: Total - Anulados
+- **Anulados**: Tickets cancelados
+
+**Implementado en:**
+- Control Previo (HTML y PDF)
+- Control Posterior (HTML y PDF)
+
+**Archivos modificados:**
+- `public/index.html`: Nuevas tarjetas de estadísticas
+- `public/js/app.js`: `mostrarResultadosCP()`, `mostrarResultadosEscrutinio()`
+- `src/modules/actas/actas.controller.js`: PDFs de Control Previo y Posterior
+
+### Extractos Sorteados en Control Posterior
+
+**Nueva funcionalidad:** Después del escrutinio, se muestran los 20 números y letras de cada provincia.
+
+**Implementado en:**
+- HTML: Nueva sección `#cpst-extractos-sorteados`
+- PDF: Sección final con todos los extractos
+
+**Estilos:**
+- Cabeza (posición 1) resaltada en amarillo
+- Letras en color warning
+- Grid responsive de 10 columnas
+
+### Tabla de Sorteos (Base de Datos)
+
+Se agregó el sorteo **Previa** que faltaba:
+
+```sql
+INSERT INTO sorteos (juego_id, nombre, codigo) VALUES (1, 'Previa', 'PREV');
+```
+
+| id | nombre | codigo |
+|----|--------|--------|
+| 1 | Primera | PRIM |
+| 2 | Matutina | MAT |
+| 3 | Vespertina | VESP |
+| 4 | Nocturna | NOCT |
+| 11 | Previa | PREV |
+
+### APIs del Frontend
+
+**extractosAPI** (api.js):
+```javascript
+extractosAPI.listar(params)      // GET /api/extractos
+extractosAPI.guardar(data)       // POST /api/extractos
+extractosAPI.guardarBulk(arr)    // POST /api/extractos/bulk
+extractosAPI.actualizar(id,data) // PUT /api/extractos/:id
+extractosAPI.eliminar(id)        // DELETE /api/extractos/:id
+```
+
+**programacionAPI** (api.js) - NUEVO:
+```javascript
+programacionAPI.verificarSorteo(fecha, modalidad, juego)  // GET /api/programacion/verificar
+programacionAPI.getSorteosPorFecha(fecha, juego)          // GET /api/programacion/fecha
+programacionAPI.getSorteoPorNumero(numero, juego)         // GET /api/programacion/sorteo/:numero
+```
+
+---
+
+**Última actualización**: 28 de Enero, 2026
+**Estado**:
 - ✅ Quiniela: Completo y Optimizado
+- ✅ Detección de modalidad desde contenido XML
+- ✅ Validación contra programación
+- ✅ Breakdown de tickets (Total/Válidos/Anulados)
+- ✅ Extractos sorteados en reportes
 - 🚧 Poceada: En Planificación (Control Previo y Escrutinio pendientes)
 - 📋 Loto y otros juegos: Futuro
 
-**Versión del Documento**: 2.0
+**Versión del Documento**: 2.1
