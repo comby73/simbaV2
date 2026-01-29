@@ -417,6 +417,8 @@
                 <label class="form-label">Modalidad</label>
                 <select class="form-control" id="extractos-filtro-modalidad">
                   <option value="">Todas</option>
+                  <option value="R">Previa</option>
+                  <option value="P">Primera</option>
                   <option value="M">Matutina</option>
                   <option value="V">Vespertina</option>
                   <option value="N">Nocturna</option>
@@ -425,6 +427,11 @@
               <div class="col-md-2">
                 <button class="btn btn-primary w-100" onclick="buscarExtractos()">
                   <i class="fas fa-search"></i> Buscar
+                </button>
+              </div>
+              <div class="col-md-2">
+                <button class="btn btn-success w-100" onclick="descargarExtractosExcel()" id="btn-descargar-extractos" disabled>
+                  <i class="fas fa-file-excel"></i> Descargar Excel
                 </button>
               </div>
             </div>

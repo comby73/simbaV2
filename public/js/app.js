@@ -276,13 +276,18 @@ function initExtractosFiltros() {
 }
 
 // Buscar extractos según filtros
+let ultimosExtractosBuscados = []; // Para descarga Excel
+
 async function buscarExtractos() {
   const fecha = document.getElementById('extractos-fecha').value;
   const juego = document.getElementById('extractos-filtro-juego').value;
   const modalidad = document.getElementById('extractos-filtro-modalidad').value;
 
   const container = document.getElementById('extractos-resultados');
+  const btnExcel = document.getElementById('btn-descargar-extractos');
   container.innerHTML = '<div class="text-center py-4"><i class="fas fa-spinner fa-spin fa-2x"></i></div>';
+  btnExcel.disabled = true;
+  ultimosExtractosBuscados = [];
 
   try {
     // Usar el nuevo endpoint de extractos
@@ -308,6 +313,9 @@ async function buscarExtractos() {
       return;
     }
 
+    ultimosExtractosBuscados = data.data;
+    btnExcel.disabled = false;
+
     // Renderizar extractos guardados
     container.innerHTML = renderExtractosGuardados(data.data);
 
@@ -317,15 +325,72 @@ async function buscarExtractos() {
   }
 }
 
+// Descargar extractos como Excel (CSV con BOM para compatibilidad)
+function descargarExtractosExcel() {
+  if (!ultimosExtractosBuscados || ultimosExtractosBuscados.length === 0) {
+    showToast('No hay extractos para descargar', 'warning');
+    return;
+  }
+
+  const extractos = ultimosExtractosBuscados;
+
+  // Headers: Fecha, Provincia, Nro Sorteo, Modalidad, Num1..Num20, Letras, Fuente
+  const headers = ['Fecha', 'Provincia', 'Nro Sorteo', 'Modalidad'];
+  for (let i = 1; i <= 20; i++) headers.push(`Num${i}`);
+  headers.push('Letras', 'Fuente');
+
+  const rows = extractos.map(ext => {
+    const fila = [
+      ext.fecha ? ext.fecha.split('T')[0] : '',
+      ext.provincia_nombre || ext.provincia_codigo || '',
+      ext.numero_sorteo || '',
+      ext.sorteo_nombre || ''
+    ];
+    // Números 1-20
+    const nums = ext.numeros || [];
+    for (let i = 0; i < 20; i++) {
+      fila.push(nums[i] !== undefined ? String(nums[i]).padStart(4, '0') : '');
+    }
+    // Letras
+    fila.push(ext.letras ? (Array.isArray(ext.letras) ? ext.letras.join('') : ext.letras) : '');
+    // Fuente
+    fila.push(ext.fuente || 'MANUAL');
+    return fila;
+  });
+
+  // Generar CSV con separador tab para mejor compatibilidad con Excel
+  const sep = '\t';
+  let csv = '\uFEFF'; // BOM UTF-8
+  csv += headers.join(sep) + '\n';
+  rows.forEach(row => {
+    csv += row.map(v => String(v).replace(/\t/g, ' ')).join(sep) + '\n';
+  });
+
+  // Descargar
+  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  const fecha = document.getElementById('extractos-fecha').value || 'todos';
+  a.href = url;
+  a.download = `extractos_${fecha}.xls`;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+
+  showToast(`Descargados ${extractos.length} extractos`, 'success');
+}
+
 // Renderizar lista de extractos guardados
 function renderExtractosGuardados(extractos) {
   return `
     <div class="table-responsive">
-      <table class="table table-sm">
+      <table class="table table-sm" id="tabla-extractos-ver">
         <thead>
           <tr>
             <th>Fecha</th>
             <th>Provincia</th>
+            <th>Nro. Sorteo</th>
             <th>Modalidad</th>
             <th>Números (1-20)</th>
             <th>Letras</th>
@@ -338,6 +403,7 @@ function renderExtractosGuardados(extractos) {
             <tr id="extracto-row-${ext.id}">
               <td>${formatDate(ext.fecha)}</td>
               <td><span class="badge bg-primary">${ext.provincia_nombre || ext.provincia_codigo || '-'}</span></td>
+              <td><strong>${ext.numero_sorteo || '-'}</strong></td>
               <td>${ext.sorteo_nombre || '-'}</td>
               <td>
                 <div id="numeros-display-${ext.id}" style="display: grid; grid-template-columns: repeat(10, 1fr); gap: 4px; font-family: 'JetBrains Mono', monospace; font-size: 0.75rem; min-width: 350px; text-align: center;">

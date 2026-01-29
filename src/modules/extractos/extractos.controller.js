@@ -197,15 +197,28 @@ const listarExtractos = async (req, res) => {
     const { fecha, provincia, modalidad, juego } = req.query;
 
     let sql = `
-      SELECT 
+      SELECT
         e.id, e.fecha, e.numeros, e.letras, e.fuente, e.validado, e.created_at,
         j.nombre as juego_nombre,
         s.nombre as sorteo_nombre, s.codigo as sorteo_codigo,
-        p.nombre as provincia_nombre, p.codigo as provincia_codigo
+        p.nombre as provincia_nombre, p.codigo as provincia_codigo,
+        ps.numero_sorteo
       FROM extractos e
       JOIN juegos j ON e.juego_id = j.id
       JOIN sorteos s ON e.sorteo_id = s.id
       LEFT JOIN provincias p ON e.provincia_id = p.id
+      LEFT JOIN programacion_sorteos ps ON ps.fecha_sorteo = e.fecha
+        AND ps.activo = 1
+        AND ps.modalidad_codigo = (
+          CASE s.codigo
+            WHEN 'PREV' THEN 'R'
+            WHEN 'PRIM' THEN 'P'
+            WHEN 'MAT' THEN 'M'
+            WHEN 'VESP' THEN 'V'
+            WHEN 'NOCT' THEN 'N'
+            ELSE s.codigo
+          END
+        )
       WHERE 1=1
     `;
     const params = [];
