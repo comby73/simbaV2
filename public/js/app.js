@@ -22,7 +22,23 @@ function detectarTipoJuego(fileName) {
 document.addEventListener('DOMContentLoaded', async () => {
   await checkAuth();
   setupEventListeners();
+  cargarVersionApp();
 });
+
+// Cargar versión de la aplicación desde el servidor
+async function cargarVersionApp() {
+  try {
+    const response = await fetch('/api/version');
+    const data = await response.json();
+    const versionEl = document.getElementById('app-version');
+    if (versionEl && data.version) {
+      versionEl.textContent = `v${data.version}`;
+      versionEl.title = `SIMBA ${data.version} | ${data.environment}`;
+    }
+  } catch (e) {
+    // Silencioso si no se puede cargar
+  }
+}
 
 async function checkAuth() {
   const token = getToken();

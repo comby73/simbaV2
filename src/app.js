@@ -24,7 +24,9 @@ const cors = require('cors');
 const helmet = require('helmet');
 const { testConnection } = require('./config/database');
 
-// v2.1.0 - Sistema actualizado con fix de letras en escrutinio
+// Leer versión desde package.json
+const packageJson = require('../package.json');
+const APP_VERSION = packageJson.version;
 
 // Importar rutas
 const authRoutes = require('./modules/auth/auth.routes');
@@ -98,13 +100,21 @@ app.get('/', (req, res) => {
   res.sendFile(path.join(__dirname, '../public/index.html'));
 });
 
-// Health check
+// Health check y versión
 app.get('/api/health', (req, res) => {
-  res.json({ 
-    status: 'ok', 
+  res.json({
+    status: 'ok',
     timestamp: new Date().toISOString(),
-    app: process.env.APP_NAME,
-    version: process.env.APP_VERSION
+    app: 'SIMBA V2',
+    version: APP_VERSION
+  });
+});
+
+app.get('/api/version', (req, res) => {
+  res.json({
+    version: APP_VERSION,
+    app: 'SIMBA V2',
+    environment: process.env.NODE_ENV || 'development'
   });
 });
 
