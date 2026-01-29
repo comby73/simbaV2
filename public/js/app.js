@@ -5876,15 +5876,32 @@ function updateDashboardGameIndicator() {
 // Cargar filtros disponibles
 async function cargarFiltrosDashboard() {
   try {
-    const response = await fetch(`${API_BASE}/historial/dashboard/filtros`, {
-      headers: { 'Authorization': `Bearer ${getToken()}` }
-    });
+    // Cargar filtros y agencias en paralelo
+    const [filtrosRes, agenciasRes] = await Promise.all([
+      fetch(`${API_BASE}/historial/dashboard/filtros`, {
+        headers: { 'Authorization': `Bearer ${getToken()}` }
+      }),
+      fetch(`${API_BASE}/agencias?activas=true`, {
+        headers: { 'Authorization': `Bearer ${getToken()}` }
+      })
+    ]);
 
-    const data = await response.json();
+    const filtrosData = await filtrosRes.json();
+    if (filtrosData.success) {
+      console.log('Filtros dashboard:', filtrosData.data);
+    }
 
-    if (data.success) {
-      // Se podrían usar estos rangos para validación o sugerencias
-      console.log('Filtros dashboard:', data.data);
+    // Poblar select de agencias
+    const agenciasData = await agenciasRes.json();
+    if (agenciasData.success && agenciasData.data) {
+      const select = document.getElementById('dash-agencia');
+      select.innerHTML = '<option value="">Todas las agencias (' + agenciasData.data.length + ')</option>';
+      agenciasData.data.forEach(ag => {
+        const opt = document.createElement('option');
+        opt.value = ag.numero;
+        opt.textContent = ag.numero + ' - ' + (ag.nombre || ag.barrio || 'Sin nombre');
+        select.appendChild(opt);
+      });
     }
   } catch (error) {
     console.error('Error cargando filtros:', error);
@@ -5994,31 +6011,69 @@ function actualizarStatsDashboard(stats) {
   }
 }
 
+// Variable global para ordenamiento de tabla
+let dashboardSortColumn = null;
+let dashboardSortDirection = 'desc';
+
+// Ordenar datos del dashboard por columna
+function sortDashboardData(column) {
+  if (dashboardSortColumn === column) {
+    dashboardSortDirection = dashboardSortDirection === 'desc' ? 'asc' : 'desc';
+  } else {
+    dashboardSortColumn = column;
+    dashboardSortDirection = 'desc';
+  }
+  const tipoConsulta = document.getElementById('dash-tipo-consulta')?.value || 'agencias';
+  renderTablaDashboard(tipoConsulta);
+}
+
+// Generar header sorteable
+function sortableHeader(label, column, align) {
+  const isActive = dashboardSortColumn === column;
+  const icon = isActive ? (dashboardSortDirection === 'asc' ? '&#9650;' : '&#9660;') : '&#9650;&#9660;';
+  const cls = `sortable-header ${align || ''} ${isActive ? 'sort-' + dashboardSortDirection : ''}`;
+  return `<th class="${cls}" onclick="sortDashboardData('${column}')">${label} <span class="sort-icon">${icon}</span></th>`;
+}
+
+// Ordenar array por columna y dirección
+function sortDataBy(data, column, direction) {
+  return [...data].sort((a, b) => {
+    let va = a[column] || 0;
+    let vb = b[column] || 0;
+    if (typeof va === 'string' && !isNaN(parseFloat(va))) va = parseFloat(va);
+    if (typeof vb === 'string' && !isNaN(parseFloat(vb))) vb = parseFloat(vb);
+    if (typeof va === 'string') return direction === 'asc' ? va.localeCompare(vb) : vb.localeCompare(va);
+    return direction === 'asc' ? va - vb : vb - va;
+  });
+}
+
 // Renderizar tabla según tipo de consulta
 function renderTablaDashboard(tipoConsulta) {
   const thead = document.getElementById('table-dashboard-header');
   const tbody = document.getElementById('table-dashboard-body');
 
   if (tipoConsulta === 'agencias' || tipoConsulta === 'totalizado') {
-    // Vista por Agencia - Premios pagados
-    // Agencias 51 se muestran individual, otras provincias agrupadas
+    // Vista por Agencia - Premios pagados + recaudación + anuladas
     thead.innerHTML = `
       <tr>
-        <th>Agencia / Provincia</th>
+        ${sortableHeader('Agencia / Provincia', 'agencia', '')}
         <th>Juego</th>
-        <th class="text-end">Sorteos</th>
-        <th class="text-end">Ganadores</th>
-        <th class="text-end">Premios Pagados</th>
+        ${sortableHeader('Sorteos', 'total_sorteos', 'text-end')}
+        ${sortableHeader('Tickets', 'total_tickets', 'text-end')}
+        ${sortableHeader('Apuestas', 'total_apuestas', 'text-end')}
+        ${sortableHeader('Anulados', 'total_anulados', 'text-end')}
+        ${sortableHeader('Recaudaci\u00f3n', 'total_recaudacion', 'text-end')}
+        ${sortableHeader('Ganadores', 'total_ganadores', 'text-end')}
+        ${sortableHeader('Premios Pagados', 'total_premios', 'text-end')}
       </tr>
     `;
 
-    // Ordenar por premios de mayor a menor
-    const datosOrdenados = [...dashboardData].sort((a, b) =>
-      parseFloat(b.total_premios || 0) - parseFloat(a.total_premios || 0)
-    );
+    // Ordenar por columna seleccionada o premios por defecto
+    const sortCol = dashboardSortColumn || 'total_premios';
+    const sortDir = dashboardSortColumn ? dashboardSortDirection : 'desc';
+    const datosOrdenados = sortDataBy(dashboardData, sortCol, sortDir);
 
     tbody.innerHTML = datosOrdenados.map((item, idx) => {
-      // Si es provincia (no 51), mostrar nombre de provincia
       const esProvinciaAgrupada = item.codigo_provincia && item.codigo_provincia !== '51';
       const displayAgencia = esProvinciaAgrupada
         ? `<span class="badge bg-secondary">${item.nombre || item.agencia}</span>`
@@ -6029,6 +6084,10 @@ function renderTablaDashboard(tipoConsulta) {
           <td>${displayAgencia}</td>
           <td><span class="badge game-${item.juego}">${(item.juego || '').toUpperCase()}</span></td>
           <td class="text-end">${formatNumber(item.total_sorteos || 0)}</td>
+          <td class="text-end">${formatNumber(item.total_tickets || 0)}</td>
+          <td class="text-end">${formatNumber(item.total_apuestas || 0)}</td>
+          <td class="text-end text-warning">${formatNumber(item.total_anulados || 0)}</td>
+          <td class="text-end text-primary">$${formatNumber(item.total_recaudacion || 0)}</td>
           <td class="text-end">${formatNumber(item.total_ganadores || 0)}</td>
           <td class="text-end text-success"><strong>$${formatNumber(item.total_premios || 0)}</strong></td>
         </tr>
@@ -6036,25 +6095,25 @@ function renderTablaDashboard(tipoConsulta) {
     }).join('');
 
   } else if (tipoConsulta === 'agencias_venta') {
-    // NUEVO: Vista por Agencia - Ventas/Recaudación
+    // Vista por Agencia - Ventas/Recaudación
     thead.innerHTML = `
       <tr>
-        <th>Agencia / Provincia</th>
+        ${sortableHeader('Agencia / Provincia', 'agencia', '')}
         <th>Juego</th>
-        <th class="text-end">Sorteos</th>
-        <th class="text-end">Tickets</th>
-        <th class="text-end">Apuestas</th>
-        <th class="text-end">Recaudación</th>
+        ${sortableHeader('Sorteos', 'total_sorteos', 'text-end')}
+        ${sortableHeader('Tickets', 'total_tickets', 'text-end')}
+        ${sortableHeader('Apuestas', 'total_apuestas', 'text-end')}
+        ${sortableHeader('Anulados', 'total_anulados', 'text-end')}
+        ${sortableHeader('$ Anulados', 'total_recaudacion_anulada', 'text-end')}
+        ${sortableHeader('Recaudaci\u00f3n', 'total_recaudacion', 'text-end')}
       </tr>
     `;
 
-    // Ordenar por recaudación de mayor a menor
-    const datosOrdenados = [...dashboardData].sort((a, b) =>
-      parseFloat(b.total_recaudacion || 0) - parseFloat(a.total_recaudacion || 0)
-    );
+    const sortCol = dashboardSortColumn || 'total_recaudacion';
+    const sortDir = dashboardSortColumn ? dashboardSortDirection : 'desc';
+    const datosOrdenados = sortDataBy(dashboardData, sortCol, sortDir);
 
     tbody.innerHTML = datosOrdenados.map((item, idx) => {
-      // Si es provincia (no 51), mostrar nombre de provincia
       const esProvinciaAgrupada = item.codigo_provincia && item.codigo_provincia !== '51';
       const displayAgencia = esProvinciaAgrupada
         ? `<span class="badge bg-secondary">${item.nombre || item.agencia}</span>`
@@ -6067,6 +6126,8 @@ function renderTablaDashboard(tipoConsulta) {
           <td class="text-end">${formatNumber(item.total_sorteos || 0)}</td>
           <td class="text-end">${formatNumber(item.total_tickets || 0)}</td>
           <td class="text-end">${formatNumber(item.total_apuestas || 0)}</td>
+          <td class="text-end text-warning">${formatNumber(item.total_anulados || 0)}</td>
+          <td class="text-end text-warning">$${formatNumber(item.total_recaudacion_anulada || 0)}</td>
           <td class="text-end text-primary"><strong>$${formatNumber(item.total_recaudacion || 0)}</strong></td>
         </tr>
       `;
@@ -6075,20 +6136,24 @@ function renderTablaDashboard(tipoConsulta) {
   } else if (tipoConsulta === 'detallado') {
     thead.innerHTML = `
       <tr>
-        <th>Fecha</th>
-        <th>Sorteo</th>
+        ${sortableHeader('Fecha', 'fecha', '')}
+        ${sortableHeader('Sorteo', 'sorteo', '')}
         <th>Modalidad</th>
         <th>Juego</th>
-        <th class="text-end">Tickets</th>
-        <th class="text-end">Apuestas</th>
-        <th class="text-end">Anulados</th>
-        <th class="text-end">Recaudación</th>
-        <th class="text-end">Premios</th>
-        <th class="text-end">Ganadores</th>
+        ${sortableHeader('Tickets', 'total_tickets', 'text-end')}
+        ${sortableHeader('Apuestas', 'total_apuestas', 'text-end')}
+        ${sortableHeader('Anulados', 'total_anulados', 'text-end')}
+        ${sortableHeader('Recaudaci\u00f3n', 'recaudacion_total', 'text-end')}
+        ${sortableHeader('Premios', 'total_premios', 'text-end')}
+        ${sortableHeader('Ganadores', 'total_ganadores', 'text-end')}
       </tr>
     `;
 
-    tbody.innerHTML = dashboardData.map(item => `
+    const sortCol = dashboardSortColumn || 'fecha';
+    const sortDir = dashboardSortColumn ? dashboardSortDirection : 'desc';
+    const datosOrdenados = sortDataBy(dashboardData, sortCol, sortDir);
+
+    tbody.innerHTML = datosOrdenados.map(item => `
       <tr>
         <td>${formatDate(item.fecha)}</td>
         <td><strong>${item.sorteo}</strong></td>

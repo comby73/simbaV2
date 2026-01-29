@@ -1725,7 +1725,9 @@
                 </div>
                 <div class="col-lg-2 col-md-3">
                   <label class="form-label">Agencia</label>
-                  <input type="text" class="form-control form-control-sm" id="dash-agencia" placeholder="Ej: 5100001 o vacío=todas">
+                  <select class="form-control form-control-sm" id="dash-agencia">
+                    <option value="">Todas las agencias</option>
+                  </select>
                 </div>
                 <div class="col-lg-2 col-md-3">
                   <label class="form-label">Vista</label>
@@ -1753,19 +1755,19 @@
           <!-- Estadísticas -->
           <div class="stats-grid mb-4" id="dash-stats-grid">
             <div class="stat-card recaudacion">
-              <div class="stat-value" id="dash-stat-recaudacion">$0</div>
-              <div class="stat-label">Recaudación Total</div>
+              <div class="stat-value dash-stat-responsive" id="dash-stat-recaudacion">$0</div>
+              <div class="stat-label">Recaudaci\u00f3n Total</div>
             </div>
             <div class="stat-card premios">
-              <div class="stat-value" id="dash-stat-premios">$0</div>
+              <div class="stat-value dash-stat-responsive" id="dash-stat-premios">$0</div>
               <div class="stat-label">Premios Pagados</div>
             </div>
             <div class="stat-card apuestas">
-              <div class="stat-value" id="dash-stat-apuestas">0</div>
+              <div class="stat-value dash-stat-responsive" id="dash-stat-apuestas">0</div>
               <div class="stat-label">Total Apuestas</div>
             </div>
             <div class="stat-card tickets">
-              <div class="stat-value" id="dash-stat-tickets">0</div>
+              <div class="stat-value dash-stat-responsive" id="dash-stat-tickets">0</div>
               <div class="stat-label">Total Tickets</div>
             </div>
             <div class="stat-card sorteos">

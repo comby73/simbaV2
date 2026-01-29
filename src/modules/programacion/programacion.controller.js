@@ -662,13 +662,42 @@ const getSorteosDelDia = async (req, res) => {
       ORDER BY hora_sorteo ASC, juego ASC
     `, [fechaConsulta]);
 
-    // Por ahora solo mostramos los sorteos sin estado de procesamiento
-    // TODO: Agregar JOINs con control_previo y control_posterior cuando se unifique la estructura
+    // Buscar datos de Control Previo y Escrutinio para cada sorteo
+    const controlPrevioData = await query(`
+      SELECT numero_sorteo, modalidad, total_recaudacion, total_tickets, total_apuestas, total_anulados
+      FROM control_previo_quiniela
+      WHERE fecha = ? ORDER BY id DESC
+    `, [fechaConsulta]).catch(() => []);
+
+    const escrutinioData = await query(`
+      SELECT numero_sorteo, modalidad, total_premios, total_ganadores
+      FROM escrutinio_quiniela
+      WHERE fecha = ? ORDER BY id DESC
+    `, [fechaConsulta]).catch(() => []);
+
+    // Indexar por número de sorteo
+    const cpMap = {};
+    controlPrevioData.forEach(cp => { if (!cpMap[cp.numero_sorteo]) cpMap[cp.numero_sorteo] = cp; });
+    const escMap = {};
+    escrutinioData.forEach(esc => { if (!escMap[esc.numero_sorteo]) escMap[esc.numero_sorteo] = esc; });
+
     const sorteosConEstado = sorteos.map(s => {
-      // Por defecto todos pendientes (sin integración con control_previo/posterior aún)
+      const cp = cpMap[s.numero_sorteo] || null;
+      const esc = escMap[s.numero_sorteo] || null;
+
       let estado = 'pendiente';
       let estadoColor = 'secondary';
       let estadoIcono = 'clock';
+
+      if (esc) {
+        estado = 'escrutado';
+        estadoColor = 'success';
+        estadoIcono = 'check-circle';
+      } else if (cp) {
+        estado = 'control_previo';
+        estadoColor = 'primary';
+        estadoIcono = 'clipboard-check';
+      }
 
       return {
         id: s.id,
@@ -687,14 +716,19 @@ const getSorteosDelDia = async (req, res) => {
           mendoza: s.prov_mendoza,
           entrerios: s.prov_entrerios
         },
-        // Estado de procesamiento
         estado,
         estadoColor,
         estadoIcono,
-        // Datos de Control Previo (TODO: integrar)
-        controlPrevio: null,
-        // Datos de Control Posterior (TODO: integrar)
-        controlPosterior: null
+        controlPrevio: cp ? {
+          recaudacion: parseFloat(cp.total_recaudacion) || 0,
+          tickets: cp.total_tickets || 0,
+          apuestas: cp.total_apuestas || 0,
+          anulados: cp.total_anulados || 0
+        } : null,
+        controlPosterior: esc ? {
+          premiosPagados: parseFloat(esc.total_premios) || 0,
+          ganadores: esc.total_ganadores || 0
+        } : null
       };
     });
 
