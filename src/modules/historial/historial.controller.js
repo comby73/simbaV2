@@ -867,6 +867,24 @@ const obtenerDatosDashboard = async (req, res) => {
         `;
       };
       
+      // Query para obtener datos de venta por agencia desde control_previo_agencias
+      // Formato clave: CABA = "51-XXXXX" (para matchear con escrutinio_premios_agencia.cta_cte)
+      const buildVentaQuery = (juegoNombre) => {
+        return `
+          SELECT
+            CASE
+              WHEN cpa.codigo_provincia = '51' THEN CONCAT(LEFT(cpa.codigo_agencia, 2), '-', SUBSTRING(cpa.codigo_agencia, 3))
+              ELSE CONCAT('PROV-', cpa.codigo_provincia)
+            END as agencia_key,
+            SUM(cpa.total_tickets) as total_tickets,
+            SUM(cpa.total_apuestas) as total_apuestas,
+            SUM(cpa.total_anulados) as total_anulados,
+            SUM(cpa.total_recaudacion) as total_recaudacion
+          FROM control_previo_agencias cpa
+          WHERE cpa.juego = '${juegoNombre}'
+        `;
+      };
+
       if (!juego || juego === 'quiniela') {
         let sqlQ = buildTotalizadoQuery('escrutinio_quiniela', 'quiniela');
         const paramsQ = [];
@@ -874,26 +892,50 @@ const obtenerDatosDashboard = async (req, res) => {
         if (fechaHasta) { sqlQ += ' AND e.fecha <= ?'; paramsQ.push(fechaHasta); }
         if (sorteoDesde) { sqlQ += ' AND e.numero_sorteo >= ?'; paramsQ.push(sorteoDesde); }
         if (sorteoHasta) { sqlQ += ' AND e.numero_sorteo <= ?'; paramsQ.push(sorteoHasta); }
-        if (agencia) { 
-          // Si busca agencia específica, buscar solo esa
-          sqlQ += ' AND epa.cta_cte LIKE ?'; 
-          paramsQ.push(`%${agencia}%`); 
+        if (agencia) {
+          sqlQ += ' AND epa.cta_cte LIKE ?';
+          paramsQ.push(`%${agencia}%`);
         }
-        sqlQ += ` GROUP BY 
+        sqlQ += ` GROUP BY
           CASE WHEN epa.codigo_provincia = '51' THEN epa.cta_cte ELSE CONCAT('PROV-', epa.codigo_provincia) END,
           CASE WHEN epa.codigo_provincia = '51' THEN epa.cta_cte ELSE epa.codigo_provincia END,
           epa.codigo_provincia
           ORDER BY total_premios DESC`;
-        
-        const quinielaData = await query(sqlQ, paramsQ);
-        // Agregar nombre de provincia
+
+        // Query de ventas con los mismos filtros de fecha/sorteo
+        let sqlVQ = buildVentaQuery('quiniela');
+        const paramsVQ = [];
+        if (fechaDesde) { sqlVQ += ' AND cpa.fecha >= ?'; paramsVQ.push(fechaDesde); }
+        if (fechaHasta) { sqlVQ += ' AND cpa.fecha <= ?'; paramsVQ.push(fechaHasta); }
+        if (sorteoDesde) { sqlVQ += ' AND cpa.numero_sorteo >= ?'; paramsVQ.push(sorteoDesde); }
+        if (sorteoHasta) { sqlVQ += ' AND cpa.numero_sorteo <= ?'; paramsVQ.push(sorteoHasta); }
+        if (agencia) { sqlVQ += ' AND cpa.codigo_agencia LIKE ?'; paramsVQ.push(`%${agencia}%`); }
+        sqlVQ += ` GROUP BY CASE WHEN cpa.codigo_provincia = '51' THEN CONCAT(LEFT(cpa.codigo_agencia, 2), '-', SUBSTRING(cpa.codigo_agencia, 3)) ELSE CONCAT('PROV-', cpa.codigo_provincia) END`;
+
+        const [quinielaData, ventaDataQ] = await Promise.all([
+          query(sqlQ, paramsQ),
+          query(sqlVQ, paramsVQ).catch(() => [])
+        ]);
+
+        // Indexar ventas por agencia_key
+        const ventaMapQ = {};
+        ventaDataQ.forEach(v => { ventaMapQ[v.agencia_key] = v; });
+
+        // Merge premios + ventas
         quinielaData.forEach(row => {
+          // Guardar clave original antes de sobreescribir (CABA: "51-XXXXX", Prov: "PROV-XX")
+          const ventaKey = row.agencia;
           if (row.codigo_provincia !== '51') {
             row.nombre = PROVINCIAS_NOMBRES[row.codigo_provincia] || `Provincia ${row.codigo_provincia}`;
             row.agencia = row.nombre;
           } else {
             row.nombre = row.agencia;
           }
+          const venta = ventaMapQ[ventaKey] || {};
+          row.total_tickets = parseInt(venta.total_tickets) || 0;
+          row.total_apuestas = parseInt(venta.total_apuestas) || 0;
+          row.total_anulados = parseInt(venta.total_anulados) || 0;
+          row.total_recaudacion = parseFloat(venta.total_recaudacion) || 0;
         });
         resultados = resultados.concat(quinielaData);
       }
@@ -905,25 +947,47 @@ const obtenerDatosDashboard = async (req, res) => {
         if (fechaHasta) { sqlP += ' AND e.fecha <= ?'; paramsP.push(fechaHasta); }
         if (sorteoDesde) { sqlP += ' AND e.numero_sorteo >= ?'; paramsP.push(sorteoDesde); }
         if (sorteoHasta) { sqlP += ' AND e.numero_sorteo <= ?'; paramsP.push(sorteoHasta); }
-        if (agencia) { 
-          sqlP += ' AND epa.cta_cte LIKE ?'; 
-          paramsP.push(`%${agencia}%`); 
+        if (agencia) {
+          sqlP += ' AND epa.cta_cte LIKE ?';
+          paramsP.push(`%${agencia}%`);
         }
-        sqlP += ` GROUP BY 
+        sqlP += ` GROUP BY
           CASE WHEN epa.codigo_provincia = '51' THEN epa.cta_cte ELSE CONCAT('PROV-', epa.codigo_provincia) END,
           CASE WHEN epa.codigo_provincia = '51' THEN epa.cta_cte ELSE epa.codigo_provincia END,
           epa.codigo_provincia
           ORDER BY total_premios DESC`;
-        
-        const poceadaData = await query(sqlP, paramsP);
-        // Agregar nombre de provincia
+
+        // Query de ventas poceada
+        let sqlVP = buildVentaQuery('poceada');
+        const paramsVP = [];
+        if (fechaDesde) { sqlVP += ' AND cpa.fecha >= ?'; paramsVP.push(fechaDesde); }
+        if (fechaHasta) { sqlVP += ' AND cpa.fecha <= ?'; paramsVP.push(fechaHasta); }
+        if (sorteoDesde) { sqlVP += ' AND cpa.numero_sorteo >= ?'; paramsVP.push(sorteoDesde); }
+        if (sorteoHasta) { sqlVP += ' AND cpa.numero_sorteo <= ?'; paramsVP.push(sorteoHasta); }
+        if (agencia) { sqlVP += ' AND cpa.codigo_agencia LIKE ?'; paramsVP.push(`%${agencia}%`); }
+        sqlVP += ` GROUP BY CASE WHEN cpa.codigo_provincia = '51' THEN CONCAT(LEFT(cpa.codigo_agencia, 2), '-', SUBSTRING(cpa.codigo_agencia, 3)) ELSE CONCAT('PROV-', cpa.codigo_provincia) END`;
+
+        const [poceadaData, ventaDataP] = await Promise.all([
+          query(sqlP, paramsP),
+          query(sqlVP, paramsVP).catch(() => [])
+        ]);
+
+        const ventaMapP = {};
+        ventaDataP.forEach(v => { ventaMapP[v.agencia_key] = v; });
+
         poceadaData.forEach(row => {
+          const ventaKey = row.agencia;
           if (row.codigo_provincia !== '51') {
             row.nombre = PROVINCIAS_NOMBRES[row.codigo_provincia] || `Provincia ${row.codigo_provincia}`;
             row.agencia = row.nombre;
           } else {
             row.nombre = row.agencia;
           }
+          const venta = ventaMapP[ventaKey] || {};
+          row.total_tickets = parseInt(venta.total_tickets) || 0;
+          row.total_apuestas = parseInt(venta.total_apuestas) || 0;
+          row.total_anulados = parseInt(venta.total_anulados) || 0;
+          row.total_recaudacion = parseFloat(venta.total_recaudacion) || 0;
         });
         resultados = resultados.concat(poceadaData);
       }
