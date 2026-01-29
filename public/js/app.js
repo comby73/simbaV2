@@ -28,15 +28,17 @@ document.addEventListener('DOMContentLoaded', async () => {
 // Cargar versión de la aplicación desde el servidor
 async function cargarVersionApp() {
   try {
-    const response = await fetch('/api/version');
+    // Usar API_BASE para compatibilidad con todos los entornos
+    const base = typeof API_BASE !== 'undefined' ? API_BASE : '/api';
+    const response = await fetch(`${base}/version`);
     const data = await response.json();
     const versionEl = document.getElementById('app-version');
     if (versionEl && data.version) {
       versionEl.textContent = `v${data.version}`;
-      versionEl.title = `SIMBA ${data.version} | ${data.environment}`;
+      versionEl.title = `SIMBA ${data.version} | ${data.environment || ''}`;
     }
   } catch (e) {
-    // Silencioso si no se puede cargar
+    console.log('No se pudo cargar versión:', e.message);
   }
 }
 
