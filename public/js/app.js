@@ -325,7 +325,7 @@ async function buscarExtractos() {
   }
 }
 
-// Descargar extractos como Excel (CSV con BOM para compatibilidad)
+// Descargar extractos como CSV separado por punto y coma (compatible Excel español)
 function descargarExtractosExcel() {
   if (!ultimosExtractosBuscados || ultimosExtractosBuscados.length === 0) {
     showToast('No hay extractos para descargar', 'warning');
@@ -334,9 +334,9 @@ function descargarExtractosExcel() {
 
   const extractos = ultimosExtractosBuscados;
 
-  // Headers: Fecha, Provincia, Nro Sorteo, Modalidad, Num1..Num20, Letras, Fuente
+  // Headers
   const headers = ['Fecha', 'Provincia', 'Nro Sorteo', 'Modalidad'];
-  for (let i = 1; i <= 20; i++) headers.push(`Num${i}`);
+  for (let i = 1; i <= 20; i++) headers.push('Num' + i);
   headers.push('Letras', 'Fuente');
 
   const rows = extractos.map(ext => {
@@ -346,33 +346,33 @@ function descargarExtractosExcel() {
       ext.numero_sorteo || '',
       ext.sorteo_nombre || ''
     ];
-    // Números 1-20
     const nums = ext.numeros || [];
     for (let i = 0; i < 20; i++) {
       fila.push(nums[i] !== undefined ? String(nums[i]).padStart(4, '0') : '');
     }
-    // Letras
     fila.push(ext.letras ? (Array.isArray(ext.letras) ? ext.letras.join('') : ext.letras) : '');
-    // Fuente
     fila.push(ext.fuente || 'MANUAL');
     return fila;
   });
 
-  // Generar CSV con separador tab para mejor compatibilidad con Excel
-  const sep = '\t';
+  // CSV con separador ; (estándar Excel en español)
+  const sep = ';';
   let csv = '\uFEFF'; // BOM UTF-8
-  csv += headers.join(sep) + '\n';
+  csv += headers.join(sep) + '\r\n';
   rows.forEach(row => {
-    csv += row.map(v => String(v).replace(/\t/g, ' ')).join(sep) + '\n';
+    csv += row.map(v => {
+      const s = String(v);
+      // Escapar si contiene ; o "
+      return s.includes(sep) || s.includes('"') ? '"' + s.replace(/"/g, '""') + '"' : s;
+    }).join(sep) + '\r\n';
   });
 
-  // Descargar
   const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
   const fecha = document.getElementById('extractos-fecha').value || 'todos';
   a.href = url;
-  a.download = `extractos_${fecha}.xls`;
+  a.download = `extractos_${fecha}.csv`;
   document.body.appendChild(a);
   a.click();
   document.body.removeChild(a);
