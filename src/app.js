@@ -6,17 +6,15 @@ const fs = require('fs');
 const envLocalPath = path.join(__dirname, '../.env.local');
 const envPath = path.join(__dirname, '../.env');
 
-if (process.env.NODE_ENV !== 'production') {
-  // Solo cargar dotenv en desarrollo
-  if (fs.existsSync(envLocalPath)) {
-    require('dotenv').config({ path: envLocalPath });
-    console.log('📁 Usando configuración: .env.local (LOCAL)');
-  } else if (fs.existsSync(envPath)) {
-    require('dotenv').config({ path: envPath });
-    console.log('📁 Usando configuración: .env');
-  }
+// Siempre intentar cargar dotenv como fallback (Hostinger no siempre inyecta las variables)
+if (fs.existsSync(envLocalPath)) {
+  require('dotenv').config({ path: envLocalPath });
+  console.log('📁 Usando configuración: .env.local (LOCAL)');
+} else if (fs.existsSync(envPath)) {
+  require('dotenv').config({ path: envPath });
+  console.log('📁 Usando configuración: .env');
 } else {
-  console.log('📁 Modo PRODUCCIÓN: usando variables de entorno del servidor');
+  console.log('📁 No se encontró archivo .env, usando variables del servidor');
 }
 
 const express = require('express');
