@@ -23,6 +23,63 @@ const MODALIDADES = {
   'NOCTURNO': { codigo: 'N', nombre: 'NOCTURNA' }
 };
 
+// Mapeo de códigos de juegos del Excel a nombres internos
+// El Excel muestra una columna "Juego" con formato "CODIGO NOMBRE" (ej: "0069 QUINI 6")
+const JUEGOS_CONFIG = {
+  '0080': { nombre: 'Quiniela', nombreCorto: 'QNL', tipo: 'quiniela' },
+  '0069': { nombre: 'Quini 6', nombreCorto: 'Q6', tipo: 'loto' },
+  '0013': { nombre: 'Brinco', nombreCorto: 'BRC', tipo: 'loto' },
+  '0005': { nombre: 'Loto 5 Plus', nombreCorto: 'L5P', tipo: 'loto' },
+  '0009': { nombre: 'Loto Plus Tradicional', nombreCorto: 'LPT', tipo: 'loto' },
+  '0082': { nombre: 'Quiniela Poceada', nombreCorto: 'PCD', tipo: 'poceada' },
+  '0023': { nombre: 'Tombolina', nombreCorto: 'TMB', tipo: 'tombolina' }
+};
+
+/**
+ * Detectar el tipo de juego desde el valor de la columna "Juego"
+ * @param {string} valorJuego - Valor de la celda (ej: "0069 QUINI 6")
+ * @returns {Object} - Configuración del juego detectado
+ */
+function detectarJuego(valorJuego) {
+  if (!valorJuego) return null;
+
+  const valor = String(valorJuego).trim().toUpperCase();
+
+  // Intentar extraer código del inicio (primeros 4 dígitos)
+  const match = valor.match(/^(\d{4})\s*/);
+  if (match) {
+    const codigo = match[1];
+    if (JUEGOS_CONFIG[codigo]) {
+      return { ...JUEGOS_CONFIG[codigo], codigo };
+    }
+  }
+
+  // Fallback: buscar por nombre
+  if (valor.includes('QUINI 6') || valor.includes('QUINI6')) {
+    return { ...JUEGOS_CONFIG['0069'], codigo: '0069' };
+  }
+  if (valor.includes('BRINCO')) {
+    return { ...JUEGOS_CONFIG['0013'], codigo: '0013' };
+  }
+  if (valor.includes('LOTO 5 PLUS') || valor.includes('LOTO5PLUS')) {
+    return { ...JUEGOS_CONFIG['0005'], codigo: '0005' };
+  }
+  if (valor.includes('LOTO PLUS TRADICIONAL')) {
+    return { ...JUEGOS_CONFIG['0009'], codigo: '0009' };
+  }
+  if (valor.includes('POCEADA')) {
+    return { ...JUEGOS_CONFIG['0082'], codigo: '0082' };
+  }
+  if (valor.includes('TOMBOLINA')) {
+    return { ...JUEGOS_CONFIG['0023'], codigo: '0023' };
+  }
+  if (valor.includes('QUINIELA') && !valor.includes('POCEADA')) {
+    return { ...JUEGOS_CONFIG['0080'], codigo: '0080' };
+  }
+
+  return null;
+}
+
 // Mapeo de columnas del Excel de Quiniela a campos de BD
 // Incluye variantes con/sin puntos, espacios, etc.
 const COLUMNAS_QUINIELA = {
@@ -31,12 +88,12 @@ const COLUMNAS_QUINIELA = {
   'JUEGO': 'juego',
   'FECHA': 'fecha_sorteo',
   'HORA': 'hora_sorteo',
-  
+
   // CABA
   'CDAD': 'prov_caba',
   'CDAD.': 'prov_caba',
   'CABA': 'prov_caba',
-  
+
   // Buenos Aires - todas las variantes
   'BS.AS': 'prov_bsas',
   'BS. AS': 'prov_bsas',
@@ -44,12 +101,12 @@ const COLUMNAS_QUINIELA = {
   'BS.AS.': 'prov_bsas',
   'BS. AS.': 'prov_bsas',
   'BSAS': 'prov_bsas',
-  
+
   // Córdoba
   'CBA': 'prov_cordoba',
   'CBA.': 'prov_cordoba',
   'CORDOBA': 'prov_cordoba',
-  
+
   // Santa Fe
   'STA.FE': 'prov_santafe',
   'STA. FE': 'prov_santafe',
@@ -58,23 +115,23 @@ const COLUMNAS_QUINIELA = {
   'STA. FE.': 'prov_santafe',
   'SANTAFE': 'prov_santafe',
   'SANTA FE': 'prov_santafe',
-  
+
   // Uruguay/Montevideo
   'URU': 'prov_montevideo',
   'URU.': 'prov_montevideo',
   'URUGUAY': 'prov_montevideo',
   'MONTEVIDEO': 'prov_montevideo',
-  
+
   // Santiago del Estero
   'STGO': 'prov_santiago',
   'STGO.': 'prov_santiago',
   'SANTIAGO': 'prov_santiago',
-  
+
   // Mendoza
   'MZA': 'prov_mendoza',
   'MZA.': 'prov_mendoza',
   'MENDOZA': 'prov_mendoza',
-  
+
   // Entre Ríos - todas las variantes
   'E.RS': 'prov_entrerios',
   'E. RS': 'prov_entrerios',
@@ -85,16 +142,16 @@ const COLUMNAS_QUINIELA = {
   'E.ROS': 'prov_entrerios',
   'ENTRERIOS': 'prov_entrerios',
   'ENTRE RIOS': 'prov_entrerios',
-  
+
   // Tipo/Modalidad
   'TIPO': 'modalidad_nombre',
-  
+
   // Fechas de pago
   'INICIO PAGO PREMIOS': 'fecha_inicio_pago',
   'INICIO PAGO UTE SISTEMA': 'inicio_pago_ute',
   'PRESCRIPCION': 'fecha_prescripcion',
   'PRESCRIPCIÓN': 'fecha_prescripcion',
-  
+
   // Apertura ventas
   'FECHA APE. VTAS.': 'fecha_apertura_vtas',
   'FECHA APE.VTAS.': 'fecha_apertura_vtas',
@@ -103,7 +160,7 @@ const COLUMNAS_QUINIELA = {
   'HORA APE. VTAS.': 'hora_apertura_vtas',
   'HORA APE.VTAS.': 'hora_apertura_vtas',
   'HORA APE VTAS': 'hora_apertura_vtas',
-  
+
   // Cierre ventas
   'FECHA CIE. VTAS.': 'fecha_cierre_vtas',
   'FECHA CIE.VTAS.': 'fecha_cierre_vtas',
@@ -112,7 +169,7 @@ const COLUMNAS_QUINIELA = {
   'HORA CIE. VTAS.': 'hora_cierre_vtas',
   'HORA CIE.VTAS.': 'hora_cierre_vtas',
   'HORA CIE VTAS': 'hora_cierre_vtas',
-  
+
   // Días
   'DIAS': 'dias_vta'
 };
@@ -145,7 +202,7 @@ const cargarExcelQuiniela = async (req, res) => {
       const row = worksheet.getRow(rowNum);
       const tempHeaders = [];
       const tempColumnMap = {};
-      
+
       row.eachCell((cell, colNumber) => {
         let value = '';
         if (cell.value) {
@@ -158,7 +215,7 @@ const cargarExcelQuiniela = async (req, res) => {
         }
         value = value.toUpperCase().trim();
         tempHeaders[colNumber] = value;
-        
+
         const campo = COLUMNAS_QUINIELA[value];
         if (campo) {
           tempColumnMap[campo] = colNumber;
@@ -261,7 +318,7 @@ const cargarExcelQuiniela = async (req, res) => {
       // Validar registro mínimo
       if (registro.numero_sorteo && registro.fecha_sorteo) {
         registros.push(registro);
-        
+
         // Extraer mes
         if (registro.fecha_sorteo) {
           const fecha = new Date(registro.fecha_sorteo);
@@ -358,7 +415,297 @@ const cargarExcelQuiniela = async (req, res) => {
   } catch (error) {
     console.error('Error cargando Excel:', error);
     if (req.file?.path) {
-      try { fs.unlinkSync(req.file.path); } catch (e) {}
+      try { fs.unlinkSync(req.file.path); } catch (e) { }
+    }
+    return errorResponse(res, 'Error procesando archivo: ' + error.message, 500);
+  }
+};
+
+/**
+ * Cargar Excel de programación con DETECCIÓN AUTOMÁTICA del juego
+ * Lee la columna "Juego" del Excel para identificar el tipo de juego
+ * Soporta: Quiniela, Quini 6, Brinco, Loto 5 Plus, Loto Plus Tradicional, Poceada, Tombolina
+ */
+const cargarExcelGenerico = async (req, res) => {
+  try {
+    if (!req.file) {
+      return errorResponse(res, 'No se proporcionó archivo Excel', 400);
+    }
+
+    const filePath = req.file.path;
+    const extension = path.extname(req.file.originalname).toLowerCase();
+
+    // ExcelJS solo soporta .xlsx (formato ZIP)
+    if (extension === '.xls') {
+      fs.unlinkSync(filePath);
+      return errorResponse(res, 'El formato .xls (Excel 97-2003) no es compatible. Por favor, abra el archivo y guárdelo como "Libro de Excel (.xlsx)" antes de volver a cargarlo.', 400);
+    }
+
+    const workbook = new ExcelJS.Workbook();
+
+    try {
+      await workbook.xlsx.readFile(filePath);
+    } catch (zipError) {
+      fs.unlinkSync(filePath);
+      if (zipError.message.includes('end of central directory')) {
+        return errorResponse(res, 'El archivo no es un Excel válido (.xlsx). Si es un archivo .xls antiguo, debe convertirlo a .xlsx.', 400);
+      }
+      throw zipError;
+    }
+
+    const worksheet = workbook.worksheets[0];
+    if (!worksheet) {
+      fs.unlinkSync(filePath);
+      return errorResponse(res, 'El archivo Excel está vacío', 400);
+    }
+
+
+    // Buscar la fila de headers (buscar en las primeras 10 filas)
+    let headerRowNum = 1;
+    let headers = [];
+    let columnMap = {};
+
+    for (let rowNum = 1; rowNum <= 10; rowNum++) {
+      const row = worksheet.getRow(rowNum);
+      const tempHeaders = [];
+      const tempColumnMap = {};
+
+      row.eachCell((cell, colNumber) => {
+        let value = '';
+        if (cell.value) {
+          if (typeof cell.value === 'object' && cell.value.richText) {
+            value = cell.value.richText.map(rt => rt.text).join('');
+          } else {
+            value = String(cell.value);
+          }
+        }
+        value = value.toUpperCase().trim();
+        tempHeaders[colNumber] = value;
+
+        const campo = COLUMNAS_QUINIELA[value];
+        if (campo) {
+          tempColumnMap[campo] = colNumber;
+        }
+      });
+
+      // Si encontramos SORTEO y FECHA, esta es la fila de headers
+      if (tempColumnMap['numero_sorteo'] && tempColumnMap['fecha_sorteo']) {
+        headerRowNum = rowNum;
+        headers = tempHeaders;
+        columnMap = tempColumnMap;
+        console.log(`Headers encontrados en fila ${rowNum}:`, Object.keys(tempColumnMap));
+        break;
+      }
+    }
+
+    // Verificar columnas obligatorias
+    if (!columnMap['numero_sorteo'] || !columnMap['fecha_sorteo']) {
+      fs.unlinkSync(filePath);
+      const headersEncontrados = headers.filter(h => h).join(', ');
+      return errorResponse(res, `El Excel no tiene las columnas obligatorias (SORTEO, FECHA). Headers encontrados: ${headersEncontrados}`, 400);
+    }
+
+    // Procesar filas (empezando después de los headers)
+    const registrosPorJuego = {}; // Agrupar por juego detectado
+    const mesSet = new Set();
+    let juegosDetectados = new Set();
+
+    worksheet.eachRow((row, rowNumber) => {
+      if (rowNumber <= headerRowNum) return; // Skip header y filas anteriores
+
+      // Detectar el juego desde la columna JUEGO
+      let juegoDetectado = null;
+      if (columnMap['juego']) {
+        const cellJuego = row.getCell(columnMap['juego']);
+        let valorJuego = cellJuego.value;
+        if (typeof valorJuego === 'object' && valorJuego.richText) {
+          valorJuego = valorJuego.richText.map(rt => rt.text).join('');
+        }
+        juegoDetectado = detectarJuego(valorJuego);
+      }
+
+      // Si no se detectó juego, usar "Desconocido"
+      const nombreJuego = juegoDetectado ? juegoDetectado.nombre : 'Desconocido';
+      juegosDetectados.add(nombreJuego);
+
+      const registro = {
+        juego: nombreJuego,
+        codigo_juego: juegoDetectado?.codigo || null,
+        tipo_juego: juegoDetectado?.tipo || null,
+        numero_sorteo: null,
+        fecha_sorteo: null,
+        hora_sorteo: null,
+        modalidad_codigo: null,
+        modalidad_nombre: null,
+        prov_caba: 0,
+        prov_bsas: 0,
+        prov_cordoba: 0,
+        prov_santafe: 0,
+        prov_montevideo: 0,
+        prov_santiago: 0,
+        prov_mendoza: 0,
+        prov_entrerios: 0,
+        fecha_inicio_pago: null,
+        inicio_pago_ute: null,
+        fecha_prescripcion: null,
+        fecha_apertura_vtas: null,
+        hora_apertura_vtas: null,
+        fecha_cierre_vtas: null,
+        hora_cierre_vtas: null,
+        dias_vta: null
+      };
+
+      // Extraer valores
+      for (const [campo, colIndex] of Object.entries(columnMap)) {
+        const cell = row.getCell(colIndex);
+        let value = cell.value;
+
+        // Manejar fechas
+        if (value instanceof Date) {
+          if (campo.includes('fecha')) {
+            value = value.toISOString().split('T')[0];
+          } else if (campo.includes('hora')) {
+            value = value.toTimeString().split(' ')[0];
+          }
+        }
+
+        // Manejar valores numéricos para provincias
+        if (campo.startsWith('prov_')) {
+          const numValue = parseInt(value, 10);
+          value = (!isNaN(numValue) && numValue > 0) ? 1 : 0;
+        }
+
+        // Manejar modalidad
+        if (campo === 'modalidad_nombre' && value) {
+          const modalidad = MODALIDADES[String(value).toUpperCase().trim()];
+          if (modalidad) {
+            registro.modalidad_codigo = modalidad.codigo;
+            registro.modalidad_nombre = modalidad.nombre;
+          } else {
+            registro.modalidad_nombre = String(value).toUpperCase().trim();
+          }
+        } else if (campo !== 'juego') {
+          // No sobrescribir el juego detectado
+          registro[campo] = value;
+        }
+      }
+
+      // Validar registro mínimo
+      if (registro.numero_sorteo && registro.fecha_sorteo) {
+        if (!registrosPorJuego[nombreJuego]) {
+          registrosPorJuego[nombreJuego] = [];
+        }
+        registrosPorJuego[nombreJuego].push(registro);
+
+        // Extraer mes
+        if (registro.fecha_sorteo) {
+          const fecha = new Date(registro.fecha_sorteo);
+          mesSet.add(`${fecha.getFullYear()}-${String(fecha.getMonth() + 1).padStart(2, '0')}`);
+        }
+      }
+    });
+
+    // Limpiar archivo temporal
+    fs.unlinkSync(filePath);
+
+    const totalRegistros = Object.values(registrosPorJuego).reduce((sum, arr) => sum + arr.length, 0);
+
+    if (totalRegistros === 0) {
+      return errorResponse(res, 'No se encontraron registros válidos en el Excel', 400);
+    }
+
+    // Determinar mes de carga
+    const meses = Array.from(mesSet).sort();
+    const mesCarga = meses[0] || new Date().toISOString().slice(0, 7);
+
+    // Insertar/actualizar en BD
+    let insertados = 0;
+    let actualizados = 0;
+    const resumenJuegos = {};
+
+    for (const [juego, registros] of Object.entries(registrosPorJuego)) {
+      resumenJuegos[juego] = { total: registros.length, insertados: 0, actualizados: 0 };
+
+      for (const reg of registros) {
+        try {
+          await query(`
+            INSERT INTO programacion_sorteos (
+              juego, codigo_juego, tipo_juego, numero_sorteo, fecha_sorteo, hora_sorteo,
+              modalidad_codigo, modalidad_nombre,
+              prov_caba, prov_bsas, prov_cordoba, prov_santafe,
+              prov_montevideo, prov_santiago, prov_mendoza, prov_entrerios,
+              fecha_inicio_pago, inicio_pago_ute, fecha_prescripcion,
+              fecha_apertura_vtas, hora_apertura_vtas, fecha_cierre_vtas, hora_cierre_vtas,
+              dias_vta, mes_carga, archivo_origen
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ON DUPLICATE KEY UPDATE
+              fecha_sorteo = VALUES(fecha_sorteo),
+              hora_sorteo = VALUES(hora_sorteo),
+              modalidad_codigo = VALUES(modalidad_codigo),
+              modalidad_nombre = VALUES(modalidad_nombre),
+              prov_caba = VALUES(prov_caba),
+              prov_bsas = VALUES(prov_bsas),
+              prov_cordoba = VALUES(prov_cordoba),
+              prov_santafe = VALUES(prov_santafe),
+              prov_montevideo = VALUES(prov_montevideo),
+              prov_santiago = VALUES(prov_santiago),
+              prov_mendoza = VALUES(prov_mendoza),
+              prov_entrerios = VALUES(prov_entrerios),
+              fecha_inicio_pago = VALUES(fecha_inicio_pago),
+              inicio_pago_ute = VALUES(inicio_pago_ute),
+              fecha_prescripcion = VALUES(fecha_prescripcion),
+              fecha_apertura_vtas = VALUES(fecha_apertura_vtas),
+              hora_apertura_vtas = VALUES(hora_apertura_vtas),
+              fecha_cierre_vtas = VALUES(fecha_cierre_vtas),
+              hora_cierre_vtas = VALUES(hora_cierre_vtas),
+              dias_vta = VALUES(dias_vta),
+              mes_carga = VALUES(mes_carga),
+              archivo_origen = VALUES(archivo_origen),
+              updated_at = CURRENT_TIMESTAMP
+          `, [
+            reg.juego, reg.codigo_juego, reg.tipo_juego, reg.numero_sorteo, reg.fecha_sorteo, reg.hora_sorteo,
+            reg.modalidad_codigo, reg.modalidad_nombre,
+            reg.prov_caba, reg.prov_bsas, reg.prov_cordoba, reg.prov_santafe,
+            reg.prov_montevideo, reg.prov_santiago, reg.prov_mendoza, reg.prov_entrerios,
+            reg.fecha_inicio_pago, reg.inicio_pago_ute, reg.fecha_prescripcion,
+            reg.fecha_apertura_vtas, reg.hora_apertura_vtas, reg.fecha_cierre_vtas, reg.hora_cierre_vtas,
+            reg.dias_vta, mesCarga, req.file.originalname
+          ]);
+          insertados++;
+          resumenJuegos[juego].insertados++;
+        } catch (err) {
+          if (err.code === 'ER_DUP_ENTRY') {
+            actualizados++;
+            resumenJuegos[juego].actualizados++;
+          } else {
+            console.error('Error insertando registro:', err.message);
+          }
+        }
+      }
+
+      // Registrar carga por juego
+      await query(`
+        INSERT INTO programacion_cargas (juego, mes_carga, archivo_nombre, registros_cargados, registros_actualizados, usuario_id)
+        VALUES (?, ?, ?, ?, ?, ?)
+      `, [juego, mesCarga, req.file.originalname, resumenJuegos[juego].insertados, resumenJuegos[juego].actualizados, req.user?.id || null]);
+    }
+
+    const juegosLista = Array.from(juegosDetectados).join(', ');
+
+    return successResponse(res, {
+      registrosProcesados: totalRegistros,
+      insertados,
+      actualizados,
+      mesCarga,
+      archivo: req.file.originalname,
+      juegosDetectados: Array.from(juegosDetectados),
+      resumenPorJuego: resumenJuegos
+    }, `Programación cargada: ${insertados} nuevos, ${actualizados} actualizados. Juegos: ${juegosLista}`);
+
+  } catch (error) {
+    console.error('Error cargando Excel:', error);
+    if (req.file?.path) {
+      try { fs.unlinkSync(req.file.path); } catch (e) { }
     }
     return errorResponse(res, 'Error procesando archivo: ' + error.message, 500);
   }
@@ -616,7 +963,7 @@ const getHistorialCargas = async (req, res) => {
 const borrarProgramacion = async (req, res) => {
   try {
     const { juego } = req.body;
-    
+
     if (!juego) {
       return errorResponse(res, 'Debe especificar el juego', 400);
     }
@@ -651,7 +998,7 @@ const borrarProgramacion = async (req, res) => {
 const getSorteosDelDia = async (req, res) => {
   try {
     const { fecha } = req.query;
-    
+
     // Usar fecha actual si no se especifica
     const fechaConsulta = fecha || new Date().toISOString().split('T')[0];
 
@@ -832,6 +1179,7 @@ const verificarSorteo = async (req, res) => {
 
 module.exports = {
   cargarExcelQuiniela,
+  cargarExcelGenerico,
   getSorteosPorFecha,
   getSorteoPorNumero,
   listarProgramacion,
@@ -839,5 +1187,6 @@ module.exports = {
   getHistorialCargas,
   borrarProgramacion,
   getSorteosDelDia,
-  verificarSorteo
+  verificarSorteo,
+  JUEGOS_CONFIG
 };

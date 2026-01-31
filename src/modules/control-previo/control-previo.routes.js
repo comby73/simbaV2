@@ -52,6 +52,14 @@ router.post('/poceada/procesar',
   poceadaController.procesarZip
 );
 
+// Tombolina
+const tombolinaController = require('./tombolina.controller');
+router.post('/tombolina/procesar',
+  requirePermission('control_previo.ejecutar'),
+  upload.single('archivo'),
+  tombolinaController.procesarZipTombolina
+);
+
 // Ruta alternativa (legacy)
 router.post('/poceada/procesar-zip', 
   upload.single('archivo'),
@@ -66,6 +74,11 @@ router.get('/poceada/buscar-pozo/:sorteo',
 router.post('/poceada/guardar-resultado',
   requirePermission('control_previo.ejecutar'),
   poceadaController.guardarResultado
+);
+
+router.post('/poceada/guardar-arrastres',
+  requirePermission('control_previo.ejecutar'),
+  poceadaController.guardarArrastres
 );
 
 // Configuración de juegos

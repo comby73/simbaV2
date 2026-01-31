@@ -16,16 +16,16 @@ const { PROVINCIAS } = require('./helpers');
  */
 function agruparPorAgencia(registrosNTF, tipoJuego = 'quiniela') {
   const agencias = new Map();
-  
+
   if (!registrosNTF || !Array.isArray(registrosNTF)) {
     return agencias;
   }
-  
+
   for (const registro of registrosNTF) {
     // Obtener código de agencia según tipo de juego
     let codigoAgencia;
     let codigoProvincia = '51'; // Por defecto CABA
-    
+
     if (tipoJuego === 'poceada') {
       // Poceada tiene agenciaCompleta (provincia + agencia) o agencia sola
       if (registro.agenciaCompleta) {
@@ -35,17 +35,23 @@ function agruparPorAgencia(registrosNTF, tipoJuego = 'quiniela') {
         codigoAgencia = registro.agencia?.trim().padStart(5, '0') || '00000';
       }
     } else {
-      // Quiniela solo tiene agencia (5 dígitos)
-      codigoAgencia = registro.agencia?.trim().padStart(5, '0') || '00000';
-      // Para venta web (88880), la provincia es 51
-      if (codigoAgencia === '88880') {
-        codigoProvincia = '51';
+      // Quiniela o Tombolina
+      const agStr = registro.agencia?.trim() || '0000000';
+      if (agStr.length >= 7) {
+        codigoProvincia = agStr.substring(0, 2);
+        codigoAgencia = agStr.substring(2).padStart(5, '0');
+      } else {
+        codigoAgencia = agStr.padStart(5, '0');
+        // Para venta web (88880), la provincia es 51
+        if (codigoAgencia === '88880') {
+          codigoProvincia = '51';
+        }
       }
     }
-    
+
     // Clave única: provincia + agencia
     const claveAgencia = codigoProvincia + codigoAgencia;
-    
+
     if (!agencias.has(claveAgencia)) {
       agencias.set(claveAgencia, {
         codigoAgencia: claveAgencia, // Código completo (7 dígitos: prov + agencia)
@@ -57,9 +63,9 @@ function agruparPorAgencia(registrosNTF, tipoJuego = 'quiniela') {
         ticketsSet: new Set() // Para contar tickets únicos
       });
     }
-    
+
     const ag = agencias.get(claveAgencia);
-    
+
     // Contar como ticket único según ordinal o por ticket number
     if (tipoJuego === 'poceada') {
       // En Poceada usamos el ticket como identificador único
@@ -68,23 +74,23 @@ function agruparPorAgencia(registrosNTF, tipoJuego = 'quiniela') {
       ag.totalApuestas++;
       ag.totalRecaudacion += registro.importe || 0;
     } else {
-      // Quiniela
+      // Quiniela o Tombolina
       const ordinal = registro.ordinal?.trim() || '';
-      if (ordinal === '01' || ordinal === '' || ordinal === '1') {
-        ag.ticketsSet.add(registro.numeroTicket);
+      if (ordinal === '01' || ordinal === '' || ordinal === '1' || tipoJuego === 'tombolina') {
+        ag.ticketsSet.add(registro.numeroTicket || registro.ticket);
       }
-      // Cada registro es una apuesta (ordinal)
+      // Cada registro es una apuesta (ordinal o registro único en tómbola)
       ag.totalApuestas++;
-      ag.totalRecaudacion += registro.valorApuesta || 0;
+      ag.totalRecaudacion += (registro.valorApuesta || registro.importe || 0);
     }
   }
-  
+
   // Convertir ticketsSet a count y eliminar el Set
   for (const [, ag] of agencias) {
     ag.totalTickets = ag.ticketsSet.size;
     delete ag.ticketsSet;
   }
-  
+
   return agencias;
 }
 
@@ -106,23 +112,23 @@ async function guardarAgenciasControlPrevio(controlPrevioId, juego, fecha, numer
       'DELETE FROM control_previo_agencias WHERE control_previo_id = ? AND juego = ?',
       [controlPrevioId, juego]
     );
-    
+
     // Agrupar por agencia según tipo de juego
     const agencias = agruparPorAgencia(registrosNTF, tipoJuego);
-    
+
     if (agencias.size === 0) {
       console.log(`⚠️ No hay datos de agencias para guardar (${juego})`);
       return { success: true, agenciasGuardadas: 0 };
     }
-    
+
     // Preparar inserts en batch
     const valores = [];
     const placeholders = [];
-    
+
     for (const [codigoAgencia, datos] of agencias) {
       // Obtener anulados de ese agencia si está disponible
       const anulados = registrosAnuladosPorAgencia?.get(codigoAgencia) || 0;
-      
+
       placeholders.push('(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)');
       valores.push(
         controlPrevioId,
@@ -138,7 +144,7 @@ async function guardarAgenciasControlPrevio(controlPrevioId, juego, fecha, numer
         datos.totalRecaudacion
       );
     }
-    
+
     // Insert en batch
     const sql = `
       INSERT INTO control_previo_agencias 
@@ -146,12 +152,12 @@ async function guardarAgenciasControlPrevio(controlPrevioId, juego, fecha, numer
          codigo_provincia, total_tickets, total_apuestas, total_anulados, total_recaudacion)
       VALUES ${placeholders.join(', ')}
     `;
-    
+
     await query(sql, valores);
-    
+
     console.log(`✅ Guardadas ${agencias.size} agencias para Control Previo ${juego} (ID: ${controlPrevioId})`);
     return { success: true, agenciasGuardadas: agencias.size };
-    
+
   } catch (error) {
     console.error(`❌ Error guardando agencias Control Previo ${juego}:`, error);
     return { success: false, error: error.message };
@@ -254,11 +260,11 @@ async function guardarControlPrevioQuiniela(resultado, usuario, nombreArchivo) {
     // NUEVO: Guardar datos por agencia si hay registros NTF
     if (resultado.registrosNTF && resultado.registrosNTF.length > 0) {
       const resAgencias = await guardarAgenciasControlPrevio(
-        id, 
-        'quiniela', 
-        fecha, 
-        numeroSorteo, 
-        modalidad, 
+        id,
+        'quiniela',
+        fecha,
+        numeroSorteo,
+        modalidad,
         resultado.registrosNTF,
         null, // No tenemos map de anulados por agencia aún
         'quiniela' // Tipo de juego para parsing correcto
@@ -373,10 +379,10 @@ async function guardarControlPrevioPoceada(resultado, usuario, nombreArchivo) {
     // NUEVO: Guardar datos por agencia si hay registros NTF
     if (resultado.registrosNTF && resultado.registrosNTF.length > 0) {
       const resAgencias = await guardarAgenciasControlPrevio(
-        id, 
-        'poceada', 
-        fecha, 
-        numeroSorteo, 
+        id,
+        'poceada',
+        fecha,
+        numeroSorteo,
         'U', // Poceada no tiene modalidad, usar 'U' (único)
         resultado.registrosNTF,
         null, // No tenemos map de anulados por agencia
@@ -436,8 +442,91 @@ async function obtenerHistorialControlPrevio(juego, filtros = {}) {
   }
 }
 
+/**
+ * Guarda el resultado del Control Previo de Tombolina en la base de datos
+ */
+async function guardarControlPrevioTombolina(resultado, usuario, nombreArchivo) {
+  try {
+    const {
+      sorteo,
+      datosCalculados,
+      registrosNTF
+    } = resultado;
+
+    // Extraer datos
+    const fecha = new Date().toISOString().split('T')[0]; // Tombolina usa fecha actual si no viene otra
+    const numeroSorteo = parseInt(sorteo || datosCalculados?.numeroSorteo || 0);
+
+    // Verificar si ya existe
+    const existe = await query(
+      'SELECT id FROM control_previo_tombolina WHERE fecha = ? AND numero_sorteo = ?',
+      [fecha, numeroSorteo]
+    );
+
+    const datosGuardar = {
+      fecha,
+      numero_sorteo: numeroSorteo,
+      total_registros: datosCalculados?.totalRegistros || 0,
+      total_tickets: datosCalculados?.totalApuestas || 0,
+      total_apuestas: datosCalculados?.totalApuestas || 0,
+      total_anulados: datosCalculados?.totalAnulados || 0,
+      total_recaudacion: datosCalculados?.totalRecaudacion || 0,
+      nombre_archivo_zip: nombreArchivo,
+      hash_archivo: resultado.seguridad?.hashCalculado || null,
+      usuario_id: usuario?.id || null,
+      usuario_nombre: usuario?.nombre || 'Sistema'
+    };
+
+    let id;
+
+    if (existe.length > 0) {
+      id = existe[0].id;
+      await query(
+        `UPDATE control_previo_tombolina SET 
+          total_registros = ?, total_tickets = ?, total_apuestas = ?, total_anulados = ?,
+          total_recaudacion = ?, nombre_archivo_zip = ?, hash_archivo = ?, 
+          usuario_id = ?, usuario_nombre = ?, updated_at = NOW()
+         WHERE id = ?`,
+        [
+          datosGuardar.total_registros, datosGuardar.total_tickets, datosGuardar.total_apuestas,
+          datosGuardar.total_anulados, datosGuardar.total_recaudacion, datosGuardar.nombre_archivo_zip,
+          datosGuardar.hash_archivo, datosGuardar.usuario_id, datosGuardar.usuario_nombre, id
+        ]
+      );
+    } else {
+      const result = await query(
+        `INSERT INTO control_previo_tombolina 
+         (fecha, numero_sorteo, total_registros, total_tickets, total_apuestas,
+          total_anulados, total_recaudacion, nombre_archivo_zip, hash_archivo,
+          usuario_id, usuario_nombre)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        [
+          datosGuardar.fecha, datosGuardar.numero_sorteo, datosGuardar.total_registros,
+          datosGuardar.total_tickets, datosGuardar.total_apuestas, datosGuardar.total_anulados,
+          datosGuardar.total_recaudacion, datosGuardar.nombre_archivo_zip, datosGuardar.hash_archivo,
+          datosGuardar.usuario_id, datosGuardar.usuario_nombre
+        ]
+      );
+      id = result.insertId;
+    }
+
+    // Guardar agencias
+    if (registrosNTF && registrosNTF.length > 0) {
+      await guardarAgenciasControlPrevio(
+        id, 'tombolina', fecha, numeroSorteo, 'U', registrosNTF, null, 'tombolina'
+      );
+    }
+
+    return { success: true, id, mensaje: 'Control Previo Tombolina guardado' };
+  } catch (error) {
+    console.error('❌ Error guardando CP Tombolina:', error);
+    return { success: false, error: error.message };
+  }
+}
+
 module.exports = {
   guardarControlPrevioQuiniela,
   guardarControlPrevioPoceada,
+  guardarControlPrevioTombolina,
   obtenerHistorialControlPrevio
 };

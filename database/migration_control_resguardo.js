@@ -63,7 +63,6 @@ CREATE TABLE IF NOT EXISTS control_previo_quiniela (
   FOREIGN KEY (usuario_id) REFERENCES usuarios(id) ON DELETE SET NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
--- Control Previo Poceada (solo totales)
 CREATE TABLE IF NOT EXISTS control_previo_poceada (
   id INT PRIMARY KEY AUTO_INCREMENT,
   fecha DATE NOT NULL,
@@ -97,6 +96,48 @@ CREATE TABLE IF NOT EXISTS control_previo_poceada (
   updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   
   UNIQUE KEY uk_poceada_sorteo (fecha, numero_sorteo),
+  INDEX idx_fecha (fecha),
+  INDEX idx_sorteo (numero_sorteo),
+  FOREIGN KEY (usuario_id) REFERENCES usuarios(id) ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- Control Previo Tombolina (solo totales)
+CREATE TABLE IF NOT EXISTS control_previo_tombolina (
+  id INT PRIMARY KEY AUTO_INCREMENT,
+  fecha DATE NOT NULL,
+  numero_sorteo INT NOT NULL,
+  
+  -- Totales
+  total_registros INT DEFAULT 0,
+  total_tickets INT DEFAULT 0,
+  total_apuestas INT DEFAULT 0,
+  total_anulados INT DEFAULT 0,
+  total_recaudacion DECIMAL(15,2) DEFAULT 0,
+  
+  -- Desglose por cantidad de números jugados
+  apuestas_7_numeros INT DEFAULT 0,
+  apuestas_6_numeros INT DEFAULT 0,
+  apuestas_5_numeros INT DEFAULT 0,
+  apuestas_4_numeros INT DEFAULT 0,
+  apuestas_3_numeros INT DEFAULT 0,
+  
+  -- Archivo procesado
+  nombre_archivo_zip VARCHAR(255),
+  hash_archivo VARCHAR(64),
+  hash_verificado BOOLEAN DEFAULT FALSE,
+  
+  -- Detalle por agencia (incluye online 88880)
+  resumen_agencias JSON COMMENT 'Detalle por agencia',
+  
+  datos_adicionales JSON,
+  
+  -- Auditoría
+  usuario_id INT,
+  usuario_nombre VARCHAR(100),
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  
+  UNIQUE KEY uk_tombolina_sorteo (fecha, numero_sorteo),
   INDEX idx_fecha (fecha),
   INDEX idx_sorteo (numero_sorteo),
   FOREIGN KEY (usuario_id) REFERENCES usuarios(id) ON DELETE SET NULL

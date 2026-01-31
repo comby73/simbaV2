@@ -3,11 +3,12 @@ const router = express.Router();
 const multer = require('multer');
 const quinielaController = require('./quiniela-escrutinio.controller');
 const poceadaController = require('./poceada-escrutinio.controller');
+const tombolinaController = require('./tombolina-escrutinio.controller');
 const extractoController = require('./extracto.controller');
 const { authenticate } = require('../../shared/middleware');
 
 // Configurar multer para uploads
-const upload = multer({ 
+const upload = multer({
   storage: multer.memoryStorage(),
   limits: { fileSize: 10 * 1024 * 1024 } // 10MB
 });
@@ -18,6 +19,7 @@ router.use(authenticate);
 // Ejecutar escrutinio
 router.post('/quiniela/escrutinio', quinielaController.ejecutarControlPosterior);
 router.post('/poceada/escrutinio', poceadaController.ejecutar);
+router.post('/tombolina-escrutinio', tombolinaController.ejecutarEscrutinioTombolina);
 
 // Generar Excel
 router.post('/quiniela/excel', quinielaController.generarExcel);

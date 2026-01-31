@@ -5,10 +5,6 @@ const isProduction = !isLocal;
 const isApache = (window.location.port === '' || window.location.port === '80') && !isFile && isLocal;
 
 // Configurar API_BASE según el entorno:
-// - Producción (Hostinger): /api
-// - Apache local (XAMPP/WAMP): /simbaV2/public/api  
-// - Servidor de desarrollo (Vite/Node/Puerto 3000): /api
-// - Archivo local: http://localhost/simbaV2/public/api
 const API_BASE = isFile ? 'http://localhost/simbaV2/public/api' : (isProduction ? '/api' : (isApache ? '/simbaV2/public/api' : '/api'));
 
 console.log(`[SIMBA] Entorno detectado: ${isProduction ? 'Producción' : 'Desarrollo'} | API_BASE: ${API_BASE}`);
@@ -37,7 +33,6 @@ async function apiRequest(endpoint, options = {}) {
     ...options
   };
 
-  // Timeout de 30 segundos para evitar colgaduras infinitas
   const controller = new AbortController();
   const id = setTimeout(() => controller.abort(), 30000);
   config.signal = controller.signal;
@@ -47,7 +42,6 @@ async function apiRequest(endpoint, options = {}) {
     const response = await fetch(url, config);
     clearTimeout(id);
 
-    // Intentar parsear JSON solo si hay contenido
     const contentType = response.headers.get("content-type");
     let data;
     if (contentType && contentType.includes("application/json")) {
@@ -68,13 +62,16 @@ async function apiRequest(endpoint, options = {}) {
     return data;
   } catch (error) {
     clearTimeout(id);
-    if (error.name === 'AbortError') {
-      console.error('[SIMBA] La solicitud excedió el tiempo límite (30s)');
-      throw new Error('Tiempo de espera agotado. El servidor no responde.');
-    }
+    if (error.name === 'AbortError') throw new Error('Tiempo de espera agotado.');
     console.error('[SIMBA] Error en apiRequest:', error);
     throw error;
   }
+}
+
+function handleLogout() {
+  removeToken();
+  removeUser();
+  window.location.reload();
 }
 
 // Auth API
@@ -90,10 +87,8 @@ const authAPI = {
     }
     return response;
   },
-
   getProfile: () => apiRequest('/auth/profile'),
   verify: () => apiRequest('/auth/verify'),
-
   changePassword: (currentPassword, newPassword) =>
     apiRequest('/auth/change-password', {
       method: 'POST',
@@ -101,73 +96,47 @@ const authAPI = {
     })
 };
 
-// Users API
-const usersAPI = {
-  getAll: () => apiRequest('/users'),
-  getById: (id) => apiRequest(`/users/${id}`),
-  getRoles: () => apiRequest('/users/roles'),
-
-  create: (data) => apiRequest('/users', {
-    method: 'POST',
-    body: JSON.stringify(data)
-  }),
-
-  update: (id, data) => apiRequest(`/users/${id}`, {
-    method: 'PUT',
-    body: JSON.stringify(data)
-  }),
-
-  resetPassword: (id, newPassword) => apiRequest(`/users/${id}/reset-password`, {
-    method: 'POST',
-    body: JSON.stringify({ newPassword })
-  })
-};
-
-function handleLogout() {
-  removeToken();
-  removeUser();
-  window.location.reload();
-}
-
 // Control Previo API
 const controlPrevioAPI = {
   procesarQuiniela: async (file) => {
     const formData = new FormData();
     formData.append('archivo', file);
-
     const token = getToken();
     const response = await fetch(`${API_BASE}/control-previo/quiniela/procesar`, {
       method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${token}`
-      },
+      headers: { 'Authorization': `Bearer ${token}` },
       body: formData
     });
-
     const data = await response.json();
-    if (!response.ok) {
-      throw new Error(data.message || 'Error procesando archivo');
-    }
+    if (!response.ok) throw new Error(data.message || 'Error procesando archivo');
     return data;
   },
 
   procesarPoceada: async (file) => {
     const formData = new FormData();
     formData.append('archivo', file);
-
     const token = getToken();
     const response = await fetch(`${API_BASE}/control-previo/poceada/procesar-zip`, {
       method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${token}`
-      },
+      headers: { 'Authorization': `Bearer ${token}` },
       body: formData
     });
-
     const data = await response.json();
-    if (!response.ok) {
-      throw new Error(data.message || 'Error procesando Poceada');
-    }
+    if (!response.ok) throw new Error(data.message || 'Error procesando Poceada');
+    return data;
+  },
+
+  procesarTombolina: async (file) => {
+    const formData = new FormData();
+    formData.append('archivo', file);
+    const token = getToken();
+    const response = await fetch(`${API_BASE}/control-previo/tombolina/procesar`, {
+      method: 'POST',
+      headers: { 'Authorization': `Bearer ${token}` },
+      body: formData
+    });
+    const data = await response.json();
+    if (!response.ok) throw new Error(data.message || 'Error procesando Tombolina');
     return data;
   },
 
@@ -201,6 +170,11 @@ const controlPosteriorAPI = {
     body: JSON.stringify(datos)
   }),
 
+  escrutinioTombolina: (datos) => apiRequest('/control-posterior/tombolina-escrutinio', {
+    method: 'POST',
+    body: JSON.stringify(datos)
+  }),
+
   procesarXmlExtracto: async (file) => {
     const formData = new FormData();
     formData.append('archivo', file);
@@ -216,32 +190,10 @@ const controlPosteriorAPI = {
 
 // Agencias API
 const agenciasAPI = {
-  cargarExcel: async (file, reemplazar = false) => {
-    const formData = new FormData();
-    formData.append('excel', file);
-    formData.append('reemplazar', reemplazar);
-
-    const token = getToken();
-    const response = await fetch(`${API_BASE}/agencias/cargar-excel`, {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${token}`
-      },
-      body: formData
-    });
-
-    const data = await response.json();
-    if (!response.ok) {
-      throw new Error(data.message || 'Error cargando Excel');
-    }
-    return data;
-  },
-
   obtenerTodas: (params = {}) => {
     const query = new URLSearchParams(params).toString();
     return apiRequest(`/agencias${query ? `?${query}` : ''}`);
   },
-
   buscar: (numero) => apiRequest(`/agencias/buscar/${numero}`)
 };
 
@@ -251,21 +203,9 @@ const extractosAPI = {
     const query = new URLSearchParams(params).toString();
     return apiRequest(`/extractos${query ? `?${query}` : ''}`);
   },
-  getById: (id) => apiRequest(`/extractos/${id}`),
-  guardar: (data) => apiRequest('/extractos', {
-    method: 'POST',
-    body: JSON.stringify(data)
-  }),
   guardarBulk: (extractos) => apiRequest('/extractos/bulk', {
     method: 'POST',
     body: JSON.stringify({ extractos })
-  }),
-  actualizar: (id, data) => apiRequest(`/extractos/${id}`, {
-    method: 'PUT',
-    body: JSON.stringify(data)
-  }),
-  eliminar: (id) => apiRequest(`/extractos/${id}`, {
-    method: 'DELETE'
   })
 };
 

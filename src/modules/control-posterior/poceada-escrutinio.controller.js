@@ -107,11 +107,11 @@ function calcularGanadoresMultiples(betNumbers, extractNumbers, numbersCount) {
   for (const num of betSet) {
     if (extractNumbers.has(num)) hits++;
   }
-  
+
   const ganadores = { 6: 0, 7: 0, 8: 0 };
-  
+
   if (hits < 6) return ganadores;
-  
+
   // Para cada nivel de aciertos (6, 7, 8)
   // Fórmula: C(hits, nivel) * C(numbersCount - hits, 8 - nivel)
   for (const nivel of [6, 7, 8]) {
@@ -119,7 +119,7 @@ function calcularGanadoresMultiples(betNumbers, extractNumbers, numbersCount) {
       ganadores[nivel] = combinaciones(hits, nivel) * combinaciones(numbersCount - hits, 8 - nivel);
     }
   }
-  
+
   return ganadores;
 }
 
@@ -157,16 +157,16 @@ const ejecutar = async (req, res) => {
     console.log(`Registros recibidos: ${registrosNTF.length}`);
     console.log(`Extracto (20 números): ${extracto.numeros.join(', ')}`);
     console.log(`Letras: ${extracto.letras.join(' ')}`);
-    
+
     const resultado = runScrutiny(registrosNTF, extracto, datosControlPrevio, registrosAnulados);
-    
+
     console.log(`\nRESULTADOS:`);
     console.log(`  Ganadores 8 aciertos: ${resultado.porNivel[8].ganadores}`);
     console.log(`  Ganadores 7 aciertos: ${resultado.porNivel[7].ganadores}`);
     console.log(`  Ganadores 6 aciertos: ${resultado.porNivel[6].ganadores}`);
     console.log(`  Total ganadores: ${resultado.totalGanadores}`);
     console.log(`${'='.repeat(50)}\n`);
-    
+
     // GUARDAR EN BASE DE DATOS (resguardo)
     try {
       const resguardo = await guardarEscrutinioPoceada(resultado, datosControlPrevio, req.user);
@@ -190,12 +190,12 @@ const ejecutar = async (req, res) => {
 function numeroALetras(n) {
   if (n === 0) return 'VACANTE';
   if (n === 1) return 'UN (1) GANADOR';
-  
+
   const basicos = {
-    2: 'DOS', 3: 'TRES', 4: 'CUATRO', 5: 'CINCO', 
+    2: 'DOS', 3: 'TRES', 4: 'CUATRO', 5: 'CINCO',
     6: 'SEIS', 7: 'SIETE', 8: 'OCHO', 9: 'NUEVE', 10: 'DIEZ'
   };
-  
+
   if (basicos[n]) return `${basicos[n]} (${n}) GANADORES`;
   return `${n} GANADORES`;
 }
@@ -208,19 +208,19 @@ function runScrutiny(registrosNTF, extracto, datosControlPrevio, registrosAnulad
   // Preparar extracto - convertir a Set para búsqueda O(1)
   const extractNumbers = new Set(extracto.numeros.map(n => parseInt(n)));
   const extractLetters = extracto.letras.join('').toUpperCase();
-  
+
   console.log(`Números del sorteo (Set): ${[...extractNumbers].join(', ')}`);
   console.log(`Letras del sorteo: ${extractLetters}`);
-  
+
   // Filtrar solo registros de Poceada
-  const registrosPoceada = registrosNTF.filter(r => 
-    r.tipo === 'POC' || 
-    r.tipoJuego === 'POC' || 
+  const registrosPoceada = registrosNTF.filter(r =>
+    r.tipo === 'POC' ||
+    r.tipoJuego === 'POC' ||
     r.tipoJuego === 'Poceada'
   );
-  
+
   console.log(`Registros Poceada: ${registrosPoceada.length} de ${registrosNTF.length}`);
-  
+
   // Estructuras para acumular resultados
   const porNivel = {
     8: { ganadores: 0, premioUnitario: 0, totalPremios: 0, pozoVacante: 0, agenciasGanadoras: [] },
@@ -228,7 +228,7 @@ function runScrutiny(registrosNTF, extracto, datosControlPrevio, registrosAnulad
     6: { ganadores: 0, premioUnitario: 0, totalPremios: 0, pozoVacante: 0 },
     'letras': { ganadores: 0, premioUnitario: 0, totalPremios: 0, pozoVacante: 0 }
   };
-  
+
   // Estadísticas por cantidad de números jugados
   const porCantidadNumeros = {};
   for (let i = 8; i <= 15; i++) {
@@ -241,27 +241,29 @@ function runScrutiny(registrosNTF, extracto, datosControlPrevio, registrosAnulad
       totalPremios: 0
     };
   }
-  
+
   let totalRegistrosValidos = 0;
   let totalApuestas = 0;
   let totalRecaudacion = 0;
   let ganadoresLetras = 0;
-  
+
+  const ganadoresDetalle = [];
+
   // Procesar cada registro
   for (const registro of registrosPoceada) {
     // Saltar registros cancelados (ya vienen filtrados, pero por si acaso)
     if (registro.cancelado || registro.isCanceled) continue;
-    
+
     totalRegistrosValidos++;
-    
+
     // Determinar cantidad de números jugados
     const cantNum = parseInt(registro.cantNum || registro.cantidadNumeros || 8);
     totalApuestas += COMBINACIONES_MULTIPLES[cantNum] || 1;
-    
+
     // Obtener importe
     const importe = parseFloat(registro.importe || registro.monto || 0);
     totalRecaudacion += importe;
-    
+
     // Decodificar números de la apuesta desde la secuencia
     let betNumbers = [];
     if (registro.numeros && Array.isArray(registro.numeros)) {
@@ -269,30 +271,43 @@ function runScrutiny(registrosNTF, extracto, datosControlPrevio, registrosAnulad
     } else if (registro.secuencia) {
       betNumbers = decodificarNumerosPoceada(registro.secuencia);
     }
-    
+
     if (betNumbers.length < 8) {
       console.warn(`Registro con pocos números (${betNumbers.length}): secuencia=${registro.secuencia}`);
       continue;
     }
-    
+
     // Registrar estadísticas por cantidad de números
     if (porCantidadNumeros[cantNum]) {
       porCantidadNumeros[cantNum].registros++;
     }
-    
+
     let hits = 0;
-    
+
     // Calcular ganadores
     if (cantNum === 8) {
       // Apuesta simple: contar aciertos directamente
       hits = countHits(betNumbers, extractNumbers);
-      
+
       if (hits >= 6) {
         porNivel[hits].ganadores++;
-        // Guardar agencia si es 8 aciertos
+
+        // RECOLECTAR DETALLE PARA REPORTES
+        const codProv = registro.provincia || '51';
+        const codAgenciaStr = (registro.agencia || '').toString();
+        const codAgencia = codAgenciaStr.replace(/^51/, '').padStart(5, '0');
+
+        ganadoresDetalle.push({
+          ticket: registro.ticket || registro.numeroTicket,
+          agencia: `${codProv}-${codAgencia}`,
+          provincia: codProv,
+          cta_cte: `${codProv}-${codAgencia}`,
+          hits: hits,
+          tipo: `Poceada ${hits} aciertos`,
+          premio: 0 // Se calculará después al tener el unitario
+        });
+
         if (hits === 8) {
-          const codProv = registro.provincia || '51';
-          const codAgencia = (registro.agencia || '').toString().padStart(5, '0');
           porNivel[8].agenciasGanadoras.push({
             agencia: registro.agencia || '',
             provincia: codProv,
@@ -300,7 +315,7 @@ function runScrutiny(registrosNTF, extracto, datosControlPrevio, registrosAnulad
             posicion: registro.posicion || null
           });
         }
-        
+
         if (porCantidadNumeros[cantNum]) {
           porCantidadNumeros[cantNum][`gan${hits}`]++;
         }
@@ -309,10 +324,12 @@ function runScrutiny(registrosNTF, extracto, datosControlPrevio, registrosAnulad
       // Apuesta múltiple: calcular combinaciones ganadoras
       hits = countHits(betNumbers, extractNumbers); // Aciertos base para estadísticas
       const ganadoresMultiples = calcularGanadoresMultiples(betNumbers, extractNumbers, cantNum);
-      
+
+      const codProv = registro.provincia || '51';
+      const codAgenciaStr = (registro.agencia || '').toString();
+      const codAgencia = codAgenciaStr.replace(/^51/, '').padStart(5, '0');
+
       if (ganadoresMultiples[8] > 0) {
-        const codProv = registro.provincia || '51';
-        const codAgencia = (registro.agencia || '').toString().padStart(5, '0');
         porNivel[8].ganadores += ganadoresMultiples[8];
         porNivel[8].agenciasGanadoras.push({
           agencia: registro.agencia || '',
@@ -322,51 +339,82 @@ function runScrutiny(registrosNTF, extracto, datosControlPrevio, registrosAnulad
           cantidad: ganadoresMultiples[8]
         });
       }
-      porNivel[7].ganadores += ganadoresMultiples[7];
-      porNivel[6].ganadores += ganadoresMultiples[6];
-      
+
+      // Registrar en detalle para 8, 7 y 6
+      [8, 7, 6].forEach(nivel => {
+        if (ganadoresMultiples[nivel] > 0) {
+          porNivel[nivel].ganadores += (nivel !== 8 ? ganadoresMultiples[nivel] : 0); // El 8 ya se sumó arriba
+
+          for (let k = 0; k < ganadoresMultiples[nivel]; k++) {
+            ganadoresDetalle.push({
+              ticket: registro.ticket || registro.numeroTicket,
+              agencia: `${codProv}-${codAgencia}`,
+              provincia: codProv,
+              cta_cte: `${codProv}-${codAgencia}`,
+              hits: nivel,
+              tipo: `Poceada ${nivel} aciertos (múltiple)`,
+              premio: 0
+            });
+          }
+        }
+      });
+
       if (porCantidadNumeros[cantNum]) {
         porCantidadNumeros[cantNum].gan8 += ganadoresMultiples[8];
         porCantidadNumeros[cantNum].gan7 += ganadoresMultiples[7];
         porCantidadNumeros[cantNum].gan6 += ganadoresMultiples[6];
       }
     }
-    
+
     // Verificar letras
     const letrasApuesta = (registro.letras || '').toUpperCase();
     if (letrasApuesta === extractLetters) {
       ganadoresLetras++;
       porNivel['letras'].ganadores++;
+
+      const codProv = registro.provincia || '51';
+      const codAgenciaStr = (registro.agencia || '').toString();
+      const codAgencia = codAgenciaStr.replace(/^51/, '').padStart(5, '0');
+
+      ganadoresDetalle.push({
+        ticket: registro.ticket || registro.numeroTicket,
+        agencia: `${codProv}-${codAgencia}`,
+        provincia: codProv,
+        cta_cte: `${codProv}-${codAgencia}`,
+        hits: 'letras',
+        tipo: `Poceada Letras`,
+        premio: 1000 // Fijo para letras
+      });
     }
   }
-  
+
   // Obtener premios del control previo (del XML)
   // Los premios ya están calculados en el control previo, no los calculamos acá
-  const premiosXML = datosControlPrevio?.datosOficiales?.premios || 
-                     datosControlPrevio?.premios || {};
-  
+  const premiosXML = datosControlPrevio?.datosOficiales?.premios ||
+    datosControlPrevio?.premios || {};
+
   const primerPremioTotal = premiosXML?.primero?.total || premiosXML?.primerPremio || 0;
   const segundoPremioTotal = premiosXML?.segundo?.total || premiosXML?.segundoPremio || 0;
   const tercerPremioTotal = premiosXML?.tercero?.total || premiosXML?.tercerPremio || 0;
   const letrasPremioTotal = premiosXML?.letras?.total || premiosXML?.letras || 0;
-  
+
   console.log(`\nPremios del XML:`);
   console.log(`  Primer premio (8 aciertos): $${primerPremioTotal.toLocaleString()}`);
   console.log(`  Segundo premio (7 aciertos): $${segundoPremioTotal.toLocaleString()}`);
   console.log(`  Tercer premio (6 aciertos): $${tercerPremioTotal.toLocaleString()}`);
   console.log(`  Premio Letras: $${letrasPremioTotal.toLocaleString()}`);
-  
+
   // Calcular premio estímulo agenciero (0.5% del pozo, o deducido del 1er premio)
   // Si 1er premio (62%) = X, entonces Pozo = X / 0.62
   // Estímulo (0.5%) = Pozo * 0.005
   let premioEstimuloTotal = 0;
   let pozoEstimado = 0;
-  
+
   if (primerPremioTotal > 0) {
     pozoEstimado = primerPremioTotal / 0.62;
     premioEstimuloTotal = pozoEstimado * 0.005;
   }
-  
+
   // Calcular premios unitarios y totales
   let totalPremios = 0;
   let totalGanadores = 0;
@@ -378,11 +426,11 @@ function runScrutiny(registrosNTF, extracto, datosControlPrevio, registrosAnulad
     6: tercerPremioTotal,
     'letras': letrasPremioTotal
   };
-  
+
   for (const nivel of [8, 7, 6, 'letras']) {
     const cantGanadores = porNivel[nivel].ganadores;
     let pozoNivel = premiosPorNivel[nivel];
-    
+
     // REGLA ESPECIAL PREMIO LETRAS: Es un premio fijo de $1000 por ganador
     if (nivel === 'letras') {
       const PREMIO_FIJO_LETRAS = 1000; // $1000.00 en pesos
@@ -390,7 +438,7 @@ function runScrutiny(registrosNTF, extracto, datosControlPrevio, registrosAnulad
       porNivel[nivel].totalPremios = cantGanadores * PREMIO_FIJO_LETRAS;
       porNivel[nivel].pozoVacante = 0; // No hay vacante en premio fijo
       porNivel[nivel].ganadoresTexto = cantGanadores > 0 ? numeroALetras(cantGanadores) : 'VACANTE';
-      
+
       if (cantGanadores > 0) {
         totalPremios += porNivel[nivel].totalPremios;
         totalGanadores += cantGanadores; // Incluimos ganadores de letras en el total general
@@ -400,7 +448,7 @@ function runScrutiny(registrosNTF, extracto, datosControlPrevio, registrosAnulad
 
     // Agregar texto de ganadores
     porNivel[nivel].ganadoresTexto = numeroALetras(cantGanadores);
-    
+
     if (cantGanadores > 0) {
       porNivel[nivel].premioUnitario = pozoNivel / cantGanadores;
       porNivel[nivel].totalPremios = pozoNivel;
@@ -424,12 +472,12 @@ function runScrutiny(registrosNTF, extracto, datosControlPrevio, registrosAnulad
     ganadores: porNivel[8].ganadores > 0 ? porNivel[8].agenciasGanadoras.length : 0,
     premioUnitario: porNivel[8].ganadores > 0 ? (premioEstimuloTotal / porNivel[8].ganadores) : 0,
     totalPremios: porNivel[8].ganadores > 0 ? premioEstimuloTotal : 0,
-    pozoVacante: porNivel[8].ganadores === 0 ? premioEstimuloTotal : 0, 
+    pozoVacante: porNivel[8].ganadores === 0 ? premioEstimuloTotal : 0,
     ganadoresTexto: porNivel[8].ganadores > 0 ? numeroALetras(porNivel[8].ganadores) : 'VACANTE',
     detalles: porNivel[8].agenciasGanadoras // Lista de agencias para mostrar Cta Cte
   };
 
-  
+
   // Calcular premios por cantidad de números
   for (let cant = 8; cant <= 15; cant++) {
     const datos = porCantidadNumeros[cant];
@@ -447,12 +495,12 @@ function runScrutiny(registrosNTF, extracto, datosControlPrevio, registrosAnulad
       datos.totalPremios = premiosCant;
     }
   }
-  
+
   // Construir objeto de comparación con control previo
   const cpRegistros = datosControlPrevio?.registros || datosControlPrevio?.resumen?.registros || totalRegistrosValidos;
   const cpApuestas = datosControlPrevio?.apuestas || datosControlPrevio?.resumen?.apuestasTotal || totalApuestas;
   const cpRecaudacion = datosControlPrevio?.recaudacion || datosControlPrevio?.resumen?.recaudacion || totalRecaudacion;
-  
+
   const comparacion = {
     registros: {
       controlPrevio: cpRegistros,
@@ -471,15 +519,26 @@ function runScrutiny(registrosNTF, extracto, datosControlPrevio, registrosAnulad
       coincide: Math.abs(cpRecaudacion - totalRecaudacion) < 1
     }
   };
-  
+
+  // Asignar premios a los ganadores detallados
+  for (const g of ganadoresDetalle) {
+    if (g.hits === 'letras') {
+      g.premio = 1000;
+    } else if (porNivel[g.hits] && porNivel[g.hits].premioUnitario > 0) {
+      g.premio = porNivel[g.hits].premioUnitario;
+    }
+  }
+
   return {
     numeroSorteo: datosControlPrevio?.sorteo || datosControlPrevio?.numeroSorteo || 'S/N',
     fechaSorteo: datosControlPrevio?.fecha || datosControlPrevio?.fechaSorteo || '',
     totalGanadores,
     totalPremios,
+    totalAgenciero: agencieroData.totalPremios,
     ganadoresLetras,
     porNivel,
     agenciero: agencieroData,
+    ganadoresDetalle, // NUEVO: Detalle para el helper y reportes
     porCantidadNumeros,
     comparacion,
     premiosXML: {
@@ -492,8 +551,54 @@ function runScrutiny(registrosNTF, extracto, datosControlPrevio, registrosAnulad
       numeros: [...extractNumbers],
       letras: extractLetters
     },
-    agenciero: agencieroData
+    // NUEVO: Reporte por extracto (provincia) para que sea "como quiniela"
+    reportePorExtracto: buildReportePorProvinciasPoceada(ganadoresDetalle, porNivel)
   };
+}
+
+/**
+ * Construye el desglose por provincias para Poceada
+ */
+function buildReportePorProvinciasPoceada(ganadoresDetalle, porNivel) {
+  const PROVINCIAS = [
+    { codigo: '51', nombre: 'CABA' },
+    { codigo: '53', nombre: 'Buenos Aires' },
+    { codigo: '55', nombre: 'Córdoba' },
+    { codigo: '72', nombre: 'Santa Fe' },
+    { codigo: '00', nombre: 'Montevideo' },
+    { codigo: '64', nombre: 'Mendoza' },
+    { codigo: '59', nombre: 'Entre Ríos' }
+  ];
+
+  return PROVINCIAS.map(prov => {
+    const ganadoresProv = ganadoresDetalle.filter(g => g.provincia === prov.codigo);
+
+    // Agrupar por nivel de aciertos
+    const porNivelProv = {
+      8: { ganadores: 0, pagado: 0 },
+      7: { ganadores: 0, pagado: 0 },
+      6: { ganadores: 0, pagado: 0 },
+      letras: { ganadores: 0, pagado: 0 }
+    };
+
+    let totalPagado = 0;
+    ganadoresProv.forEach(g => {
+      if (porNivelProv[g.hits]) {
+        porNivelProv[g.hits].ganadores++;
+        porNivelProv[g.hits].pagado += g.premio;
+        totalPagado += g.premio;
+      }
+    });
+
+    return {
+      codigo: prov.codigo,
+      nombre: prov.nombre,
+      totalGanadores: ganadoresProv.length,
+      totalPagado: totalPagado,
+      porNivel: porNivelProv,
+      cargado: true
+    };
+  });
 }
 
 module.exports = {

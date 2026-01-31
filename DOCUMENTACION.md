@@ -740,14 +740,249 @@ programacionAPI.getSorteoPorNumero(numero, juego)         // GET /api/programaci
 
 ---
 
-**Última actualización**: 28 de Enero, 2026
+---
+
+## 🆕 Actualizaciones 30 de Enero 2026
+
+### Deploy en Hostinger (Producción)
+
+**Problema resuelto:** La aplicación no conectaba a la BD en producción. Hostinger no inyecta las variables de entorno al proceso Node.js, y los archivos `.env` se eliminan/ocultan al hacer redeploy.
+
+**Solución implementada:**
+- `src/config/database.js`: Se eliminó la guarda `NODE_ENV !== 'production'` que impedía cargar dotenv. Se agregaron credenciales hardcodeadas como fallback para producción Hostinger.
+- `src/app.js`: Misma corrección de carga de dotenv.
+
+**Notas sobre Hostinger:**
+- Deploya desde branch `principal` (no `main`)
+- Tarda 1+ hora en completar un redeploy
+- El file manager muestra nombres en español (publico, origen, paquete.json)
+- Los archivos dotfiles (`.env`) desaparecen al hacer redeploy
+
+**Archivos modificados:**
+- `src/config/database.js`
+- `src/app.js`
+
+### Tablas de Producción
+
+Se crearon todas las tablas faltantes en la BD de producción (Hostinger):
+- `control_previo_quiniela` (con total_tickets, total_apuestas, total_anulados)
+- `control_previo_poceada` (con distribucion_premios JSON, pozos_arrastre JSON)
+- `control_previo_tombolina` (con desglose apuestas 3-7 números)
+- `escrutinio_quiniela`, `escrutinio_poceada`
+- `escrutinio_premios_agencia`, `escrutinio_ganadores`
+- `control_previo_agencias`
+- `programacion_sorteos`, `programacion_cargas`
+- `poceada_sorteos`
+
+### Modal Pozos de Arrastre - Poceada (4 pozos)
+
+**Problema:** Cuando no se encontraban datos de arrastre del sorteo anterior en la BD, la tabla de Comparación de Premios mostraba $0 en todos los arrastres. Solo existía un `prompt()` para corregir un único pozo.
+
+**Solución implementada:**
+
+#### Frontend (index.html)
+- Nuevo **modal con 4 campos de entrada**: 1er Premio (8 aciertos), 2do Premio (7 aciertos), 3er Premio (6 aciertos), Premio Agenciero
+- La sección "Pozos de Arrastre" ahora muestra **4 tarjetas** con los valores individuales
+- Indicador de fuente de datos: BD (verde), manual (amarillo), sin datos (rojo con link)
+
+#### Frontend (app.js) - Funciones nuevas
+| Función | Descripción |
+|---------|-------------|
+| `abrirModalPozosArrastre()` | Abre el modal pre-cargando valores actuales |
+| `cerrarModalPozosArrastre()` | Cierra el modal |
+| `aplicarPozosArrastre()` | Aplica arrastres, recalcula distribución, guarda en BD |
+| `actualizarDisplayPozosArrastre()` | Actualiza las 4 tarjetas visuales |
+| `recalcularDistribucionConArrastres()` | Recalcula distribución de premios localmente (62%, 23.5%, 10%, etc.) |
+| `actualizarComparacionPremiosConArrastres()` | Actualiza tabla Comparación de Premios en tiempo real |
+| `verificarYMostrarModalArrastres()` | Se ejecuta al procesar Poceada. Si no hay datos, abre modal automáticamente tras 1.5s |
+
+#### Backend (poceada.controller.js)
+- Nuevo endpoint: `POST /api/control-previo/poceada/guardar-arrastres`
+- Nueva función: `buscarTodosArrastresAnterior()` - retorna los 4 arrastres del sorteo anterior
+- `procesarZip` ahora usa los 4 arrastres (antes solo usaba el del 1er premio)
+
+#### Migración BD
+Nuevas columnas en `poceada_sorteos`:
+```sql
+ALTER TABLE poceada_sorteos ADD COLUMN arrastre_segundo_premio DECIMAL(15,2) DEFAULT 0;
+ALTER TABLE poceada_sorteos ADD COLUMN arrastre_tercer_premio DECIMAL(15,2) DEFAULT 0;
+ALTER TABLE poceada_sorteos ADD COLUMN arrastre_agenciero DECIMAL(15,2) DEFAULT 0;
+```
+
+**Archivos modificados:**
+- `public/index.html`: Modal HTML + sección 4 tarjetas pozos
+- `public/js/app.js`: Funciones de modal, recálculo, display
+- `src/modules/control-previo/poceada.controller.js`: `buscarTodosArrastresAnterior()`, `guardarArrastres`
+- `src/modules/control-previo/control-previo.routes.js`: Ruta `/poceada/guardar-arrastres`
+- `database/migration_pozos_arrastre.js`: Script de migración
+
+### Tombolina - Control Previo con Desglose por Tipo de Apuesta
+
+**Nueva funcionalidad:** Soporte completo para el juego Tombolina en Control Previo, con desglose de apuestas por cantidad de números jugados (3 a 7).
+
+#### NTF Tombolina - Diseño de Registro
+
+La parte genérica (200 chars) es idéntica a Poceada/Quiniela. La parte específica:
+
+| Campo | Posición (1-based) | Índice | Length | Descripción |
+|-------|-------------------|--------|--------|-------------|
+| VERSION_ESPECIFICA | 201-202 | 200 | 2 | "01" versión 1 |
+| LETRAS | 203-206 | 202 | 4 | Letras jugadas |
+| APUESTAS_SIMPLES | 207-208 | 206 | 2 | Cantidad apuestas simples |
+| CANTIDAD_NUMEROS | 215-216 | 214 | 2 | Números jugados (3-7) |
+| SECUENCIA_NUMEROS | 211-224 | 210 | 14 | 7 números x 2 dígitos |
+
+**Detección de anulación:** Igual que Poceada/Quiniela, por `FECHA_CANCELACION` (pos 71-78). Si no está en blanco, el registro está anulado.
+
+**Valor de apuesta:** Pos 122-131, formato EEEEEEEEDD (8 enteros + 2 decimales), dividir por 100.
+
+**Hash:** SHA-512 (igual que Poceada). Los archivos de hash son `.HASH` y `CP.HASH`.
+
+#### Frontend (index.html)
+- Nueva card "Desglose por Tipo de Apuesta" con tabla:
+  - Apuesta a 7, 6, 5, 4, 3 números
+  - Apuestas válidas, % del total (con barra de progreso visual), apuestas anuladas, total
+  - Footer con totales generales
+
+#### Frontend (app.js)
+| Función | Descripción |
+|---------|-------------|
+| `renderTablasTombolina()` | Renderiza tabla de desglose con barras de progreso |
+| `ocultarCardTombolina()` | Oculta card al cambiar de juego |
+
+- Soporte para `comparacionXml` en formato array (Tombolina) vs objeto (Poceada)
+- Detección automática de tipo de juego: Quiniela, Poceada, Tombolina
+
+#### Backend (tombolina.controller.js) - Reescrito completo
+- **Bug corregido:** El código XML se ejecutaba antes del `try` donde se definían variables, causando crash
+- Usa NTF_GENERIC completo (idéntico a Poceada/Quiniela)
+- Hash SHA-512 (era SHA-256, incompatible con archivos `.HASH` de LOTBA)
+- Encoding `latin1` para TXT (era `utf8`, causaba diferencia en hash)
+- Busca archivos `.HASH` y `CP.HASH` (antes buscaba `.SHA256`)
+- Debug de primeros 5 registros para diagnosticar posiciones de campos
+- Escaneo automático de posiciones candidatas si `CANTIDAD_NUMEROS` no se detecta en la posición principal
+- Respuesta incluye `seguridad` completo para que el frontend muestre todos los checks
+
+#### Tabla BD
+```sql
+CREATE TABLE control_previo_tombolina (
+  id INT PRIMARY KEY AUTO_INCREMENT,
+  fecha DATE NOT NULL,
+  numero_sorteo INT NOT NULL,
+  total_registros INT DEFAULT 0,
+  total_tickets INT DEFAULT 0,
+  total_apuestas INT DEFAULT 0,
+  total_anulados INT DEFAULT 0,
+  total_recaudacion DECIMAL(15,2) DEFAULT 0,
+  apuestas_7_numeros INT DEFAULT 0,
+  apuestas_6_numeros INT DEFAULT 0,
+  apuestas_5_numeros INT DEFAULT 0,
+  apuestas_4_numeros INT DEFAULT 0,
+  apuestas_3_numeros INT DEFAULT 0,
+  nombre_archivo_zip VARCHAR(255),
+  hash_archivo VARCHAR(255),
+  hash_verificado BOOLEAN DEFAULT FALSE,
+  resumen_agencias JSON,
+  datos_adicionales JSON,
+  usuario_id INT,
+  usuario_nombre VARCHAR(100),
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+);
+```
+
+**Archivos modificados:**
+- `public/index.html`: Card desglose Tombolina
+- `public/js/app.js`: `renderTablasTombolina()`, `ocultarCardTombolina()`, soporte comparacionXml
+- `src/modules/control-previo/tombolina.controller.js`: Reescritura completa
+- `src/modules/control-previo/control-previo.routes.js`: Ya tenía ruta `/tombolina/procesar`
+
+---
+
+**Última actualización**: 30 de Enero, 2026
 **Estado**:
 - ✅ Quiniela: Completo y Optimizado
+- ✅ Poceada: Control Previo completo, Escrutinio completo, Modal 4 Pozos de Arrastre
+- ✅ Tombolina: Control Previo y Escrutinio Profesional con premios variables y letras
+- ✅ OCR Inteligente: Carga de extractos vía IA (Groq Vision) para todos los juegos
 - ✅ Detección de modalidad desde contenido XML
 - ✅ Validación contra programación
 - ✅ Breakdown de tickets (Total/Válidos/Anulados)
 - ✅ Extractos sorteados en reportes
-- 🚧 Poceada: En Planificación (Control Previo y Escrutinio pendientes)
-- 📋 Loto y otros juegos: Futuro
+- ✅ Deploy en Hostinger (producción) operativo
+- 📋 Loto y otros juegos: Soporte inicial en Control Posterior (Detección y Selección)
 
-**Versión del Documento**: 2.1
+
+---
+
+## 🆕 Actualizaciones 31 de Enero 2026
+
+### Estabilidad del Backend y Dashboard
+
+**Corrección de Error SQL (Dashboard Stats):**
+- **Problema**: Error `Unknown column 'created_at' in 'where clause'` al intentar cargar estadísticas para juegos genéricos (Quini 6, Loto, etc.) en el Dashboard.
+- **Solución**: Se modificó `historial.controller.js` para eliminar la dependencia de la columna `created_at` en tablas que no la poseen. Se optimizó el conteo de `total_provincias_activas` realizando una consulta directa a `control_previo_agencias`, lo cual es más preciso.
+
+### Mejoras de Interfaz (Frontend)
+
+**Optimización de Rejilla de Estadísticas:**
+- Se ajustó el valor `minmax` de la clase `.stats-grid` en `styles.css` de **180px a 150px**.
+- Esto permite que los **8 indicadores** del Dashboard (incluyendo el nuevo "Agencias c/Venta") se distribuyan correctamente en pantallas estándar y realicen un salto de línea (wrapping) fluido en lugar de superponerse.
+
+**Saneamiento de Código CSS:**
+- Se eliminaron errores de sintaxis (llaves de cierre huérfanas y propiedades sin selector) en `styles.css` que impedían la carga correcta de estilos en secciones secundarias.
+
+**Corrección Estructural HTML (Main Content):**
+- **Problema**: Las secciones de **Reportes** y **Usuarios** aparecían desplazadas o el sistema mostraba una "pantalla negra" parcial debido a un error de anidamiento.
+- **Solución**: Se identificó y eliminó un tag `</div>` extra en el módulo de Control Posterior que cerraba prematuramente el contenedor `<main class="main-content">`. Esto restauró la jerarquía visual y el correcto posicionamiento de todas las vistas SPA.
+
+**Versión del Documento**: 2.5
+**Última actualización**: 31 de Enero, 2026
+
+### Control Posterior - Unificación y Polimorfismo (30 de Enero 2026 - Parte 2)
+
+**Mejoras en la Interfaz de Selección:**
+- Se implementó una **barra de selección de juegos horizontal** (flex-row con scroll) que permite acceder rápidamente a: Quiniela, Poceada, Tombolina, Quini 6, Brinco, Loto y Loto 5.
+- Las tarjetas de juego ahora son más compactas y cuentan con iconos descriptivos para mejorar la densidad de información.
+
+**Detección Automática de Juego:**
+- Al cargar datos desde el módulo de **Control Previo**, el sistema detecta automáticamente el tipo de juego y ajusta la interfaz de Control Posterior de forma transparente.
+- Se agregaron prefijos de detección automática para nuevos juegos: `Q6` (Quini 6), `BRC` (Brinco), `LOTO` (Loto), `L5` (Loto 5 Plus), `TMB` (Tombolina).
+
+**Unificación de Carga de Extractos (Modo Lista):**
+- Por solicitud del usuario, juegos como **Tombolina** ahora utilizan el formato de carga de "lista de números" (el mismo de Poceada) en lugar del grid de provincias de Quiniela, unificando la experiencia de carga de XMLs de loto.
+- El sistema adapta dinámicamente el encabezado del panel de extractos según el juego seleccionado.
+
+**Corrección Escrutinio Tombolina:**
+- Se corrigió el error "No hay registros del TXT" mediante la implementación de la captura de registros individuales en `tombolina.controller.js`.
+- Ahora el backend retorna la lista completa de apuestas (`registrosNTF`) con sus números jugados (secuencia de hasta 7 números) para que el escrutinio pueda operar correctamente.
+
+**Gestión de Número de Sorteo Dinámico:**
+- El sistema ahora prioriza el número de sorteo proveniente del **Dashboard/Programación** si el usuario navega directamente desde allí (vía `sessionStorage`).
+- Si el usuario carga un archivo ZIP, el sistema toma el número de sorteo contenido en el archivo y actualiza la vista.
+- Se normalizó el acceso a este campo en el frontend para soportar tanto objetos (Quiniela) como strings planos (Poceada/Tombolina) retornados por el API.
+
+---
+
+### Control Posterior - Tombolina y Poceada Profesional (30 de Enero 2026 - Parte 3)
+
+**Escrutinio Profesional de Tombolina:**
+- **Motor de Escrutinio**: Implementada la tabla de premios completa con multiplicadores variables (de 1x a 8000x) según la cantidad de números jugados (3 a 7) y aciertos obtenidos.
+- **Premios por Letras**: Se añadió la lógica para otorgar un premio fijo de $1000 por coincidencia exacta de las 4 letras del extracto (solo si no hubo premio por números).
+- **Estímulo Agenciero**: El sistema calcula y muestra ahora un 1% de estímulo para el agenciero sobre el total de premios pagados.
+- **Balance Financiero**: Se incorporó el seguimiento de recaudación de apuestas anuladas para permitir un balance comercial exacto entre recaudación bruta y neta.
+
+**Nuevos Reportes PDF (Actas de Escrutinio):**
+- **Reporte Tombolina**: Rediseñado para incluir resumen ejecutivo con tarjetas de colores, tabla de comparación técnica con Control Previo, desglose detallado de premios por categoría y visualización clara del extracto sorteado.
+- **Reporte Poceada**: Actualizado para incluir cajas de resumen (Ganadores, Premios, Recaudación y Tasa de Devolución) en el encabezado, alineando su estética con la de Quiniela.
+- **Estándar Visual**: Todos los reportes de control posterior ahora incluyen la comparación "Control Previo vs Escrutinio" para auditoría de tickets, apuestas y montos.
+
+**Interfaz de Usuario (Frontend):**
+- **Tarjetas de Recaudación**: Se añadieron indicadores dinámicos para Recaudación Total, Válida y Anulada en el panel de resultados de Tombolina.
+- **Listado de Ganadores**: Nueva tabla detallada ticket por ticket con información de agencia, tipo de apuesta, números jugados y monto ganado.
+- **Exportación CSV**: Botón de descarga de listado de ganadores en formato compatible con Excel para facilitar la gestión administrativa.
+
+**OCR de Extractos (Groq Vision):**
+- **Extracción Inteligente**: Implementado módulo de OCR basado en IA (Groq Llama 3.2 Vision) que permite extraer números y letras de extractos desde capturas de pantalla, fotos o archivos PDF.
+- **Flujo de Trabajo**: El sistema pre-procesa la imagen, consulta a la IA y carga automáticamente los resultados en la interfaz para su previsualización y guardado definitivo en la tabla de extractos.
+- **Integración**: Los extractos cargados por OCR quedan inmediatamente disponibles para ser utilizados en el proceso de Control Posterior.

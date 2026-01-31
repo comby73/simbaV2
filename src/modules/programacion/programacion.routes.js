@@ -10,6 +10,7 @@ const { authenticate, requirePermission } = require('../../shared/middleware');
 
 const {
   cargarExcelQuiniela,
+  cargarExcelGenerico,
   getSorteosPorFecha,
   getSorteoPorNumero,
   listarProgramacion,
@@ -17,7 +18,8 @@ const {
   getHistorialCargas,
   borrarProgramacion,
   getSorteosDelDia,
-  verificarSorteo
+  verificarSorteo,
+  JUEGOS_CONFIG
 } = require('./programacion.controller');
 
 // Configuración de multer para upload de Excel
@@ -36,12 +38,12 @@ const upload = multer({
   fileFilter: (req, file, cb) => {
     const allowedTypes = [
       'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', // xlsx
-      'application/vnd.ms-excel', // xls
       'application/octet-stream' // some browsers
     ];
-    const allowedExtensions = ['.xlsx', '.xls'];
+    const allowedExtensions = ['.xlsx'];
     const ext = path.extname(file.originalname).toLowerCase();
-    
+
+
     if (allowedTypes.includes(file.mimetype) || allowedExtensions.includes(ext)) {
       cb(null, true);
     } else {
@@ -58,41 +60,62 @@ router.use(authenticate);
 
 // === RUTAS DE CARGA ===
 
-// Cargar Excel de programación Quiniela
-router.post('/cargar/quiniela', 
+// Cargar Excel de programación Quiniela (legacy)
+router.post('/cargar/quiniela',
   requirePermission('programacion.cargar'),
   upload.single('archivo'),
   cargarExcelQuiniela
 );
 
+// Cargar Excel genérico con DETECCIÓN AUTOMÁTICA del juego
+// Este endpoint detecta automáticamente el tipo de juego desde la columna "Juego" del Excel
+router.post('/cargar/generico',
+  requirePermission('programacion.cargar'),
+  upload.single('archivo'),
+  cargarExcelGenerico
+);
+
+// Obtener lista de juegos soportados
+router.get('/juegos',
+  requirePermission('programacion.ver'),
+  (req, res) => {
+    const juegos = Object.entries(JUEGOS_CONFIG).map(([codigo, config]) => ({
+      codigo,
+      ...config
+    }));
+    res.json({ success: true, data: juegos });
+  }
+);
+
+
 // === RUTAS DE CONSULTA ===
 
 // Listar programación con filtros
-router.get('/', 
+router.get('/',
   requirePermission('programacion.ver'),
   listarProgramacion
 );
 
 // Obtener sorteos por fecha
-router.get('/fecha', 
+router.get('/fecha',
   requirePermission('programacion.ver'),
   getSorteosPorFecha
 );
 
 // Obtener sorteo por número
-router.get('/sorteo/:numero', 
+router.get('/sorteo/:numero',
   requirePermission('programacion.ver'),
   getSorteoPorNumero
 );
 
 // Historial de cargas
-router.get('/historial', 
+router.get('/historial',
   requirePermission('programacion.ver'),
   getHistorialCargas
 );
 
 // Sorteos del día (para Dashboard)
-router.get('/dia', 
+router.get('/dia',
   requirePermission('programacion.ver'),
   getSorteosDelDia
 );
@@ -114,7 +137,7 @@ router.post('/validar-provincias',
 // === RUTAS DE ADMINISTRACIÓN ===
 
 // Borrar toda la programación de un juego
-router.delete('/borrar', 
+router.delete('/borrar',
   requirePermission('programacion.cargar'),
   borrarProgramacion
 );

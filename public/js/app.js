@@ -7,8 +7,15 @@ let provincias = [];
 
 const PREFIJOS_JUEGOS = {
   'QNL': { nombre: 'Quiniela', api: 'procesarQuiniela' },
-  'PCD': { nombre: 'Poceada', api: 'procesarPoceada' }
+  'PCD': { nombre: 'Poceada', api: 'procesarPoceada' },
+  'TMB': { nombre: 'Tombolina', api: 'procesarTombolina' },
+  'Q6': { nombre: 'Quini 6', api: 'procesarQuini6' },
+  'BRC': { nombre: 'Brinco', api: 'procesarBrinco' },
+  'LOTO': { nombre: 'Loto', api: 'procesarLoto' },
+  'L5': { nombre: 'Loto 5', api: 'procesarLoto5' }
 };
+
+
 
 function detectarTipoJuego(fileName) {
   const upper = fileName.toUpperCase();
@@ -925,7 +932,7 @@ async function procesarControlPrevio() {
 
   const juegoConfig = detectarTipoJuego(cpArchivoSeleccionado.name);
   if (!juegoConfig) {
-    showToast('No se pudo detectar el tipo de juego (Prefijos: QNL, PCD)', 'error');
+    showToast('No se pudo detectar el tipo de juego (Prefijos: QNL, PCD, TMB)', 'error');
     return;
   }
 
@@ -949,6 +956,9 @@ async function procesarControlPrevio() {
 
 function mostrarResultadosCP(data) {
   console.log('📊 Datos recibidos en mostrarResultadosCP:', data);
+
+  // Ocultar cards específicas de otros juegos al inicio
+  ocultarCardTombolina();
 
   // Normalizar datos según el juego
   const isPoceada = data.tipoJuego === 'Poceada';
@@ -974,7 +984,8 @@ function mostrarResultadosCP(data) {
   if (pcdEspecífico) {
     if (isPoceada) {
       pcdEspecífico.classList.remove('hidden');
-      document.getElementById('cp-pozo-arrastre').textContent = '$' + formatNumber(data.pozoArrastre || 0);
+      // Los 4 pozos se actualizan via verificarYMostrarModalArrastres
+      verificarYMostrarModalArrastres(data);
     } else {
       pcdEspecífico.classList.add('hidden');
     }
@@ -1001,9 +1012,14 @@ function mostrarResultadosCP(data) {
   // Badge de sorteo
   document.getElementById('cp-sorteo-badge').textContent = `Sorteo: ${data.sorteo || calc.numeroSorteo}`;
 
-  // Tablas
+  // Tablas según tipo de juego
+  const isTombolina = data.tipoJuego === 'Tombolina';
   if (isPoceada) {
     renderTablasPoceada(data);
+  } else if (isTombolina) {
+    renderTablasTombolina(data);
+    // Tombolina NO tiene provincias - ocultar esas cards
+    ocultarCardsProvincias();
   } else {
     renderTablasQuiniela(data);
   }
@@ -1105,6 +1121,26 @@ function mostrarResultadosCP(data) {
         `;
       }
 
+      document.getElementById('cp-verificacion-badge').innerHTML =
+        '<span class="badge badge-success">XML Cargado</span>';
+    } else if (data.comparacionXml && Array.isArray(data.comparacionXml)) {
+      // Formato Tombolina: array con { concepto, txt, xml, diferencia }
+      console.log('✅ Usando comparacionXml (formato Tombolina)');
+      for (const item of data.comparacionXml) {
+        const diff = item.diferencia;
+        const esMonto = item.concepto.toLowerCase().includes('recaudaci');
+        const diffClass = diff === 0 ? 'text-success' : (diff !== '' ? 'text-warning' : '');
+        const diffText = diff === 0 ? '✓ OK' : (typeof diff === 'number' ? ((diff > 0 ? '+' : '') + formatNumber(diff)) : String(diff));
+
+        tbodyComp.innerHTML += `
+          <tr>
+            <td>${item.concepto}</td>
+            <td>${esMonto ? '$' : ''}${formatNumber(item.txt)}</td>
+            <td>${esMonto ? '$' : ''}${formatNumber(item.xml)}</td>
+            <td class="${diffClass}">${diffText}</td>
+          </tr>
+        `;
+      }
       document.getElementById('cp-verificacion-badge').innerHTML =
         '<span class="badge badge-success">XML Cargado</span>';
     } else {
@@ -1727,6 +1763,8 @@ function renderDistribucionPremiosPoceada(data) {
 }
 
 function renderTablasQuiniela(data) {
+  // Asegurar que las cards de provincias estén visibles
+  mostrarCardsProvincias();
   const calc = data.datosCalculados;
   const tbodyRecProv = document.querySelector('#cp-tabla-recaudacion-prov tbody');
   const tbodyProv = document.querySelector('#cp-tabla-provincias tbody');
@@ -1766,16 +1804,374 @@ function renderTablasQuiniela(data) {
   }
 }
 
-function corregirPozoManualmente() {
-  const actual = document.getElementById('cp-pozo-arrastre').textContent.replace('$', '').replace(/\./g, '').replace(',', '.').trim();
-  const nuevo = prompt('Ingrese el monto del pozo de arrastre:', actual);
-  if (nuevo !== null) {
-    const monto = parseFloat(nuevo.replace(',', '.'));
-    if (!isNaN(monto)) {
-      document.getElementById('cp-pozo-arrastre').textContent = '$' + formatNumber(monto);
-      cpResultadosActuales.pozoArrastre = monto;
-      showToast('Pozo de arrastre actualizado localmente', 'success');
+// =============================================
+// TOMBOLINA - Desglose por tipo de apuesta
+// =============================================
+
+function renderTablasTombolina(data) {
+  const card = document.getElementById('cp-tombolina-desglose-card');
+  const tbody = document.getElementById('cp-tombolina-desglose-body');
+  if (!card || !tbody) return;
+
+  // Mostrar la card
+  card.classList.remove('hidden');
+
+  const calc = data.datosCalculados || {};
+  const desglose = data.desglosePorRango || {};
+  const validas = desglose.validas || calc.apuestasPorNumeros || {};
+  const anuladas = desglose.anuladas || calc.apuestasAnuladasPorNumeros || {};
+  const recaudacionPorNum = data.recaudacionPorNumeros || calc.recaudacionPorNumeros || {};
+
+  const totalValidas = Object.values(validas).reduce((a, b) => a + (b || 0), 0);
+  const totalAnuladas = Object.values(anuladas).reduce((a, b) => a + (b || 0), 0);
+  const totalRecaudacion = Object.values(recaudacionPorNum).reduce((a, b) => a + (b || 0), 0);
+
+  // Colores para cada tipo de apuesta
+  const colores = {
+    7: { icon: 'fa-star', color: '#FFD700', label: 'Apuesta a 7 numeros' },
+    6: { icon: 'fa-dice-six', color: '#C0C0C0', label: 'Apuesta a 6 numeros' },
+    5: { icon: 'fa-dice-five', color: '#CD7F32', label: 'Apuesta a 5 numeros' },
+    4: { icon: 'fa-dice-four', color: '#4CAF50', label: 'Apuesta a 4 numeros' },
+    3: { icon: 'fa-dice-three', color: '#2196F3', label: 'Apuesta a 3 numeros' }
+  };
+
+  let html = '';
+
+  // Renderizar de 7 a 3
+  for (let num = 7; num >= 3; num--) {
+    const v = validas[num] || 0;
+    const a = anuladas[num] || 0;
+    const total = v + a;
+    const rec = recaudacionPorNum[num] || 0;
+    const pct = totalValidas > 0 ? ((v / totalValidas) * 100).toFixed(1) : '0.0';
+    const cfg = colores[num];
+
+    html += `
+      <tr>
+        <td>
+          <i class="fas ${cfg.icon}" style="color: ${cfg.color}; margin-right: 0.5rem;"></i>
+          <strong>${cfg.label}</strong>
+        </td>
+        <td>${formatNumber(v)}</td>
+        <td>$${formatNumber(Math.round(rec))}</td>
+        <td>
+          <div style="display: flex; align-items: center; gap: 0.5rem;">
+            <div style="flex: 1; background: var(--bg-input); border-radius: 4px; height: 8px; overflow: hidden;">
+              <div style="width: ${pct}%; height: 100%; background: ${cfg.color}; border-radius: 4px;"></div>
+            </div>
+            <span style="min-width: 50px; text-align: right;">${pct}%</span>
+          </div>
+        </td>
+        <td>${formatNumber(a)}</td>
+        <td>${formatNumber(total)}</td>
+      </tr>
+    `;
+  }
+
+  tbody.innerHTML = html;
+
+  // Totales en footer
+  document.getElementById('cp-tmb-total-validas').textContent = formatNumber(totalValidas);
+  document.getElementById('cp-tmb-total-recaudacion').textContent = '$' + formatNumber(Math.round(totalRecaudacion));
+  document.getElementById('cp-tmb-total-anuladas').textContent = formatNumber(totalAnuladas);
+  document.getElementById('cp-tmb-total-general').textContent = formatNumber(totalValidas + totalAnuladas);
+}
+
+// Ocultar card de Tombolina cuando se procesa otro juego
+function ocultarCardTombolina() {
+  const card = document.getElementById('cp-tombolina-desglose-card');
+  if (card) card.classList.add('hidden');
+}
+
+// Ocultar cards de Provincias (Tombolina no tiene provincias)
+function ocultarCardsProvincias() {
+  const tablaRecProv = document.getElementById('cp-tabla-recaudacion-prov');
+  const tablaProv = document.getElementById('cp-tabla-provincias');
+  if (tablaRecProv) tablaRecProv.closest('.card').style.display = 'none';
+  if (tablaProv) tablaProv.closest('.card').style.display = 'none';
+}
+
+// Mostrar cards de Provincias (para Quiniela/Poceada)
+function mostrarCardsProvincias() {
+  const tablaRecProv = document.getElementById('cp-tabla-recaudacion-prov');
+  const tablaProv = document.getElementById('cp-tabla-provincias');
+  if (tablaRecProv) tablaRecProv.closest('.card').style.display = '';
+  if (tablaProv) tablaProv.closest('.card').style.display = '';
+}
+
+// =============================================
+// MODAL POZOS DE ARRASTRE (4 pozos: 1er, 2do, 3er, Agenciero)
+// =============================================
+
+function abrirModalPozosArrastre() {
+  const modal = document.getElementById('modal-pozos-arrastre');
+  if (!modal) return;
+
+  // Info del sorteo actual
+  const sorteoInfo = document.getElementById('pozos-arrastre-sorteo-info');
+  if (sorteoInfo && cpResultadosActuales) {
+    const numSorteo = cpResultadosActuales.sorteo || cpResultadosActuales.datosCalculados?.numeroSorteo || '-';
+    sorteoInfo.textContent = `Sorteo actual: ${numSorteo} (cargando arrastres del sorteo anterior)`;
+  }
+
+  // Pre-cargar valores actuales en los inputs
+  const arrastres = cpResultadosActuales?._pozosArrastre || {};
+  document.getElementById('pozo-arrastre-1er').value = arrastres.primerPremio || '';
+  document.getElementById('pozo-arrastre-2do').value = arrastres.segundoPremio || '';
+  document.getElementById('pozo-arrastre-3er').value = arrastres.tercerPremio || '';
+  document.getElementById('pozo-arrastre-agenciero').value = arrastres.agenciero || '';
+
+  modal.classList.remove('hidden');
+}
+
+function cerrarModalPozosArrastre() {
+  const modal = document.getElementById('modal-pozos-arrastre');
+  if (modal) modal.classList.add('hidden');
+}
+
+function parsearMonto(texto) {
+  if (!texto) return 0;
+  // Soportar formatos: 826000000, 826.000.000, 826,000,000
+  const limpio = String(texto).replace(/\./g, '').replace(/,/g, '.').replace(/[^0-9.]/g, '');
+  return parseFloat(limpio) || 0;
+}
+
+async function aplicarPozosArrastre() {
+  const arrastres = {
+    primerPremio: parsearMonto(document.getElementById('pozo-arrastre-1er').value),
+    segundoPremio: parsearMonto(document.getElementById('pozo-arrastre-2do').value),
+    tercerPremio: parsearMonto(document.getElementById('pozo-arrastre-3er').value),
+    agenciero: parsearMonto(document.getElementById('pozo-arrastre-agenciero').value)
+  };
+
+  // Guardar en el estado local
+  if (!cpResultadosActuales) cpResultadosActuales = {};
+  cpResultadosActuales._pozosArrastre = arrastres;
+  cpResultadosActuales.pozoArrastre = arrastres.primerPremio;
+
+  // Actualizar la UI de los pozos
+  actualizarDisplayPozosArrastre(arrastres, 'manual');
+
+  // Recalcular distribución de premios con los nuevos arrastres
+  recalcularDistribucionConArrastres(arrastres);
+
+  cerrarModalPozosArrastre();
+  showToast('Pozos de arrastre actualizados. Distribución recalculada.', 'success');
+
+  // Intentar guardar en backend (para que quede persistido)
+  try {
+    const token = getToken();
+    const sorteo = cpResultadosActuales.sorteo || cpResultadosActuales.datosCalculados?.numeroSorteo;
+    if (sorteo && token) {
+      await fetch(`${API_BASE}/control-previo/poceada/guardar-arrastres`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+        body: JSON.stringify({ sorteo, arrastres })
+      });
     }
+  } catch (e) {
+    console.warn('No se pudieron guardar arrastres en BD (se usaron solo localmente):', e.message);
+  }
+}
+
+function actualizarDisplayPozosArrastre(arrastres, fuente) {
+  const set = (id, val) => {
+    const el = document.getElementById(id);
+    if (el) el.textContent = '$' + formatNumber(Math.round(val || 0));
+  };
+
+  set('cp-pozo-arrastre-1er', arrastres.primerPremio);
+  set('cp-pozo-arrastre-2do', arrastres.segundoPremio);
+  set('cp-pozo-arrastre-3er', arrastres.tercerPremio);
+  set('cp-pozo-arrastre-agenciero', arrastres.agenciero);
+
+  // Indicar fuente
+  const fuenteEl = document.getElementById('cp-pozos-fuente-texto');
+  if (fuenteEl) {
+    if (fuente === 'bd') {
+      fuenteEl.innerHTML = '<i class="fas fa-database text-success"></i> Datos obtenidos de la BD (sorteo anterior)';
+    } else if (fuente === 'manual') {
+      fuenteEl.innerHTML = '<i class="fas fa-pen text-warning"></i> Arrastres cargados manualmente';
+    } else {
+      fuenteEl.innerHTML = '<i class="fas fa-exclamation-triangle text-danger"></i> Sin datos de arrastre - <a href="#" onclick="abrirModalPozosArrastre(); return false;" style="color: var(--primary);">Cargar manualmente</a>';
+    }
+  }
+}
+
+function recalcularDistribucionConArrastres(arrastres) {
+  if (!cpResultadosActuales || !cpResultadosActuales.datosCalculados) return;
+
+  const recaudacion = cpResultadosActuales.datosCalculados.recaudacion || 0;
+
+  // Porcentajes de Poceada
+  const PORCENTAJE_REC = 0.45;
+  const PRIMER_PREMIO_PORC = 0.62;
+  const SEGUNDO_PREMIO_PORC = 0.235;
+  const TERCERO_PREMIO_PORC = 0.10;
+  const AGENCIERO_PORC = 0.005;
+  const FONDO_PORC = 0.04;
+
+  const recaudacionPremios = recaudacion * PORCENTAJE_REC;
+
+  // Bases
+  const p1Base = recaudacionPremios * PRIMER_PREMIO_PORC;
+  const p2Base = recaudacionPremios * SEGUNDO_PREMIO_PORC;
+  const p3Base = recaudacionPremios * TERCERO_PREMIO_PORC;
+  const agBase = recaudacionPremios * AGENCIERO_PORC;
+  const fondoReserva = recaudacionPremios * FONDO_PORC;
+
+  // Totales con arrastres
+  const p1Total = p1Base + (arrastres.primerPremio || 0);
+  const p2Total = p2Base + (arrastres.segundoPremio || 0);
+  const p3Total = p3Base + (arrastres.tercerPremio || 0);
+  const agTotal = agBase + (arrastres.agenciero || 0);
+
+  // Pozo asegurado
+  const pozoAsegurado = 60000000;
+  const diferenciaAsegurar = p1Total < pozoAsegurado ? (pozoAsegurado - p1Total) : 0;
+  const importeFinal = Math.max(p1Total, pozoAsegurado);
+
+  // Actualizar cards de distribución
+  const set = (id, val) => {
+    const el = document.getElementById(id);
+    if (el) el.textContent = '$' + formatNumber(Math.round(val || 0));
+  };
+  set('cp-premio-1ro', p1Total);
+  set('cp-premio-2do', p2Total);
+  set('cp-premio-3ro', p3Total);
+  set('cp-premio-agenciero', agTotal);
+  set('cp-fondo-reserva', fondoReserva);
+  set('cp-total-premios', recaudacionPremios);
+
+  // Actualizar arrastre del 1er premio
+  const arrastre1ro = document.getElementById('cp-premio-1ro-arrastre');
+  if (arrastre1ro) {
+    if (arrastres.primerPremio > 0) {
+      arrastre1ro.innerHTML = `<span style="color: var(--accent-color);">+ $${formatNumber(Math.round(arrastres.primerPremio))} arrastre</span>`;
+    } else {
+      arrastre1ro.textContent = '';
+    }
+  }
+
+  // Actualizar tabla de comparación de premios (columna "Calculado")
+  actualizarComparacionPremiosConArrastres(arrastres, {
+    p1Base, p2Base, p3Base, agBase, fondoReserva,
+    p1Total, p2Total, p3Total, agTotal,
+    diferenciaAsegurar, importeFinal, recaudacionPremios
+  });
+}
+
+function actualizarComparacionPremiosConArrastres(arrastres, calc) {
+  // Buscar la tabla de comparación de premios y actualizar las filas de "Arrastre del Pozo"
+  const tableBody = document.getElementById('cp-tabla-premios');
+  if (!tableBody) return;
+
+  // Necesitamos re-renderizar porque la tabla tiene datos del XML para comparar
+  // Buscar los datos originales y re-renderizar con nuevos arrastres
+  if (cpResultadosActuales && cpResultadosActuales.comparacion && cpResultadosActuales.comparacion.premios) {
+    const p = cpResultadosActuales.comparacion.premios;
+
+    // Actualizar valores calculados de pozoVacante en la comparación
+    if (p.primerPremio && p.primerPremio.pozoVacante) {
+      p.primerPremio.pozoVacante.calculado = arrastres.primerPremio || 0;
+      p.primerPremio.pozoVacante.diferencia = (arrastres.primerPremio || 0) - (p.primerPremio.pozoVacante.oficial || 0);
+    }
+    if (p.segundoPremio && p.segundoPremio.pozoVacante) {
+      p.segundoPremio.pozoVacante.calculado = arrastres.segundoPremio || 0;
+      p.segundoPremio.pozoVacante.diferencia = (arrastres.segundoPremio || 0) - (p.segundoPremio.pozoVacante.oficial || 0);
+    }
+    if (p.terceroPremio && p.terceroPremio.pozoVacante) {
+      p.terceroPremio.pozoVacante.calculado = arrastres.tercerPremio || 0;
+      p.terceroPremio.pozoVacante.diferencia = (arrastres.tercerPremio || 0) - (p.terceroPremio.pozoVacante.oficial || 0);
+    }
+    if (p.agenciero && p.agenciero.pozoVacante) {
+      p.agenciero.pozoVacante.calculado = arrastres.agenciero || 0;
+      p.agenciero.pozoVacante.diferencia = (arrastres.agenciero || 0) - (p.agenciero.pozoVacante.oficial || 0);
+    }
+
+    // Actualizar recaudacion calculada (base + arrastre)
+    if (p.primerPremio && p.primerPremio.recaudacion) {
+      const base = calc.p1Base;
+      p.primerPremio.recaudacion.calculado = base;
+    }
+    if (p.primerPremio && p.primerPremio.importeFinal) {
+      p.primerPremio.importeFinal.calculado = calc.importeFinal;
+      p.primerPremio.importeFinal.diferencia = calc.importeFinal - (p.primerPremio.importeFinal.oficial || 0);
+    }
+    if (p.primerPremio && p.primerPremio.diferenciaAsegurar) {
+      p.primerPremio.diferenciaAsegurar.calculado = calc.diferenciaAsegurar;
+      p.primerPremio.diferenciaAsegurar.diferencia = calc.diferenciaAsegurar - (p.primerPremio.diferenciaAsegurar.oficial || 0);
+    }
+    if (p.segundoPremio && p.segundoPremio.importeFinal) {
+      p.segundoPremio.importeFinal.calculado = calc.p2Total;
+      p.segundoPremio.importeFinal.diferencia = calc.p2Total - (p.segundoPremio.importeFinal.oficial || 0);
+    }
+    if (p.terceroPremio && p.terceroPremio.importeFinal) {
+      p.terceroPremio.importeFinal.calculado = calc.p3Total;
+      p.terceroPremio.importeFinal.diferencia = calc.p3Total - (p.terceroPremio.importeFinal.oficial || 0);
+    }
+    if (p.agenciero && p.agenciero.importeFinal) {
+      p.agenciero.importeFinal.calculado = calc.agTotal;
+      p.agenciero.importeFinal.diferencia = calc.agTotal - (p.agenciero.importeFinal.oficial || 0);
+    }
+
+    // Actualizar distribucionPremios en el estado
+    if (cpResultadosActuales.distribucionPremios) {
+      cpResultadosActuales.distribucionPremios.primerPremio = {
+        ...cpResultadosActuales.distribucionPremios.primerPremio,
+        pozoVacante: arrastres.primerPremio || 0,
+        total: calc.p1Total,
+        importeFinal: calc.importeFinal,
+        diferenciaAsegurar: calc.diferenciaAsegurar
+      };
+      cpResultadosActuales.distribucionPremios.segundoPremio = {
+        ...cpResultadosActuales.distribucionPremios.segundoPremio,
+        pozoVacante: arrastres.segundoPremio || 0,
+        total: calc.p2Total
+      };
+      cpResultadosActuales.distribucionPremios.terceroPremio = {
+        ...cpResultadosActuales.distribucionPremios.terceroPremio,
+        pozoVacante: arrastres.tercerPremio || 0,
+        total: calc.p3Total
+      };
+      cpResultadosActuales.distribucionPremios.agenciero = {
+        ...cpResultadosActuales.distribucionPremios.agenciero,
+        pozoVacante: arrastres.agenciero || 0,
+        total: calc.agTotal
+      };
+    }
+
+    // Re-renderizar la tabla completa
+    renderComparacionPremiosPoceada(cpResultadosActuales);
+  }
+}
+
+// Función para mostrar automáticamente el modal si no hay arrastres
+function verificarYMostrarModalArrastres(data) {
+  if (data.tipoJuego !== 'Poceada') return;
+
+  const pozoArrastre = data.pozoArrastre || 0;
+  const arrastres = {
+    primerPremio: pozoArrastre,
+    segundoPremio: data.distribucionPremios?.segundoPremio?.pozoVacante || 0,
+    tercerPremio: data.distribucionPremios?.terceroPremio?.pozoVacante || 0,
+    agenciero: data.distribucionPremios?.agenciero?.pozoVacante || 0
+  };
+
+  // Guardar en estado
+  if (!cpResultadosActuales) cpResultadosActuales = {};
+  cpResultadosActuales._pozosArrastre = arrastres;
+
+  const tieneDatos = arrastres.primerPremio > 0 || arrastres.segundoPremio > 0 || arrastres.tercerPremio > 0 || arrastres.agenciero > 0;
+
+  if (tieneDatos) {
+    actualizarDisplayPozosArrastre(arrastres, 'bd');
+  } else {
+    actualizarDisplayPozosArrastre(arrastres, 'sin_datos');
+    // Mostrar modal automáticamente tras un breve delay
+    setTimeout(() => {
+      abrirModalPozosArrastre();
+    }, 1500);
   }
 }
 
@@ -2076,23 +2472,39 @@ const COMBINACIONES_MULTIPLES_POCEADA = {
 
 // Función para seleccionar el juego en Control Posterior
 function seleccionarJuegoPosterior(juego) {
+  // Normalizar nombre del juego (ajustar si viene del backend con variaciones)
+  if (juego === 'poceada') juego = 'Poceada';
+  if (juego === 'quiniela') juego = 'Quiniela';
+  if (juego === 'tombolina') juego = 'Tombolina';
+
   cpstJuegoSeleccionado = juego;
 
   // Actualizar título
   const titulo = document.getElementById('cpst-titulo');
   const subtitulo = document.getElementById('cpst-subtitulo');
   if (titulo) titulo.textContent = `Control Posterior - ${juego}`;
+
   if (subtitulo) {
-    subtitulo.textContent = juego === 'Poceada'
-      ? 'Escrutinio de ganadores por aciertos (6, 7 u 8)'
-      : 'Análisis de ganadores post-sorteo';
+    if (juego === 'Poceada') {
+      subtitulo.textContent = 'Escrutinio de ganadores por aciertos (6, 7 u 8)';
+    } else if (juego === 'Tombolina') {
+      subtitulo.textContent = 'Control de aciertos sobre extracto de Quiniela';
+    } else if (['Quini 6', 'Brinco', 'Loto'].includes(juego)) {
+      subtitulo.textContent = `Escrutinio de ganadores para ${juego}`;
+    } else {
+      subtitulo.textContent = 'Análisis de ganadores post-sorteo';
+    }
   }
 
   // Actualizar estilos de las tarjetas de radio
   document.querySelectorAll('input[name="cpst-juego"]').forEach(radio => {
     const card = radio.closest('.radio-card');
     if (card) {
-      if (radio.value === juego) {
+      // Comparación flexible (insensible a mayúsculas/minúsculas o espacios extra para evitar errores)
+      const radioVal = radio.value.toLowerCase().trim();
+      const targetVal = juego.toLowerCase().trim();
+
+      if (radioVal === targetVal) {
         card.style.borderColor = 'var(--primary)';
         card.style.background = 'rgba(37, 99, 235, 0.05)';
         radio.checked = true;
@@ -2109,17 +2521,46 @@ function seleccionarJuegoPosterior(juego) {
   const detalleQuiniela = document.getElementById('cpst-detalle-quiniela');
   const detallePoceada = document.getElementById('cpst-detalle-poceada');
 
+
   if (juego === 'Quiniela') {
     extractoQuiniela?.classList.remove('hidden');
     extractoPoceada?.classList.add('hidden');
     detalleQuiniela?.classList.remove('hidden');
     detallePoceada?.classList.add('hidden');
   } else {
+    // Para Poceada, Tombolina, Quini 6, Brinco, Loto, etc.
     extractoQuiniela?.classList.add('hidden');
     extractoPoceada?.classList.remove('hidden');
     detalleQuiniela?.classList.add('hidden');
-    detallePoceada?.classList.remove('hidden');
+
+    if (juego === 'Poceada') {
+      detallePoceada?.classList.remove('hidden');
+      document.getElementById('cpst-detalle-tombolina')?.classList.add('hidden');
+      document.getElementById('cpst-ganadores-tombolina')?.classList.add('hidden');
+    } else if (juego === 'Tombolina') {
+      detallePoceada?.classList.add('hidden');
+      document.getElementById('cpst-detalle-tombolina')?.classList.remove('hidden');
+      document.getElementById('cpst-ganadores-tombolina')?.classList.add('hidden');
+    } else {
+      detallePoceada?.classList.add('hidden');
+      document.getElementById('cpst-detalle-tombolina')?.classList.add('hidden');
+      document.getElementById('cpst-ganadores-tombolina')?.classList.add('hidden');
+    }
+
+    // Actualizar texto del header de extracto si existe
+    const poceadaHeader = extractoPoceada?.querySelector('h3');
+    if (poceadaHeader) {
+      if (juego === 'Poceada') poceadaHeader.innerHTML = '<i class="fas fa-list-ol"></i> Extracto Poceada (20 Números + 4 Letras)';
+      else if (juego === 'Tombolina') poceadaHeader.innerHTML = '<i class="fas fa-list-ol"></i> Extracto Tombolina (20 Números de Quiniela)';
+      else if (juego === 'Quini 6') poceadaHeader.innerHTML = '<i class="fas fa-list-ol"></i> Extracto Quini 6 (Tradicional, Segunda, Revancha, Sale o Sale)';
+      else if (juego === 'Brinco') poceadaHeader.innerHTML = '<i class="fas fa-list-ol"></i> Extracto Brinco (Tradicional y Junior)';
+      else if (juego === 'Loto') poceadaHeader.innerHTML = '<i class="fas fa-list-ol"></i> Extracto Loto (Tradicional, Desquite, Sale o Sale)';
+      else if (juego === 'Loto 5') poceadaHeader.innerHTML = '<i class="fas fa-list-ol"></i> Extracto Loto 5 (5 Números)';
+      else poceadaHeader.innerHTML = `<i class="fas fa-list-ol"></i> Extracto ${juego}`;
+    }
   }
+
+
 
   // Actualizar hint de modalidad
   const hintModalidad = document.getElementById('cpst-hint-modalidad');
@@ -2408,9 +2849,21 @@ function initControlPosterior() {
     }
   }
 
+  // Si venimos del dashboard, intentar pre-cargar datos o al menos el número de sorteo
+  const sorteoSeleccionado = sessionStorage.getItem('sorteoSeleccionado');
+  if (sorteoSeleccionado) {
+    cpstNumeroSorteo = sorteoSeleccionado;
+    const sorteoBadge = document.getElementById('cpst-sorteo');
+    if (sorteoBadge) {
+      sorteoBadge.textContent = sorteoSeleccionado;
+      document.getElementById('cpst-datos-cargados')?.classList.remove('hidden');
+    }
+  }
+
   // Mostrar extractos cargados
   renderExtractosList();
 }
+
 
 // =============================================
 // CARGAR EXTRACTOS EXISTENTES DE LA BD
@@ -2495,11 +2948,8 @@ function cargarDatosControlPrevio() {
 
   // Detectar tipo de juego y seleccionar automáticamente
   const tipoJuegoDetectado = cpResultadosActuales.tipoJuego || 'Quiniela';
-  if (tipoJuegoDetectado === 'Poceada') {
-    seleccionarJuegoPosterior('Poceada');
-  } else {
-    seleccionarJuegoPosterior('Quiniela');
-  }
+  seleccionarJuegoPosterior(tipoJuegoDetectado);
+
 
   // Usar los datos del control previo - INCLUIR datosOficiales para los premios
   cpstDatosControlPrevio = {
@@ -2507,22 +2957,52 @@ function cargarDatosControlPrevio() {
     datosOficiales: cpResultadosActuales.datosOficiales || null,
     comparacion: cpResultadosActuales.comparacion || null
   };
-  cpstNumeroSorteo = cpstDatosControlPrevio.numeroSorteo || cpResultadosActuales.sorteo?.numero || '';
+
+  // Normalizar obtención del número de sorteo (Quiniela devuelve objeto, Poceada/Tombolina puede devolver string)
+  let nroSorteo = cpResultadosActuales.sorteo;
+  if (nroSorteo && typeof nroSorteo === 'object') nroSorteo = nroSorteo.numero;
+
+  cpstNumeroSorteo = cpstDatosControlPrevio.numeroSorteo || nroSorteo || '';
 
   // Tomar modalidad SOLO de la programación (basado en número de sorteo)
   // NO usar el código del NTF (SR, etc.) - la programación ya tiene la modalidad correcta
-  const modalidadProgramacion = cpResultadosActuales.sorteo?.modalidad?.codigo;
+  const modalidadInfo = cpResultadosActuales.sorteo?.modalidad || {};
+  const modalidadProgramacion = modalidadInfo.codigo;
+
   if (modalidadProgramacion) {
     cpstModalidadSorteo = modalidadProgramacion;
-    console.log(`Modalidad desde programación (sorteo ${cpstNumeroSorteo}): ${modalidadProgramacion} (${cpResultadosActuales.sorteo?.modalidad?.nombre})`);
+    console.log(`Modalidad desde programación (sorteo ${cpstNumeroSorteo}): ${modalidadProgramacion} (${modalidadInfo.nombre})`);
   } else {
-    // Sin programación cargada - no se puede filtrar automáticamente
-    cpstModalidadSorteo = '';
-    console.warn(`⚠️ Sorteo ${cpstNumeroSorteo} no encontrado en programación. Cargue la programación primero.`);
+    // Sin programación cargada - Solo para juegos que no son Quiniela, podemos asignar una modalidad por defecto
+    if (tipoJuegoDetectado === 'Poceada') cpstModalidadSorteo = 'PCD';
+    else if (tipoJuegoDetectado === 'Tombolina') cpstModalidadSorteo = 'TMB';
+    else if (tipoJuegoDetectado === 'Quini 6') cpstModalidadSorteo = 'Q6';
+    else if (tipoJuegoDetectado === 'Brinco') cpstModalidadSorteo = 'BRC';
+    else if (tipoJuegoDetectado === 'Loto') cpstModalidadSorteo = 'LOTO';
+    else if (tipoJuegoDetectado === 'Loto 5') cpstModalidadSorteo = 'L5';
+    else cpstModalidadSorteo = '';
+
+    if (cpstModalidadSorteo) {
+      console.log(`[CPST] Sorteo ${cpstNumeroSorteo} no programado. Usando modalidad por defecto para ${tipoJuegoDetectado}: ${cpstModalidadSorteo}`);
+    } else {
+      console.warn(`⚠️ Sorteo ${cpstNumeroSorteo} no encontrado en programación. Cargue la programación primero.`);
+    }
   }
 
-  // Cargar los registros parseados del TXT
-  cpstRegistrosNTF = cpRegistrosNTF || cpResultadosActuales.registrosNTF || [];
+  // Cargar los registros parseados del TXT (búsqueda exhaustiva)
+  let registrosArray = [];
+  if (Array.isArray(cpResultadosActuales.registrosNTF)) {
+    registrosArray = cpResultadosActuales.registrosNTF;
+  } else if (Array.isArray(cpResultadosActuales.registros)) {
+    registrosArray = cpResultadosActuales.registros;
+  } else if (cpResultadosActuales.datosCalculados && Array.isArray(cpResultadosActuales.datosCalculados.registrosNTF)) {
+    registrosArray = cpResultadosActuales.datosCalculados.registrosNTF;
+  }
+
+  cpRegistrosNTF = registrosArray;
+  cpstRegistrosNTF = registrosArray;
+
+  console.log(`[CPST] Registros cargados (${tipoJuegoDetectado}):`, cpstRegistrosNTF.length);
 
   // Mostrar datos cargados
   document.getElementById('cpst-datos-cargados').classList.remove('hidden');
@@ -2554,9 +3034,12 @@ function cargarDatosControlPrevio() {
     console.log('Premios del Control Previo:', premios);
   }
 
-  // Mostrar cuántos registros reales hay
   const cantRegistros = cpstRegistrosNTF.length;
-  showToast(`Datos cargados: ${formatNumber(cantRegistros)} registros. Juego: ${cpstJuegoSeleccionado}. Al ejecutar escrutinio se procesarán solo registros de este juego.`, 'success');
+  if (cantRegistros > 0) {
+    showToast(`Datos cargados correctamente: ${formatNumber(cantRegistros)} registros operativos de ${cpstJuegoSeleccionado}.`, 'success');
+  } else {
+    showToast(`Se cargó el sorteo pero no se encontraron registros de apuestas en el archivo TXT.`, 'warning');
+  }
 
   // NUEVO: Verificar si ya existen extractos en la BD para este sorteo
   verificarExtractosExistentes();
@@ -2862,7 +3345,7 @@ async function cargarZipPosterior(input) {
   // Detectar tipo de juego por nombre del archivo
   const juegoConfig = detectarTipoJuego(file.name);
   if (!juegoConfig) {
-    showToast('No se pudo detectar el tipo de juego. El nombre debe empezar con QNL (Quiniela) o PCD (Poceada)', 'error');
+    showToast('No se pudo detectar el tipo de juego por el nombre del archivo.', 'error');
     return;
   }
 
@@ -2877,9 +3360,10 @@ async function cargarZipPosterior(input) {
     formData.append('archivo', file);
 
     // Usar el endpoint correcto según el tipo de juego
-    const endpoint = juegoConfig.nombre === 'Poceada'
-      ? `${API_BASE}/control-previo/poceada/procesar`
-      : `${API_BASE}/control-previo/quiniela/procesar`;
+    let endpoint = `${API_BASE}/control-previo/quiniela/procesar`;
+    if (juegoConfig.nombre === 'Poceada') endpoint = `${API_BASE}/control-previo/poceada/procesar`;
+    if (juegoConfig.nombre === 'Tombolina') endpoint = `${API_BASE}/control-previo/tombolina/procesar`;
+
 
     const response = await fetch(endpoint, {
       method: 'POST',
@@ -4005,7 +4489,7 @@ async function procesarArchivoXMLInteligente(archivo) {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
 
-    reader.onload = async function(e) {
+    reader.onload = async function (e) {
       try {
         const contenido = e.target.result;
 
@@ -4054,7 +4538,7 @@ async function procesarArchivoXMLInteligente(archivo) {
         const fecha = cpResultadosActuales?.sorteo?.fecha || new Date().toISOString().split('T')[0];
         const modalidad = modalidadFinal || cpstModalidadSorteo || 'M';
 
-        console.log(`[XML] Procesando ${archivo.name}: Provincia=${provinciaNombre}, Modalidad=${modalidad}, Números=${numeros.filter(n=>n).length}, Letras=${letras.length}`);
+        console.log(`[XML] Procesando ${archivo.name}: Provincia=${provinciaNombre}, Modalidad=${modalidad}, Números=${numeros.filter(n => n).length}, Letras=${letras.length}`);
 
         // VERIFICAR CONTRA PROGRAMACIÓN antes de guardar
         try {
@@ -4460,9 +4944,10 @@ async function ejecutarEscrutinio() {
       showToast('Cargue al menos un extracto', 'warning');
       return;
     }
-  } else if (cpstJuegoSeleccionado === 'Poceada') {
-    if (!cpstExtractoPoceada || cpstExtractoPoceada.numeros.length < 20 || cpstExtractoPoceada.letras.length < 4) {
-      showToast('Cargue el extracto de Poceada (20 números del sorteo + 4 letras)', 'warning');
+  } else if (cpstJuegoSeleccionado === 'Poceada' || cpstJuegoSeleccionado === 'Tombolina') {
+    // Para Poceada o Tombolina necesitamos el extracto de 20 números
+    if (!cpstExtractoPoceada || cpstExtractoPoceada.numeros.length < 20) {
+      showToast(`Cargue el extracto de ${cpstJuegoSeleccionado} (20 números)`, 'warning');
       return;
     }
   }
@@ -4508,6 +4993,18 @@ async function ejecutarEscrutinio() {
       cpstResultados = data.data;
       mostrarResultadosEscrutinioPoceada(cpstResultados);
       showToast('Escrutinio Poceada completado', 'success');
+
+    } else if (cpstJuegoSeleccionado === 'Tombolina') {
+      // Ejecutar escrutinio de Tombolina usando api.js
+      const response = await controlPosteriorAPI.escrutinioTombolina({
+        registrosNTF: cpstRegistrosNTF,
+        extracto: cpstExtractoPoceada,
+        datosControlPrevio: cpstDatosControlPrevio
+      });
+
+      cpstResultados = response.data;
+      mostrarResultadosEscrutinioTombolina(cpstResultados);
+      showToast('Escrutinio Tombolina completado', 'success');
 
     } else {
       // Ejecutar escrutinio de Quiniela (código existente)
@@ -4831,10 +5328,349 @@ function mostrarResultadosEscrutinioPoceada(resultado) {
       </div>
     </div>
   `;
+
+  // NUEVO: Poblar tabla de provincias para Poceada
+  const tbodyProv = document.querySelector('#cpst-tabla-poceada-provincias tbody');
+  if (tbodyProv && resultado.reportePorExtracto) {
+    tbodyProv.innerHTML = '';
+    resultado.reportePorExtracto.forEach(rep => {
+      if (rep.totalGanadores === 0 && rep.totalPagado === 0) return;
+
+      const p = rep.porNivel || {};
+      tbodyProv.innerHTML += `
+        <tr>
+          <td><strong>${rep.nombre}</strong></td>
+          <td class="text-success"><strong>$${formatNumber(rep.totalPagado)}</strong></td>
+          <td><strong>${rep.totalGanadores}</strong></td>
+          <td>${p[8]?.ganadores || 0}</td><td>$${formatNumber(p[8]?.pagado || 0)}</td>
+          <td>${p[7]?.ganadores || 0}</td><td>$${formatNumber(p[7]?.pagado || 0)}</td>
+          <td>${p[6]?.ganadores || 0}</td><td>$${formatNumber(p[6]?.pagado || 0)}</td>
+          <td>${p['letras']?.ganadores || 0}</td><td>$${formatNumber(p['letras']?.pagado || 0)}</td>
+        </tr>
+      `;
+    });
+
+    if (tbodyProv.innerHTML === '') {
+      tbodyProv.innerHTML = '<tr><td colspan="11" class="text-center text-muted">No se encontraron ganadores en ninguna provincia</td></tr>';
+    }
+  }
+
+  // Actulizar ventas por agencia
+  mostrarVentasAgenciaPosterior();
 }
 
 // La función generarRegistrosSimulados fue removida
 // Ahora se usan los registros reales parseados del archivo TXT (cpstRegistrosNTF)
+
+function mostrarResultadosEscrutinioTombolina(resultado) {
+  document.getElementById('cpst-resultados').classList.remove('hidden');
+
+  // Ocultar otras tablas, mostrar la de Tombolina
+  document.getElementById('cpst-detalle-quiniela')?.classList.add('hidden');
+  document.getElementById('cpst-detalle-poceada')?.classList.add('hidden');
+  document.getElementById('cpst-detalle-tombolina')?.classList.remove('hidden');
+
+  // Resumen lateral (extracto utilizado)
+  const detalleTipos = document.getElementById('cpst-detalle-tipos');
+  if (detalleTipos && cpstExtractoPoceada) {
+    detalleTipos.innerHTML = `
+      <div class="alert" style="background: var(--bg-input); padding: 1rem; border-radius: 8px; margin-bottom: 1rem;">
+        <h4 style="margin-bottom: 0.5rem;"><i class="fas fa-info-circle"></i> Extracto Utilizado (20 números)</h4>
+        <div style="display: flex; gap: 2rem; flex-wrap: wrap; margin-top: 0.5rem;">
+          <div>
+            <span style="font-family: monospace; font-size: 1.1rem; color: var(--primary); letter-spacing: 2px;">
+              ${cpstExtractoPoceada.numeros.slice(0, 10).map(n => n.toString().padStart(2, '0')).join(' - ')}<br>
+              ${cpstExtractoPoceada.numeros.slice(10, 20).map(n => n.toString().padStart(2, '0')).join(' - ')}
+            </span>
+          </div>
+        </div>
+      </div>
+    `;
+  }
+
+  // Resumen de tickets y recaudación (tomado del Control Previo)
+  const cp = resultado.datosControlPrevio || {};
+  const recValida = parseFloat(cp.totalRecaudacion || cp.recaudacion) || 0;
+  const recAnulada = parseFloat(cp.totalRecaudacionAnulada || cp.recaudacionAnulada) || 0;
+  const recTotal = recValida + recAnulada;
+  const ticketsValidos = parseInt(cp.totalApuestas || cp.registros) || 0;
+  const ticketsAnulados = parseInt(cp.totalAnulados || cp.anulados) || 0;
+  const ticketsTotal = ticketsValidos + ticketsAnulados;
+
+  document.getElementById('cpst-tickets-total').textContent = formatNumber(ticketsTotal);
+  document.getElementById('cpst-tickets-validos').textContent = formatNumber(ticketsValidos);
+  document.getElementById('cpst-tickets-anulados').textContent = formatNumber(ticketsAnulados);
+
+  document.getElementById('cpst-recaudacion-total').textContent = '$' + formatNumber(recTotal);
+  document.getElementById('cpst-recaudacion-valida').textContent = '$' + formatNumber(recValida);
+  document.getElementById('cpst-recaudacion-anulada').textContent = '$' + formatNumber(recAnulada);
+
+  // Resumen general de resultados
+  document.getElementById('cpst-total-ganadores').textContent = formatNumber(resultado.totalGanadores);
+  document.getElementById('cpst-total-premios').textContent = '$' + formatNumber(resultado.totalPremios);
+
+  // Tasa de devolución
+  const tasaDev = recValida > 0 ? (resultado.totalPremios / recValida * 100) : 0;
+  const tasaElem = document.getElementById('cpst-tasa-devolucion');
+  if (tasaElem) tasaElem.textContent = tasaDev.toFixed(2) + '%';
+
+  // Tabla Tombolina
+  const tbody = document.querySelector('#cpst-tabla-tombolina tbody');
+  if (tbody) {
+    tbody.innerHTML = '';
+
+    // El reporte del backend tiene: aciertos7, aciertos6, etc. y 'letras'
+    const niveles = [7, 6, 5, 4, 3];
+    niveles.forEach(n => {
+      const data = resultado.reporte[`aciertos${n}`];
+      if (data && data.ganadores > 0) {
+        const tr = document.createElement('tr');
+        tr.innerHTML = `
+          <td><strong>Categoría ${n} Aciertos</strong></td>
+          <td>Múltiples combinaciones</td>
+          <td>${formatNumber(data.ganadores)}</td>
+          <td>Variable x Multiplicador</td>
+          <td>$${formatNumber(data.premio)}</td>
+        `;
+        tbody.appendChild(tr);
+      }
+    });
+
+    // Fila Letras
+    const dataLetras = resultado.reporte.letras;
+    if (dataLetras && dataLetras.ganadores > 0) {
+      const tr = document.createElement('tr');
+      tr.innerHTML = `
+        <td><span class="badge badge-purple" style="background: #6f42c1; color: white;">🔤 LETRAS</span></td>
+        <td>4 Letras Exactas</td>
+        <td>${formatNumber(dataLetras.ganadores)}</td>
+        <td>$1.000 (Fijo)</td>
+        <td>$${formatNumber(dataLetras.premio)}</td>
+      `;
+      tbody.appendChild(tr);
+    }
+
+    if (resultado.totalGanadores === 0) {
+      tbody.innerHTML = '<tr><td colspan="5" class="text-center">No se encontraron ganadores</td></tr>';
+    }
+  }
+
+  // Listado de ganadores detallados (Tickets)
+  const tbodyGan = document.querySelector('#cpst-tabla-ganadores-tombolina tbody');
+  if (tbodyGan && resultado.ganadoresDetalle) {
+    tbodyGan.innerHTML = '';
+    resultado.ganadoresDetalle.forEach(gan => {
+      const tr = document.createElement('tr');
+      tr.innerHTML = `
+        <td><strong>${gan.ticket || '-'}</strong></td>
+        <td>${gan.agencia || '-'}</td>
+        <td><span class="badge ${gan.tipo.includes('Letras') ? 'badge-purple' : 'badge-primary'}" style="${gan.tipo.includes('Letras') ? 'background: #6f42c1; color: white;' : ''}">${gan.tipo}</span></td>
+        <td>${gan.numerosApostados || '-'}</td>
+        <td>${gan.aciertos || 0}</td>
+        <td class="text-success" style="font-weight: bold;">$${formatNumber(gan.premio)}</td>
+      `;
+      tbodyGan.appendChild(tr);
+    });
+
+    // Agregar fila para el Agenciero (Estímulo)
+    if (resultado.totalAgenciero > 0) {
+      const trAg = document.createElement('tr');
+      trAg.style.background = 'rgba(245, 158, 11, 0.1)';
+      trAg.innerHTML = `
+        <td colspan="5"><strong>ESTÍMULO AGENCIERO (1% de Premios)</strong></td>
+        <td class="text-orange" style="font-weight: bold; color: #f59e0b;">$${formatNumber(resultado.totalAgenciero)}</td>
+      `;
+      tbodyGan.appendChild(trAg);
+    }
+
+    if (resultado.ganadoresDetalle.length === 0 && (!resultado.totalAgenciero || resultado.totalAgenciero === 0)) {
+      tbodyGan.innerHTML = '<tr><td colspan="6" class="text-center text-muted">No hay tickets ganadores registrados</td></tr>';
+    }
+  }
+
+  // Si hay comparación con control previo, mostrarla
+  if (resultado.datosControlPrevio) {
+    // Aquí podrías agregar lógica para mostrar comparación si el backend la envía
+  }
+
+  // NUEVO: Poblar tabla de provincias para Tombolina
+  const tbodyProv = document.querySelector('#cpst-tabla-tombolina-provincias tbody');
+  if (tbodyProv && resultado.reportePorExtracto) {
+    tbodyProv.innerHTML = '';
+    resultado.reportePorExtracto.forEach(rep => {
+      if (rep.totalGanadores === 0 && rep.totalPagado === 0) return;
+
+      const p = rep.porNivel || {};
+      tbodyProv.innerHTML += `
+               <tr>
+                <td><strong>${rep.nombre}</strong></td>
+                <td class="text-success"><strong>$${formatNumber(rep.totalPagado)}</strong></td>
+                <td><strong>${rep.totalGanadores}</strong></td>
+                <td>${p[7]?.ganadores || 0}</td><td>$${formatNumber(p[7]?.pagado || 0)}</td>
+                <td>${p[6]?.ganadores || 0}</td><td>$${formatNumber(p[6]?.pagado || 0)}</td>
+                <td>${p[5]?.ganadores || 0}</td><td>$${formatNumber(p[5]?.pagado || 0)}</td>
+                <td>${p[4]?.ganadores || 0}</td><td>$${formatNumber(p[4]?.pagado || 0)}</td>
+                <td>${p[3]?.ganadores || 0}</td><td>$${formatNumber(p[3]?.pagado || 0)}</td>
+                <td>${p['letras']?.ganadores || 0}</td><td>$${formatNumber(p['letras']?.pagado || 0)}</td>
+               </tr>
+            `;
+    });
+
+    if (tbodyProv.innerHTML === '') {
+      tbodyProv.innerHTML = '<tr><td colspan="15" class="text-center text-muted">No se encontraron ganadores en ninguna provincia</td></tr>';
+    }
+  }
+
+  // Actualizar ventas por agencia
+  mostrarVentasAgenciaPosterior();
+}
+
+// Función para exportar ganadores de Tombolina a CSV
+function exportarGanadoresTombolina() {
+  if (!cpstResultados || !cpstResultados.ganadoresDetalle) {
+    showToast('No hay datos para exportar', 'warning');
+    return;
+  }
+
+  const ganadores = cpstResultados.ganadoresDetalle;
+  let csv = 'Ticket;Agencia;Tipo;Numeros Apostados;Aciertos;Premio\n';
+
+  ganadores.forEach(g => {
+    csv += `${g.ticket || ''};${g.agencia || ''};${g.tipo || ''};${g.numerosApostados || ''};${g.aciertos || 0};${g.premio || 0}\n`;
+  });
+
+  if (cpstResultados.totalAgenciero > 0) {
+    csv += `ESTIMULO AGENCIERO;;;;;${cpstResultados.totalAgenciero}\n`;
+  }
+
+  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.setAttribute('href', url);
+  link.setAttribute('download', `Ganadores_Tombolina_Sorteo_${cpstResultados.numeroSorteo || 'Sorteo'}.csv`);
+  link.style.visibility = 'hidden';
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+
+  showToast('Exportación completada', 'success');
+}
+
+/**
+ * Agrupa y muestra las ventas por agencia en Control Posterior
+ */
+function mostrarVentasAgenciaPosterior() {
+  const tbody = document.querySelector('#cpst-tabla-ventas-agencia tbody');
+  if (!tbody) return;
+
+  if (!cpstRegistrosNTF || cpstRegistrosNTF.length === 0) {
+    tbody.innerHTML = '<tr><td colspan="5" class="text-center text-muted">No hay registros de apuestas cargados</td></tr>';
+    return;
+  }
+
+  const agenciasMap = new Map();
+  const esPoceada = cpstJuegoSeleccionado === 'Poceada';
+
+  cpstRegistrosNTF.forEach(reg => {
+    let prov = '51';
+    let ag = '';
+
+    if (esPoceada) {
+      if (reg.agenciaCompleta) {
+        prov = reg.agenciaCompleta.substring(0, 2);
+        ag = reg.agenciaCompleta.substring(2);
+      } else {
+        ag = reg.agencia || '';
+      }
+    } else {
+      const agStr = String(reg.agencia || '').trim();
+      if (agStr.length >= 7) {
+        prov = agStr.substring(0, 2);
+        ag = agStr.substring(2);
+      } else {
+        ag = agStr;
+      }
+    }
+
+    const key = prov + '-' + ag;
+    if (!agenciasMap.has(key)) {
+      agenciasMap.set(key, { prov, ag, tickets: 0, apuestas: 0, recaudacion: 0 });
+    }
+
+    const item = agenciasMap.get(key);
+    item.tickets++;
+
+    // Calcular apuestas según el juego
+    let nroApuestas = 1;
+    if (esPoceada) {
+      const cantNum = parseInt(reg.cantidadNumeros) || 8;
+      nroApuestas = COMBINACIONES_MULTIPLES_POCEADA[cantNum] || 1;
+    } else if (reg.loteriasJugadas) {
+      nroApuestas = 0;
+      for (let i = 0; i < 7; i++) {
+        nroApuestas += parseInt(reg.loteriasJugadas.charAt(i)) || 0;
+      }
+    }
+
+    item.apuestas += nroApuestas;
+    item.recaudacion += parseFloat(reg.valorApuesta || 0);
+  });
+
+  // Convertir a array y ordenar por recaudación desc
+  const tableData = Array.from(agenciasMap.values()).sort((a, b) => b.recaudacion - a.recaudacion);
+  window.cpstVentasAgenciaData = tableData; // Guardar para filtrar
+
+  renderVentasAgenciaPosterior(tableData);
+}
+
+function renderVentasAgenciaPosterior(data) {
+  const tbody = document.querySelector('#cpst-tabla-ventas-agencia tbody');
+  if (!tbody) return;
+
+  tbody.innerHTML = data.map(item => `
+    <tr>
+      <td><span class="badge badge-secondary">${item.prov}</span></td>
+      <td><strong>${item.ag}</strong></td>
+      <td>${formatNumber(item.tickets)}</td>
+      <td>${formatNumber(item.apuestas)}</td>
+      <td class="text-success"><strong>$${formatNumber(item.recaudacion)}</strong></td>
+    </tr>
+  `).join('');
+
+  if (data.length === 0) {
+    tbody.innerHTML = '<tr><td colspan="5" class="text-center">No se encontraron agencias que coincidan</td></tr>';
+  }
+}
+
+function filtrarVentasAgenciaPosterior() {
+  const query = document.getElementById('cpst-buscar-agencia').value.toLowerCase();
+  if (!window.cpstVentasAgenciaData) return;
+
+  const filtered = window.cpstVentasAgenciaData.filter(item =>
+    item.ag.toLowerCase().includes(query) ||
+    item.prov.includes(query)
+  );
+  renderVentasAgenciaPosterior(filtered);
+}
+
+function exportarVentasAgenciaPosterior() {
+  if (!window.cpstVentasAgenciaData || window.cpstVentasAgenciaData.length === 0) {
+    showToast('No hay datos para exportar', 'warning');
+    return;
+  }
+
+  let csv = 'Provincia;Agencia/Cta Cte;Tickets;Apuestas;Recaudacion\n';
+  window.cpstVentasAgenciaData.forEach(item => {
+    csv += `${item.prov};${item.ag};${item.tickets};${item.apuestas};${item.recaudacion}\n`;
+  });
+
+  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.setAttribute('href', url);
+  link.setAttribute('download', `Ventas_Agencia_${cpstJuegoSeleccionado}_Sorteo_${cpstNumeroSorteo || 'Reporte'}.csv`);
+  link.click();
+}
 
 function mostrarResultadosEscrutinio(resultado) {
   document.getElementById('cpst-resultados').classList.remove('hidden');
@@ -5057,6 +5893,9 @@ function mostrarResultadosEscrutinio(resultado) {
       🎯 <strong>Aciertos</strong> = Coincidencias contra el extracto (un ticket puede tener múltiples aciertos si jugó a varias posiciones)
     </div>
   `;
+
+  // Actualizar ventas por agencia
+  mostrarVentasAgenciaPosterior();
 }
 
 // Renderizar los números de los extractos sorteados
@@ -5541,13 +6380,101 @@ async function cargarProgramacionExcel() {
   }
 }
 
+/**
+ * Cargar Excel de programación con DETECCIÓN AUTOMÁTICA del juego
+ * Lee la columna "Juego" del Excel para identificar automáticamente el tipo de juego
+ */
+async function cargarProgramacionExcelGenerico() {
+  const archivoInput = document.getElementById('programacion-archivo');
+  const resultDiv = document.getElementById('programacion-upload-result');
+
+  const archivo = archivoInput.files[0];
+
+  if (!archivo) {
+    resultDiv.className = 'alert alert-warning';
+    resultDiv.textContent = 'Seleccione un archivo Excel';
+    resultDiv.classList.remove('hidden');
+    return;
+  }
+
+  try {
+    resultDiv.className = 'alert alert-info';
+    resultDiv.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Detectando juegos y cargando programación...';
+    resultDiv.classList.remove('hidden');
+
+    const formData = new FormData();
+    formData.append('archivo', archivo);
+
+    const response = await fetch(`${API_BASE}/programacion/cargar/generico`, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${getToken()}`
+      },
+      body: formData
+    });
+
+    const data = await response.json();
+
+    if (data.success) {
+      // Construir resumen detallado por juego
+      let resumenHtml = `<strong>✓ ${data.message}</strong><br>`;
+      resumenHtml += `<strong>Total procesados:</strong> ${data.data.registrosProcesados} registros<br>`;
+      resumenHtml += `<strong>Mes de carga:</strong> ${data.data.mesCarga}<br><br>`;
+
+      // Mostrar detalle por juego detectado
+      if (data.data.resumenPorJuego && Object.keys(data.data.resumenPorJuego).length > 0) {
+        resumenHtml += '<strong>Desglose por juego:</strong><br>';
+        for (const [juego, stats] of Object.entries(data.data.resumenPorJuego)) {
+          const badgeClass = getBadgeClassForJuego(juego);
+          resumenHtml += `<span class="badge ${badgeClass}" style="margin-right: 0.5rem;">${juego}</span> `;
+          resumenHtml += `${stats.total} registros (${stats.insertados} nuevos, ${stats.actualizados} actualizados)<br>`;
+        }
+      }
+
+      resultDiv.className = 'alert alert-success';
+      resultDiv.innerHTML = resumenHtml;
+      archivoInput.value = '';
+      buscarProgramacion();
+      cargarHistorialProgramacion();
+
+      // Mostrar toast con resumen
+      const juegos = data.data.juegosDetectados || [];
+      showToast(`Cargados ${data.data.registrosProcesados} sorteos de: ${juegos.join(', ')}`, 'success');
+    } else {
+      resultDiv.className = 'alert alert-error';
+      resultDiv.textContent = data.message || 'Error al cargar el archivo';
+    }
+  } catch (error) {
+    console.error('Error cargando Excel:', error);
+    resultDiv.className = 'alert alert-error';
+    resultDiv.textContent = 'Error: ' + error.message;
+  }
+}
+
+/**
+ * Obtener clase de badge según el nombre del juego
+ */
+function getBadgeClassForJuego(juego) {
+  const lower = juego.toLowerCase();
+  if (lower.includes('quiniela') && !lower.includes('poceada')) return 'badge-primary';
+  if (lower.includes('quini 6')) return 'badge-success';
+  if (lower.includes('brinco')) return 'badge-warning';
+  if (lower.includes('loto 5')) return 'badge-info';
+  if (lower.includes('loto plus')) return 'badge-purple';
+  if (lower.includes('poceada')) return 'badge-danger';
+  if (lower.includes('tombolina')) return 'badge-dark';
+  return 'badge-secondary';
+}
+
+
 async function buscarProgramacion() {
+  const juego = document.getElementById('programacion-filtro-juego')?.value;
   const mes = document.getElementById('programacion-filtro-mes')?.value;
   const modalidad = document.getElementById('programacion-filtro-modalidad')?.value;
 
   try {
     const params = new URLSearchParams();
-    params.append('juego', 'Quiniela');
+    if (juego) params.append('juego', juego); // Solo filtrar si hay juego seleccionado
     if (mes) params.append('mes', mes);
     if (modalidad) params.append('modalidad', modalidad);
     params.append('limit', programacionLimit);
@@ -5574,18 +6501,20 @@ async function buscarProgramacion() {
   }
 }
 
+
 function renderTablaProgramacion(sorteos) {
   const tbody = document.querySelector('#table-programacion tbody');
   if (!tbody) return;
 
   if (sorteos.length === 0) {
-    tbody.innerHTML = '<tr><td colspan="11" class="text-center text-muted">No hay sorteos cargados para este período</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="12" class="text-center text-muted">No hay sorteos cargados para este período</td></tr>';
     return;
   }
 
   tbody.innerHTML = sorteos.map(s => `
     <tr>
       <td><strong>${s.numero_sorteo}</strong></td>
+      <td><span class="badge ${getBadgeClassForJuego(s.juego)}">${s.juego}</span></td>
       <td>${formatDate(s.fecha_sorteo)}</td>
       <td>${s.hora_sorteo || '-'}</td>
       <td><span class="badge badge-${getModalidadColor(s.modalidad_codigo)}">${s.modalidad_nombre || s.modalidad_codigo || '-'}</span></td>
@@ -5599,6 +6528,7 @@ function renderTablaProgramacion(sorteos) {
     </tr>
   `).join('');
 }
+
 
 function getModalidadColor(codigo) {
   const colores = {
@@ -5767,26 +6697,23 @@ async function cargarSorteosDelDia() {
       const recaudacion = s.controlPrevio ? '$' + formatNumber(s.controlPrevio.recaudacion) : '-';
       const premios = s.controlPosterior ? '$' + formatNumber(s.controlPosterior.premiosPagados) : '-';
 
-      // Acciones según estado
-      let acciones = '';
-      if (s.estado === 'pendiente') {
-        acciones = `<button class="btn btn-sm btn-primary" onclick="irAControlPrevio('${s.numero_sorteo}')" title="Cargar Control Previo">
-          <i class="fas fa-clipboard-check"></i>
-        </button>`;
-      } else if (s.estado === 'control_previo') {
-        acciones = `<button class="btn btn-sm btn-success" onclick="irAControlPosterior('${s.numero_sorteo}')" title="Ejecutar Escrutinio">
-          <i class="fas fa-calculator"></i>
-        </button>`;
-      } else {
-        acciones = `<button class="btn btn-sm btn-secondary" onclick="verDetallesSorteo('${s.numero_sorteo}')" title="Ver Detalles">
-          <i class="fas fa-eye"></i>
-        </button>`;
-      }
+      // Acciones: Mostrar siempre ambos botones
+      const acciones = `
+        <div style="display: flex; gap: 0.5rem;">
+          <button class="btn btn-sm btn-primary" onclick="irAControlPrevio('${s.numero_sorteo}')" title="Control Previo">
+            <i class="fas fa-clipboard-check"></i>
+          </button>
+          <button class="btn btn-sm btn-success" onclick="irAControlPosterior('${s.numero_sorteo}')" title="Control Posterior">
+            <i class="fas fa-calculator"></i>
+          </button>
+        </div>
+      `;
+
 
       return `
         <tr>
           <td><strong>${s.numero_sorteo}</strong></td>
-          <td>${s.juego}</td>
+          <td><span class="badge ${getBadgeClassForJuego(s.juego)}">${s.juego}</span></td>
           <td>${s.hora_sorteo || '-'}</td>
           <td><span class="badge badge-${getModalidadColor(s.modalidad_codigo)}">${s.modalidad_nombre || '-'}</span></td>
           <td>${estadoBadge}</td>
@@ -5795,6 +6722,7 @@ async function cargarSorteosDelDia() {
           <td>${acciones}</td>
         </tr>
       `;
+
     }).join('');
 
   } catch (error) {
@@ -5897,12 +6825,15 @@ function toggleDashboardGame(gameType) {
 
   if (gameType === 'todos') {
     // Si se selecciona "todos", desmarcar los individuales
-    document.getElementById('dash-game-quiniela').checked = false;
-    document.getElementById('dash-game-poceada').checked = false;
+    ['quiniela', 'poceada', 'tombolina', 'quini6', 'brinco', 'loto', 'loto5'].forEach(game => {
+      const el = document.getElementById(`dash-game-${game}`);
+      if (el) el.checked = false;
+    });
     dashboardSelectedGames = checkbox.checked ? ['todos'] : [];
   } else {
     // Si se selecciona un juego individual, desmarcar "todos"
-    document.getElementById('dash-game-todos').checked = false;
+    const todosEl = document.getElementById('dash-game-todos');
+    if (todosEl) todosEl.checked = false;
 
     if (checkbox.checked) {
       if (!dashboardSelectedGames.includes(gameType)) {
@@ -5933,11 +6864,23 @@ function updateDashboardGameIndicator() {
     indicator.className = 'badge bg-info';
   } else if (dashboardSelectedGames.length === 1) {
     const juego = dashboardSelectedGames[0];
-    indicator.textContent = juego.charAt(0).toUpperCase() + juego.slice(1);
-    indicator.className = `badge ${juego === 'quiniela' ? 'bg-primary' : 'bg-warning'}`;
+    indicator.textContent = juego.toUpperCase();
+
+    // Colores por juego
+    const colors = {
+      'quiniela': 'bg-primary',
+      'poceada': 'bg-warning',
+      'tombolina': 'bg-success',
+      'quini6': 'bg-info',
+      'brinco': 'bg-secondary',
+      'loto': 'bg-danger',
+      'loto5': 'bg-dark'
+    };
+
+    indicator.className = `badge ${colors[juego] || 'bg-secondary'}`;
   } else {
-    indicator.textContent = dashboardSelectedGames.map(g => g.charAt(0).toUpperCase() + g.slice(1)).join(' + ');
-    indicator.className = 'badge bg-secondary';
+    indicator.textContent = dashboardSelectedGames.map(g => g.toUpperCase()).join(' + ');
+    indicator.className = 'badge bg-secondary text-wrap';
   }
 }
 
@@ -6106,10 +7049,33 @@ function sortableHeader(label, column, align) {
 // Ordenar array por columna y dirección
 function sortDataBy(data, column, direction) {
   return [...data].sort((a, b) => {
-    let va = a[column] || 0;
-    let vb = b[column] || 0;
+    let va = a[column];
+    let vb = b[column];
+
+    // Lógica especial para columna agencia/cuenta corriente
+    if (column === 'agencia' || column === 'cta_cte') {
+      // Normalizar: quitar guiones y prefijos para comparar como números si aplica
+      const cleanA = String(va || '').replace(/[^\d]/g, '');
+      const cleanB = String(vb || '').replace(/[^\d]/g, '');
+
+      // Si ambos son agencias numéricas (ej: CABA)
+      if (cleanA && cleanB && !isNaN(cleanA) && !isNaN(cleanB)) {
+        const numA = parseInt(cleanA);
+        const numB = parseInt(cleanB);
+        return direction === 'asc' ? numA - numB : numB - numA;
+      }
+
+      // Si son provincias o mixtos, usar localeCompare
+      return direction === 'asc' ? String(va).localeCompare(String(vb)) : String(vb).localeCompare(String(va));
+    }
+
+    // Lógica estándar para otras columnas
+    if (va === null || va === undefined) va = 0;
+    if (vb === null || vb === undefined) vb = 0;
+
     if (typeof va === 'string' && !isNaN(parseFloat(va))) va = parseFloat(va);
     if (typeof vb === 'string' && !isNaN(parseFloat(vb))) vb = parseFloat(vb);
+
     if (typeof va === 'string') return direction === 'asc' ? va.localeCompare(vb) : vb.localeCompare(va);
     return direction === 'asc' ? va - vb : vb - va;
   });
@@ -6142,10 +7108,15 @@ function renderTablaDashboard(tipoConsulta) {
     const datosOrdenados = sortDataBy(dashboardData, sortCol, sortDir);
 
     tbody.innerHTML = datosOrdenados.map((item, idx) => {
-      const esProvinciaAgrupada = item.codigo_provincia && item.codigo_provincia !== '51';
-      const displayAgencia = esProvinciaAgrupada
-        ? `<span class="badge bg-secondary">${item.nombre || item.agencia}</span>`
-        : `<strong>${item.agencia || item.cta_cte || '-'}</strong>`;
+      // Determinar si es una provincia (no CABA 51)
+      const esProvincia = item.codigo_provincia && item.codigo_provincia !== '51';
+
+      // Formatear cuenta corriente: quitar guiones para que quede como número puro si es agencia
+      const ctaCtePura = (item.cta_cte || item.agencia || '').replace(/-/g, '');
+
+      const displayAgencia = esProvincia
+        ? `<span class="badge bg-secondary" style="font-size: 0.85rem; padding: 0.4rem 0.6rem;">${item.nombre || item.agencia}</span>`
+        : `<strong style="font-family: monospace; font-size: 0.95rem;">${ctaCtePura}</strong>`;
 
       return `
         <tr>

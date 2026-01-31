@@ -126,7 +126,7 @@ async function validarContraProgramacion(numeroSorteo, provinciasNTF, modalidadN
     // Convertir número de sorteo a entero (quitar ceros iniciales)
     // Ejemplo: "051912" -> 51912
     const numeroSorteoInt = parseInt(numeroSorteo, 10);
-    
+
     // Buscar sorteo en programación
     const sorteos = await query(
       'SELECT * FROM programacion_sorteos WHERE numero_sorteo = ? AND juego = ?',
@@ -247,7 +247,7 @@ const procesarZip = async (req, res) => {
 
     const zipPath = req.file.path;
     const extractPath = path.join(__dirname, '../../../uploads/temp', `extract_${Date.now()}`);
-    
+
     // Crear directorio de extracción
     if (!fs.existsSync(extractPath)) {
       fs.mkdirSync(extractPath, { recursive: true });
@@ -259,7 +259,7 @@ const procesarZip = async (req, res) => {
 
     // Buscar archivos
     const files = fs.readdirSync(extractPath);
-    const txtFile = files.find(f => f.toUpperCase().startsWith('QNL') && f.toUpperCase().endsWith('.TXT'));
+    const txtFile = files.find(f => f.toUpperCase().includes('QNL') && f.toUpperCase().endsWith('.TXT'));
     const xmlFile = files.find(f => f.toUpperCase().endsWith('CP.XML'));
     const hashFile = files.find(f => f.toUpperCase().endsWith('.HASH') && !f.toUpperCase().includes('CP'));
     const hashCPFile = files.find(f => f.toUpperCase().endsWith('CP.HASH'));
@@ -285,7 +285,7 @@ const procesarZip = async (req, res) => {
 
     // Calcular hashes
     const hashTxtCalculado = crypto.createHash('sha512').update(txtContent).digest('hex');
-    
+
     // Leer hash oficial si existe
     let hashTxtOficial = null;
     if (hashFile) {
@@ -309,13 +309,13 @@ const procesarZip = async (req, res) => {
 
     // Limpiar directorio temporal
     limpiarDirectorio(extractPath);
-    
+
     // Eliminar archivo ZIP subido
     fs.unlinkSync(zipPath);
 
     // NUEVO: Detectar modalidad predominante del archivo
     const modalidadPredominante = detectarModalidadPredominante(resultadosTxt.tiposSorteo);
-    
+
     // NUEVO: Validar contra programación
     const validacionProgramacion = await validarContraProgramacion(
       resultadosTxt.numeroSorteo,
@@ -328,14 +328,14 @@ const procesarZip = async (req, res) => {
       archivo: req.file.originalname,
       fechaProcesamiento: new Date().toISOString(),
       tipoJuego: 'Quiniela', // Identificar el tipo de juego
-      
+
       // NUEVO: Información del sorteo desde programación
       sorteo: {
         numero: resultadosTxt.numeroSorteo,
         modalidad: validacionProgramacion.modalidad,
         programacion: validacionProgramacion.sorteo
       },
-      
+
       // Datos del TXT procesado
       datosCalculados: {
         numeroSorteo: resultadosTxt.numeroSorteo,
@@ -344,13 +344,13 @@ const procesarZip = async (req, res) => {
         apuestasTotal: resultadosTxt.apuestas,
         recaudacion: resultadosTxt.recaudacion,
         recaudacionAnulada: resultadosTxt.recaudacionAnulada,
-        
+
         // Por provincia
         provincias: resultadosTxt.provincias,
-        
+
         // Por tipo de sorteo (A, M, V, U, N, etc.)
         tiposSorteo: resultadosTxt.tiposSorteo,
-        
+
         // Online
         online: {
           registros: resultadosTxt.onlineRegistros,
@@ -358,14 +358,14 @@ const procesarZip = async (req, res) => {
           recaudacion: resultadosTxt.onlineRecaudacion,
           anulados: resultadosTxt.onlineAnulados
         },
-        
+
         // Estadísticas de agencias amigas
         estadisticasAgenciasAmigas: resultadosTxt.estadisticasAgenciasAmigas
       },
-      
+
       // Datos del XML (UTE)
       datosOficiales: resultadosXml,
-      
+
       // Comparación de datos (TXT vs XML) - similar a Poceada
       comparacion: resultadosXml ? {
         registros: {
@@ -389,7 +389,7 @@ const procesarZip = async (req, res) => {
           diferencia: resultadosTxt.recaudacion - resultadosXml.recaudacionBruta
         }
       } : null,
-      
+
       // Verificación de seguridad
       seguridad: {
         archivos: archivosSeguridad,
@@ -397,16 +397,16 @@ const procesarZip = async (req, res) => {
         hashOficial: hashTxtOficial,
         verificado: archivosSeguridad.hashCoincide
       },
-      
+
       // NUEVO: Registros parseados del TXT para uso en Control Posterior
       registrosNTF: resultadosTxt.registrosParseados,
-      
+
       // NUEVO: Errores de agencias amigas inválidas
       erroresAgenciasAmigas: resultadosTxt.erroresAgenciasAmigas,
-      
+
       // NUEVO: Estadísticas de agencias amigas
       estadisticasAgenciasAmigas: resultadosTxt.estadisticasAgenciasAmigas,
-      
+
       // NUEVO: Validación contra programación
       validacionProgramacion: validacionProgramacion
     };
@@ -438,22 +438,22 @@ function extraerCampo(line, config) {
 // Ahora valida agencias amigas para venta web (88880)
 async function procesarArchivoNTF(content) {
   const lines = content.split('\n').filter(line => line.trim().length > 0);
-  
+
   let numeroSorteo = null;
   let registros = 0;
   let anulados = 0;
   let apuestas = 0;
   let recaudacion = 0;
   let recaudacionAnulada = 0;
-  
+
   // Array de registros parseados para el Control Posterior
   const registrosParseados = [];
-  
+
   // Errores de agencias amigas inválidas
-    const erroresAgenciasAmigas = [];
-    let totalAgenciasAmigas = 0; // Total de agencias amigas encontradas
-    let agenciasAmigasValidas = 0; // Total de agencias amigas válidas
-  
+  const erroresAgenciasAmigas = [];
+  let totalAgenciasAmigas = 0; // Total de agencias amigas encontradas
+  let agenciasAmigasValidas = 0; // Total de agencias amigas válidas
+
   // Cargar todas las agencias activas en memoria para validación rápida
   const agenciasActivas = new Set();
   try {
@@ -462,7 +462,7 @@ async function procesarArchivoNTF(content) {
   } catch (err) {
     console.warn('No se pudieron cargar agencias para validación:', err.message);
   }
-  
+
   // Contadores por provincia (índice en loterías jugadas)
   // Pos 205-212: cada dígito representa cantidad de apuestas a esa lotería
   // 0=CABA, 1=Buenos Aires, 2=Córdoba, 3=Santa Fe, 4=Montevideo, 5=Mendoza, 6=Entre Ríos
@@ -475,7 +475,7 @@ async function procesarArchivoNTF(content) {
     MZA: { apuestas: 0, recaudacion: 0, nombre: 'Mendoza', index: 5 },
     ENR: { apuestas: 0, recaudacion: 0, nombre: 'Entre Ríos', index: 6 }
   };
-  
+
   // Online (agencia 88880)
   let onlineRegistros = 0;
   let onlineApuestas = 0;
@@ -501,7 +501,7 @@ async function procesarArchivoNTF(content) {
     const agencia = extraerCampo(line, NTF_GENERIC.AGENCIA).trim(); // Limpiar espacios
     const numeroTicket = extraerCampo(line, NTF_GENERIC.NUMERO_TICKET);
     const agenciaAmiga = extraerCampo(line, NTF_GENERIC.AGENCIA_AMIGA).trim(); // Pos 114-121 (8 dígitos)
-    
+
     // Campos específicos de quiniela
     const tipoSorteo = extraerCampo(line, NTF_QUINIELA.TIPO_SORTEO).trim();
     const loteriasJugadas = extraerCampo(line, NTF_QUINIELA.LOTERIAS_JUGADAS);
@@ -519,13 +519,13 @@ async function procesarArchivoNTF(content) {
     const estaAnulado = fechaCancelacion.trim() !== '';
     // Detectar online: agencia 88880 (puede tener espacios o ceros a la izquierda)
     const esOnline = agencia === '88880' || agencia.padStart(5, '0') === '88880' || agencia.replace(/\s/g, '') === '88880';
-    
+
     // VALIDACIÓN DE AGENCIA AMIGA: Solo la agencia 88880 (venta web) puede tener agencia amiga
     // Si tiene valor (no espacios, no ceros), debe existir en la tabla de agencias
     if (esOnline && agenciaAmiga && agenciaAmiga !== '' && agenciaAmiga !== '00000000' && agenciaAmiga !== '        ') {
       totalAgenciasAmigas++;
       const agenciaAmigaNum = agenciaAmiga.padStart(8, '0');
-      
+
       // Validar contra el Set de agencias activas (validación rápida en memoria)
       if (agenciasActivas.has(agenciaAmigaNum)) {
         agenciasAmigasValidas++;
@@ -564,7 +564,7 @@ async function procesarArchivoNTF(content) {
         ubicacionDesde2,
         ubicacionHasta2
       });
-      
+
       // Contar apuestas y calcular recaudación por provincia
       // Cada posición es un dígito que indica cantidad de apuestas a esa lotería
       // La recaudación se distribuye proporcionalmente entre las provincias jugadas
@@ -572,7 +572,7 @@ async function procesarArchivoNTF(content) {
       for (let i = 0; i < 7; i++) {
         totalLoteriasJugadas += parseInt(loteriasJugadas.charAt(i)) || 0;
       }
-      
+
       for (const [codigo, prov] of Object.entries(provincias)) {
         const cantidadEnLoteria = parseInt(loteriasJugadas.charAt(prov.index)) || 0;
         if (cantidadEnLoteria > 0) {
@@ -650,7 +650,7 @@ async function procesarArchivoXML(content) {
 
       try {
         let quiniela = null;
-        
+
         if (result.CONTROL_PREVIO && result.CONTROL_PREVIO.QUINIELA_DE_LA_CIUDAD) {
           quiniela = result.CONTROL_PREVIO.QUINIELA_DE_LA_CIUDAD;
         } else if (result.QUINIELA_DE_LA_CIUDAD) {

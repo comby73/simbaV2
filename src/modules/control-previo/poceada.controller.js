@@ -17,7 +17,7 @@ let configJuegos = null;
  */
 function cargarConfigJuegos() {
   if (configJuegos) return configJuegos;
-  
+
   try {
     const configContent = fs.readFileSync(CONFIG_PATH, 'utf8');
     configJuegos = JSON.parse(configContent);
@@ -124,24 +124,24 @@ const COMBINACIONES_MULTIPLES = {
 function calcularCombinaciones(n, r) {
   if (r === 0 || r === n) return 1;
   if (r > n) return 0;
-  
+
   // Usar la tabla predefinida si está disponible
   if (COMBINACIONES_MULTIPLES[n]) {
     return COMBINACIONES_MULTIPLES[n];
   }
-  
+
   // Calcular manualmente si no está en la tabla
   let numerator = 1;
   let denominator = 1;
-  
+
   for (let i = n; i > n - r; i--) {
     numerator *= i;
   }
-  
+
   for (let i = 1; i <= r; i++) {
     denominator *= i;
   }
-  
+
   return Math.round(numerator / denominator);
 }
 
@@ -179,7 +179,7 @@ const procesarZip = async (req, res) => {
 
     const zipPath = req.file.path;
     const extractPath = path.join(__dirname, '../../../uploads/temp', `pcd_extract_${Date.now()}`);
-    
+
     if (!fs.existsSync(extractPath)) {
       fs.mkdirSync(extractPath, { recursive: true });
     }
@@ -202,27 +202,27 @@ const procesarZip = async (req, res) => {
       }
       return resultados;
     }
-    
+
     const todosLosArchivos = buscarArchivosRecursivo(extractPath);
     const files = todosLosArchivos.map(f => f.name);
     console.log('📁 Archivos encontrados en ZIP:', files);
-    
+
     // Buscar archivos TXT - Poceada puede ser:
     // - PCD + 6 dígitos + .TXT (ej: PCD051676.TXT)
     // - TMB + 6 dígitos + .TXT
     // - También puede estar en minúsculas
     const txtFileInfo = todosLosArchivos.find(f => {
       const name = f.name.toUpperCase();
-      // Verificar que empiece con PCD o TMB y termine con .TXT
-      const esPCD = name.startsWith('PCD') && name.endsWith('.TXT');
-      const esTMB = name.startsWith('TMB') && name.endsWith('.TXT');
+      // Verificar que contenga PCD o TMB y termine con .TXT
+      const esPCD = name.includes('PCD') && name.endsWith('.TXT');
+      const esTMB = name.includes('TMB') && name.endsWith('.TXT');
       if (esPCD || esTMB) {
         console.log(`✅ Archivo TXT encontrado: ${f.name} en ${f.path}`);
         return true;
       }
       return false;
     });
-    
+
     const xmlFileInfo = todosLosArchivos.find(f => f.name.toUpperCase().endsWith('CP.XML'));
     const hashFileInfo = todosLosArchivos.find(f => f.name.toUpperCase().endsWith('.HASH') && !f.name.toUpperCase().includes('CP'));
     const hashCPFileInfo = todosLosArchivos.find(f => f.name.toUpperCase().endsWith('CP.HASH'));
@@ -233,7 +233,7 @@ const procesarZip = async (req, res) => {
       limpiarDirectorio(extractPath);
       return errorResponse(res, `No se encontró archivo TXT de Poceada (PCD*.TXT o TMB*.TXT). Archivos en ZIP: ${files.join(', ')}`, 400);
     }
-    
+
     // Usar rutas completas
     const txtFile = txtFileInfo.name;
     const xmlFile = xmlFileInfo ? xmlFileInfo.name : null;
@@ -267,7 +267,7 @@ const procesarZip = async (req, res) => {
 
     // Calcular hashes
     const hashTxtCalculado = crypto.createHash('sha512').update(txtContent).digest('hex');
-    
+
     // Leer hash oficial del TXT si existe
     let hashTxtOficial = null;
     if (hashFileInfo) {
@@ -300,30 +300,28 @@ const procesarZip = async (req, res) => {
       hashXmlCoincide: hashXmlOficial && hashXmlCalculado ? hashXmlCalculado === hashXmlOficial : null
     };
 
-    // Buscar pozo de arrastre previo (del primer premio del sorteo anterior)
-    let pozoArrastre = await buscarPozoArrastreAnterior(logsTxt.numeroSorteo);
-    
-    // Preparar arrastres adicionales (2do, 3ro, Agenciero)
-    let arrastresAdicionales = {};
+    // Buscar TODOS los pozos de arrastre del sorteo anterior (4 pozos)
+    const arrastresCompletos = await buscarTodosArrastresAnterior(logsTxt.numeroSorteo);
+    let pozoArrastre = arrastresCompletos.primerPremio;
 
-    // Si tenemos XML, usar sus datos de "Pozo Vacante" como arrastre si no tenemos dato en BD
-    // NOTA IMPORTANTE: Los arrastres SOLO deben venir de nuestra BD (del control posterior).
-    // NO copiar los arrastres del XML porque eso sería hacer trampa.
+    // Preparar arrastres adicionales (2do, 3ro, Agenciero)
+    let arrastresAdicionales = {
+      segundoPremio: arrastresCompletos.segundoPremio,
+      tercerPremio: arrastresCompletos.tercerPremio,
+      agenciero: arrastresCompletos.agenciero
+    };
+
+    // NOTA: Los arrastres SOLO vienen de nuestra BD (del control posterior o carga manual).
     // Cuando no tengamos el histórico, el "Calculado" mostrará 0 y el "Oficial (XML)" mostrará el arrastre real.
-    // Esto nos permitirá ver la diferencia y saber qué datos nos faltan cargar.
-    // Los arrastres se llenarán cuando implementemos el control posterior y guardemos los resultados de cada sorteo.
-    
-    // Por ahora, arrastresAdicionales queda vacío (solo se llena desde BD, no desde XML)
-    // pozoArrastre ya viene de buscarPozoArrastreAnterior() que consulta la BD
-    
-    // Calcular distribución de premios según porcentajes (SIN arrastres del XML)
+    // Si no hay datos, el frontend mostrará un modal para cargar los arrastres manualmente.
+
+    // Calcular distribución de premios según porcentajes
     const distribucionPremios = calcularDistribucionPremios(logsTxt.resumen.recaudacion, pozoArrastre, arrastresAdicionales);
-    
+
     // DEBUG: Ver valores calculados
     console.log('📊 DEBUG distribucionPremios:');
     console.log('   Recaudación entrada:', logsTxt.resumen.recaudacion);
-    console.log('   Pozo arrastre (de BD):', pozoArrastre);
-    console.log('   Arrastres adicionales (de BD):', arrastresAdicionales);
+    console.log('   Arrastres (de BD):', arrastresCompletos);
     console.log('   recaudacionPremios (45%):', distribucionPremios.recaudacionPremios);
     console.log('   primerPremio.monto:', distribucionPremios.primerPremio?.monto);
     console.log('   fondoReserva:', distribucionPremios.fondoReserva);
@@ -344,16 +342,16 @@ const procesarZip = async (req, res) => {
       fechaProcesamiento: new Date().toISOString(),
       tipoJuego: 'Poceada',
       sorteo: logsTxt.numeroSorteo,
-      
+
       // Nuevos campos para compatibilidad legacy (simba)
       ValorApuestaMaximaPoceada: valorApuestaMaximaPoceada,
       ValorDeApuesta: valorApuestaArchivo,
       totalDiferencia: Math.abs(diferenciaApuesta),
-      
+
       // Datos calculados del TXT
       resumen: logsTxt.resumen,
       provincias: logsTxt.provincias,
-      
+
       // Datos oficiales del XML (para comparación)
       datosOficiales: datosXml ? {
         sorteo: datosXml.sorteo,
@@ -371,7 +369,7 @@ const procesarZip = async (req, res) => {
         agenciero: datosXml.premios.agenciero,
         fondo: datosXml.fondoReserva
       } : null,
-      
+
       // Comparación de datos (TXT vs XML)
       comparacion: datosXml ? {
         registros: {
@@ -426,61 +424,61 @@ const procesarZip = async (req, res) => {
           segundoPremio: {
             // Recaudacion del 2do premio (23.5% del pozo)
             recaudacion: {
-               calculado: distribucionPremios.segundoPremio.monto,
-               oficial: datosXml.premios.segundo.monto,
-               diferencia: distribucionPremios.segundoPremio.monto - datosXml.premios.segundo.monto
+              calculado: distribucionPremios.segundoPremio.monto,
+              oficial: datosXml.premios.segundo.monto,
+              diferencia: distribucionPremios.segundoPremio.monto - datosXml.premios.segundo.monto
             },
             // Arrastre del 2do premio
             pozoVacante: {
-               calculado: distribucionPremios.segundoPremio.pozoVacante,
-               oficial: datosXml.premios.segundo.pozoVacante,
-               diferencia: distribucionPremios.segundoPremio.pozoVacante - datosXml.premios.segundo.pozoVacante
+              calculado: distribucionPremios.segundoPremio.pozoVacante,
+              oficial: datosXml.premios.segundo.pozoVacante,
+              diferencia: distribucionPremios.segundoPremio.pozoVacante - datosXml.premios.segundo.pozoVacante
             },
             // Total = Recaudacion + Arrastre
             importeFinal: {
-               calculado: distribucionPremios.segundoPremio.total,
-               oficial: datosXml.premios.segundo.total,
-               diferencia: distribucionPremios.segundoPremio.total - datosXml.premios.segundo.total
+              calculado: distribucionPremios.segundoPremio.total,
+              oficial: datosXml.premios.segundo.total,
+              diferencia: distribucionPremios.segundoPremio.total - datosXml.premios.segundo.total
             }
           },
           terceroPremio: {
             // Recaudacion del 3er premio (10% del pozo)
             recaudacion: {
-               calculado: distribucionPremios.terceroPremio.monto,
-               oficial: datosXml.premios.tercero.monto,
-               diferencia: distribucionPremios.terceroPremio.monto - datosXml.premios.tercero.monto
+              calculado: distribucionPremios.terceroPremio.monto,
+              oficial: datosXml.premios.tercero.monto,
+              diferencia: distribucionPremios.terceroPremio.monto - datosXml.premios.tercero.monto
             },
             // Arrastre del 3er premio
             pozoVacante: {
-               calculado: distribucionPremios.terceroPremio.pozoVacante,
-               oficial: datosXml.premios.tercero.pozoVacante,
-               diferencia: distribucionPremios.terceroPremio.pozoVacante - datosXml.premios.tercero.pozoVacante
+              calculado: distribucionPremios.terceroPremio.pozoVacante,
+              oficial: datosXml.premios.tercero.pozoVacante,
+              diferencia: distribucionPremios.terceroPremio.pozoVacante - datosXml.premios.tercero.pozoVacante
             },
             // Total
             importeFinal: {
-               calculado: distribucionPremios.terceroPremio.total,
-               oficial: datosXml.premios.tercero.total,
-               diferencia: distribucionPremios.terceroPremio.total - datosXml.premios.tercero.total
+              calculado: distribucionPremios.terceroPremio.total,
+              oficial: datosXml.premios.tercero.total,
+              diferencia: distribucionPremios.terceroPremio.total - datosXml.premios.tercero.total
             }
           },
           agenciero: {
             // Recaudacion Agenciero (0.5% del pozo)
             recaudacion: {
-               calculado: distribucionPremios.agenciero.monto,
-               oficial: datosXml.premios.agenciero.monto,
-               diferencia: distribucionPremios.agenciero.monto - datosXml.premios.agenciero.monto
+              calculado: distribucionPremios.agenciero.monto,
+              oficial: datosXml.premios.agenciero.monto,
+              diferencia: distribucionPremios.agenciero.monto - datosXml.premios.agenciero.monto
             },
             // Arrastre Agenciero
             pozoVacante: {
-               calculado: distribucionPremios.agenciero.pozoVacante,
-               oficial: datosXml.premios.agenciero.pozoVacante, // Este valor no siempre viene en todos los XMLs pero lo forzamos
-               diferencia: distribucionPremios.agenciero.pozoVacante - datosXml.premios.agenciero.pozoVacante
+              calculado: distribucionPremios.agenciero.pozoVacante,
+              oficial: datosXml.premios.agenciero.pozoVacante, // Este valor no siempre viene en todos los XMLs pero lo forzamos
+              diferencia: distribucionPremios.agenciero.pozoVacante - datosXml.premios.agenciero.pozoVacante
             },
             // Total
             importeFinal: {
-               calculado: distribucionPremios.agenciero.total,
-               oficial: datosXml.premios.agenciero.total,
-               diferencia: distribucionPremios.agenciero.total - datosXml.premios.agenciero.total
+              calculado: distribucionPremios.agenciero.total,
+              oficial: datosXml.premios.agenciero.total,
+              diferencia: distribucionPremios.agenciero.total - datosXml.premios.agenciero.total
             }
           },
           fondoReserva: {
@@ -495,7 +493,7 @@ const procesarZip = async (req, res) => {
           }
         } : null
       } : null,
-      
+
       // Distribución calculada de premios
       distribucionPremios,
       pozoArrastre,
@@ -531,7 +529,7 @@ const procesarZip = async (req, res) => {
 async function procesarArchivoNTF(content) {
   // Según PDF: Parte genérica (200 chars) + Parte específica Poceada (33 chars) = 233 caracteres mínimo
   const lines = content.split('\n').filter(l => l.trim().length >= 233);
-  
+
   let numeroSorteo = '';
   let registros = 0;
   let anulados = 0;
@@ -552,20 +550,20 @@ async function procesarArchivoNTF(content) {
     // Según PDF: "AAAAMMDD (espacios en blanco si no está cancelado)"
     const cancelDate = line.substr(NTF_GENERIC.FECHA_CANCELACION.start, NTF_GENERIC.FECHA_CANCELACION.length);
     const isCanceled = cancelDate.trim() !== ''; // Si tiene contenido, está cancelada
-    
+
     // Valor de apuesta según PDF oficial: Posición 122-131 (10 caracteres)
     // Formato: EEEEEEEEDD (8 enteros, 2 decimales)
     const valorApuestaRaw = line.substr(NTF_GENERIC.VALOR_APUESTA.start, NTF_GENERIC.VALOR_APUESTA.length);
     // Convertir: "0000010000" = 100.00 (últimos 2 dígitos son decimales)
     const valorCentavos = parseInt(valorApuestaRaw) || 0;
     const valor = valorCentavos / 100;
-    
+
     // Específico Poceada según PDF: Posición 207-208 (2 dígitos)
     const cantNum = parseInt(line.substr(NTF_POCEADA.CANTIDAD_NUMEROS.start, NTF_POCEADA.CANTIDAD_NUMEROS.length)) || 8;
-    
+
     // Calcular combinaciones C(n, 8) - igual que PHP: combinations($cantidad_de_numeros_jugados, 8)
     const nroApuestas = COMBINACIONES_MULTIPLES[cantNum] || calcularCombinaciones(cantNum, 8);
-    
+
     const secuencia = line.substr(NTF_POCEADA.SECUENCIA_NUMEROS.start, NTF_POCEADA.SECUENCIA_NUMEROS.length);
     const letras = line.substr(NTF_POCEADA.LETRAS.start, NTF_POCEADA.LETRAS.length);
     const provCod = line.substr(NTF_GENERIC.PROVINCIA.start, NTF_GENERIC.PROVINCIA.length);
@@ -573,15 +571,15 @@ async function procesarArchivoNTF(content) {
     // Contar registros: solo los que tienen ordinal '01' o vacío (igual que Quiniela para consistencia)
     const ordinal = line.substr(NTF_GENERIC.ORDINAL_APUESTA.start, NTF_GENERIC.ORDINAL_APUESTA.length).trim();
     const esRegistroUnico = ordinal === '01' || ordinal === '' || ordinal === '1';
-    
+
     // Obtener agencia completa (provincia + agencia) para detectar ventas web
     const agenciaCompleta = provCod + line.substr(NTF_GENERIC.AGENCIA.start, NTF_GENERIC.AGENCIA.length).trim();
-    
+
     // Cargar configuración para obtener la agencia de ventas web
     const config = cargarConfigJuegos();
     const agenciaVentaWeb = config.juegos.poceada.agenciaVentaWeb || '5188880';
     const esVentaWeb = agenciaCompleta === agenciaVentaWeb;
-    
+
     if (isCanceled) {
       // Registro cancelado
       if (esRegistroUnico) {
@@ -604,7 +602,7 @@ async function procesarArchivoNTF(content) {
       provincias[key].registros++;
       provincias[key].apuestas += nroApuestas;
       provincias[key].recaudacion += valor;
-      
+
       // Contabilizar ventas web
       if (esVentaWeb) {
         provincias[key].ventaWeb = (provincias[key].ventaWeb || 0) + 1;
@@ -662,7 +660,7 @@ async function procesarArchivoNTF(content) {
 async function parsearXmlControlPrevio(xmlContent) {
   const parser = new xml2js.Parser({ explicitArray: false });
   const result = await parser.parseStringPromise(xmlContent);
-  
+
   // El XML puede tener dos estructuras:
   // 1. <CONTROL_PREVIO><QUINIELA_POCEADA_DE_LA_CIUDAD>...
   // 2. <QUINIELA_POCEADA_DE_LA_CIUDAD>... (directo)
@@ -730,7 +728,7 @@ function calcularDistribucionPremios(recaudacion, pozoArrastre = 0, arrastresAdi
   const config = cargarConfigJuegos();
   const poceadaConfig = config.juegos.poceada;
   const distribucion = poceadaConfig.distribucionPremios;
-  
+
   // Obtener porcentajes desde configuración (dividir por 100 para usar como decimales)
   const PORCENTAJE_REC = poceadaConfig.porcentajePozoTotal / 100;        // 45% de recaudación a premios
   const PRIMER_PREMIO_PORC = distribucion.primerPremio.porcentaje / 100;  // 62% del pozo
@@ -738,36 +736,36 @@ function calcularDistribucionPremios(recaudacion, pozoArrastre = 0, arrastresAdi
   const TERCERO_PREMIO_PORC = distribucion.tercerPremio.porcentaje / 100;  // 10% del pozo
   const AGENCIERO_PORC = distribucion.agenteVendedor.porcentaje / 100;     // 0.5% del pozo
   const FONDO_PORC = distribucion.fondoReserva.porcentaje / 100;           // 4% del pozo
-  
+
   const recaudacionPremios = recaudacion * PORCENTAJE_REC;
-  
+
   // Calcular premios base usando porcentajes del pozo (no calculando el resto)
   const primerPremioBase = recaudacionPremios * PRIMER_PREMIO_PORC;
   const segundoPremioBase = recaudacionPremios * SEGUNDO_PREMIO_PORC;
   const terceroPremioBase = recaudacionPremios * TERCERO_PREMIO_PORC;
   const agencieroBase = recaudacionPremios * AGENCIERO_PORC;
   const fondoReserva = recaudacionPremios * FONDO_PORC;
-  
+
   // Arrastres adicionales de 2do y 3er premio (si existen)
   const arrastre2do = arrastresAdicionales.segundoPremio || 0;
   const arrastre3ro = arrastresAdicionales.tercerPremio || 0;
   const arrastreAgenciero = arrastresAdicionales.agenciero || 0;
-  
+
   // Totales = base + arrastre
   const primerPremioTotal = primerPremioBase + pozoArrastre;
   const segundoPremioTotal = segundoPremioBase + arrastre2do;
   const terceroPremioTotal = terceroPremioBase + arrastre3ro;
   const agencieroTotal = agencieroBase + arrastreAgenciero;
-  
+
   // Pozo asegurado mínimo
   const pozoAsegurado = poceadaConfig.pozoAsegurado.primerPremio;
-  
+
   // Calcular diferencia a asegurar: si el total < asegurado, la diferencia es lo que falta
   const diferenciaAsegurar = primerPremioTotal < pozoAsegurado ? (pozoAsegurado - primerPremioTotal) : 0;
-  
+
   // Importe final del pozo: el mayor entre el total calculado y el asegurado
   const importeFinalPozo = Math.max(primerPremioTotal, pozoAsegurado);
-  
+
   return {
     recaudacionBruta: recaudacion,
     recaudacionPremios: recaudacionPremios,
@@ -812,20 +810,52 @@ async function buscarPozoArrastreAnterior(numeroSorteo) {
   try {
     const numSorteoInt = parseInt(numeroSorteo);
     const anterior = (numSorteoInt - 1).toString().padStart(6, '0');
-    
-    // Buscar el pozo arrastre del sorteo anterior (primer premio vacante)
+
+    // Buscar TODOS los pozos de arrastre del sorteo anterior
     const rows = await query(
-      'SELECT pozo_arrastre_siguiente FROM poceada_sorteos WHERE numero_sorteo = ?',
+      `SELECT pozo_arrastre_siguiente, pozo_segundo_premio, pozo_tercer_premio, arrastre_agenciero
+       FROM poceada_sorteos WHERE numero_sorteo = ?`,
       [anterior]
     );
 
-    if (rows.length > 0 && rows[0].pozo_arrastre_siguiente) {
-      return parseFloat(rows[0].pozo_arrastre_siguiente) || 0;
+    if (rows.length > 0) {
+      const row = rows[0];
+      return parseFloat(row.pozo_arrastre_siguiente) || 0;
     }
     return 0;
   } catch (error) {
     console.error('Error buscando pozo arrastre:', error);
     return 0;
+  }
+}
+
+/**
+ * Busca TODOS los arrastres del sorteo anterior (1er, 2do, 3er, agenciero)
+ */
+async function buscarTodosArrastresAnterior(numeroSorteo) {
+  try {
+    const numSorteoInt = parseInt(numeroSorteo);
+    const anterior = (numSorteoInt - 1).toString().padStart(6, '0');
+
+    const rows = await query(
+      `SELECT pozo_arrastre_siguiente, arrastre_segundo_premio, arrastre_tercer_premio, arrastre_agenciero
+       FROM poceada_sorteos WHERE numero_sorteo = ?`,
+      [anterior]
+    );
+
+    if (rows.length > 0) {
+      const row = rows[0];
+      return {
+        primerPremio: parseFloat(row.pozo_arrastre_siguiente) || 0,
+        segundoPremio: parseFloat(row.arrastre_segundo_premio) || 0,
+        tercerPremio: parseFloat(row.arrastre_tercer_premio) || 0,
+        agenciero: parseFloat(row.arrastre_agenciero) || 0
+      };
+    }
+    return { primerPremio: 0, segundoPremio: 0, tercerPremio: 0, agenciero: 0 };
+  } catch (error) {
+    console.error('Error buscando arrastres completos:', error);
+    return { primerPremio: 0, segundoPremio: 0, tercerPremio: 0, agenciero: 0 };
   }
 }
 
@@ -913,7 +943,7 @@ const obtenerConfiguracion = async (req, res) => {
 const recargarConfiguracion = async (req, res) => {
   try {
     const config = recargarConfigJuegos();
-    return successResponse(res, { 
+    return successResponse(res, {
       version: config.version,
       vigencia: config.vigencia,
       juegos: Object.keys(config.juegos)
@@ -923,10 +953,55 @@ const recargarConfiguracion = async (req, res) => {
   }
 };
 
+/**
+ * Endpoint para guardar arrastres manuales (cuando no hay datos del sorteo anterior)
+ * Los arrastres se guardan en poceada_sorteos para el sorteo ANTERIOR al actual
+ */
+const guardarArrastres = async (req, res) => {
+  const { sorteo, arrastres } = req.body;
+  if (!sorteo || !arrastres) {
+    return errorResponse(res, 'Datos incompletos: se requiere sorteo y arrastres', 400);
+  }
+
+  try {
+    const numSorteoInt = parseInt(sorteo);
+    const sorteoAnterior = (numSorteoInt - 1).toString().padStart(6, '0');
+
+    // Guardar los arrastres como datos del sorteo anterior
+    // pozo_arrastre_siguiente = arrastre del 1er premio hacia el sorteo actual
+    // arrastre_segundo_premio = arrastre del 2do premio
+    // arrastre_tercer_premio = arrastre del 3er premio
+    // arrastre_agenciero = arrastre del agenciero
+    await query(`
+      INSERT INTO poceada_sorteos
+      (numero_sorteo, pozo_arrastre_siguiente, arrastre_segundo_premio, arrastre_tercer_premio, arrastre_agenciero)
+      VALUES (?, ?, ?, ?, ?)
+      ON DUPLICATE KEY UPDATE
+      pozo_arrastre_siguiente = VALUES(pozo_arrastre_siguiente),
+      arrastre_segundo_premio = VALUES(arrastre_segundo_premio),
+      arrastre_tercer_premio = VALUES(arrastre_tercer_premio),
+      arrastre_agenciero = VALUES(arrastre_agenciero)
+    `, [
+      sorteoAnterior,
+      arrastres.primerPremio || 0,
+      arrastres.segundoPremio || 0,
+      arrastres.tercerPremio || 0,
+      arrastres.agenciero || 0
+    ]);
+
+    console.log(`✅ Arrastres manuales guardados para sorteo anterior ${sorteoAnterior}:`, arrastres);
+    return successResponse(res, null, 'Arrastres guardados correctamente');
+  } catch (error) {
+    console.error('Error guardando arrastres:', error);
+    return errorResponse(res, 'Error guardando arrastres: ' + error.message, 500);
+  }
+};
+
 module.exports = {
   procesarZip,
   buscarPozo,
   guardarResultado,
+  guardarArrastres,
   decodificarNumerosPoceada, // Exportado para escrutinio
   obtenerConfiguracion,
   recargarConfiguracion,

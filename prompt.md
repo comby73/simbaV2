@@ -1,0 +1,226 @@
+# Prompts de la Conversacion - SIMBA V2
+
+## Sesion: 30 de Enero 2026
+
+### Prompt 1 - Contexto Inicial (Recuperacion de sesion anterior)
+> [Mensaje de recuperacion de contexto con resumen detallado de sesiones anteriores cubriendo:]
+> - Deploy en Hostinger (produccion)
+> - Fixes de base de datos en produccion
+> - Tareas pendientes: Modal Pozo de Arrastre Poceada y soporte para juego Tombolina
+
+### Prompt 2 - Reporte de errores Tombolina (con screenshot)
+> "mira lso hashh y el cp t txt es decir verificar me da mal y ademas las pauestas no leen es decir cuales son de 7 nuemro cuals de 6 y asi hasta 3"
+>
+> **Contexto:** El usuario envio un screenshot mostrando:
+> - Hash TXT y Hash CP en rojo (error de verificacion)
+> - Tabla "Desglose por Tipo de Apuesta" con todos los valores en 0
+> - Las apuestas no se clasificaban correctamente por cantidad de numeros (3 a 7)
+
+### Prompt 3 - Continuar trabajo
+> "podes continuar con la tarea"
+>
+> **Contexto:** Solicitud de continuar con las correcciones del controlador Tombolina
+
+### Prompt 4 - Documentacion y prompts
+> "bueno lo primero quiero que me modifique el documentacion.md con lo que venimo haciendo y depues que en otro documento me aarmes todos los promt de esta conversacion, es decir todo lo que pregeunte en un archiv llama prompt.md a la altura de documentacion.md"
+>
+> **Contexto:** Solicitud de dos tareas:
+> 1. Actualizar DOCUMENTACION.md con todos los cambios de la sesion
+> 2. Crear prompt.md con todos los prompts del usuario
+
+### Prompt 5 - PDF Control Previo Poceada
+> "el reporte impreso en pdf como lo hace quiniela, el reporte con los registros la venta y la distribución a premios"
+>
+> **Contexto:** Solicitud de generar un PDF para Control Previo de Poceada, similar al de Quiniela, mostrando registros, ventas y distribución de premios.
+
+### Prompt 6 - Error de conexión y fetch
+> "app.js:3318 Error cargando agencias: TypeError: Failed to fetch..."
+>
+> **Contexto:** Reporte de error de conexión/refused al intentar cargar agencias y cargar Excel desde el frontend.
+
+### Prompt 7 - Problema con tabla de premios en PDF
+> "en el reprote del control previo aparece asi la agente vendeor Agente Vendedor 0.5% [object Object]... necesito la comparacion de los premios de ute con calculado abajo de Premio Porcentaje..."
+>
+> **Contexto:** El usuario detecta que la fila de Agente Vendedor muestra [object Object] y solicita que se agregue una tabla de comparación de premios calculados vs UTE en el PDF.
+
+### Prompt 8 - Cambios de encabezado en PDF
+> "y sacale el nombre de actas y al encabezado de loteria nacional s.e. acta de control previo sacalo tambien deja solo quiniela poceadda de la ciudad y arriba a la dercha como esta control previo eso si lo quiero los otros tiitulo que te nombre no"
+>
+> **Contexto:** Solicitud de eliminar los títulos "LOTERÍA NACIONAL S.E." y "ACTA DE CONTROL PREVIO" del PDF, dejando solo "QUINIELA POCEADA DE LA CIUDAD" y "CONTROL PREVIO" arriba a la derecha.
+
+### Prompt 9 - Agregar historia de prompts
+> "ahora agregame aca a prompt.md la historia de los proimpt pedidos en esta conversacion"
+>
+> **Contexto:** Solicitud de registrar en este archivo la historia de los prompts realizados en la conversación sobre Control Previo Poceada.
+
+### Prompt 10 - Integración OCR Extractos (Groq API)
+> "quiero que el sistema pueda cargar extractos desde imagen o PDF usando IA como el otro sistema quiniela-system, que le consulta groq como tengo ahu la llave y me deje cargar los resultados"
+>
+> **Contexto:**
+> - Solicitud de agregar funcionalidad OCR para cargar extractos desde imagen, PDF o captura de pantalla usando la API de Groq (modelo vision llama-3.2-90b-vision-preview).
+> - Se pide que la API key se guarde localmente y que el flujo permita cargar, previsualizar y guardar los resultados extraídos.
+
+### Prompt 11 - Confirmación de flujo de guardado
+> "y cuando carga el extracto lo garda para hacer el control posteriori no?"
+>
+> **Contexto:**
+> - Consulta sobre si los extractos cargados por OCR quedan guardados en la base y disponibles para el control posterior.
+
+---
+
+## Resumen de Tareas Solicitadas
+
+| # | Solicitud | Estado |
+|---|-----------|--------|
+| 1 | Implementar Modal Pozos de Arrastre Poceada (4 campos) | Completado |
+| 2 | Implementar soporte Tombolina (Control Previo) | Completado |
+| 3 | Corregir Hash TXT/CP y lectura de apuestas Tombolina | Completado |
+| 4 | Actualizar DOCUMENTACION.md | Completado |
+| 5 | Crear prompt.md | Completado |
+
+## Lista completa de prompts y mensajes históricos (con módulo)
+
+
+## Historial completo de pedidos y preguntas del usuario
+
+### Ejemplos recopilados del historial:
+
+- "vos ves el archivo pmpt.md en mi aplicacion?"
+- "si ese quiero que lo veas lo entieneas pero admes le agregus toso lso prompt que tneemos aca los que modificaron la aplicaicon desde el nacimiento"
+- "si todos los de la hostoria de la aplicac"
+- "si lista completa y entre parentesis a que modulo pertenece"
+- "pero eso fueron mi pedidos?"
+- "y donde  esta la seccion de tabla"
+- "pero yo pedi mucho mas coas en todos los chat que vos tenes dentro de esta aplicaicon"
+- "si recopila y agrega de tu hostorial"
+
+---
+*Esta sección contiene los pedidos, preguntas y prompts realizados por el usuario en el historial de conversaciones con GitHub Copilot dentro de la aplicación SIMBA V2.*
+- "Error guardando control previo Tombolina en BD" (tombolina.controller.js)
+
+## Lista de pedidos de la sesión actual (enero 2026)
+
+- "podes leer la implentacion de poceada o no?" (Poceada)
+- "si arranca si podes" (Poceada)
+- "¿Desea continuar con la iteración?" (Poceada)
+- "esto me dice del control previo ?" (Poceada)
+- "podes agregar a prompt.md la lista de los pedidos de aca" (General)
+
+### Pedidos técnicos y funcionales recientes:
+- Implementar módulo Poceada (control previo y posterior)
+- Crear tabla poceada_sorteos en la base de datos
+- Agregar rutas y endpoints para Poceada
+- Adaptar frontend para detección automática de juego y UI específica de Poceada
+- Soporte para pozo de arrastre automático y manual
+- Validar procesamiento de archivos ZIP de Poceada
+- Solucionar error "Ruta no encontrada" al procesar Poceada
+
+## Historia de los Prompts y Cambios (Enero 2026)
+
+### 1. Problemas de Deploy y 503 en Hostinger
+
+### 2. Diagnóstico y Logs
+
+### 3. Variables de Entorno y Archivos de Configuración
+
+### 4. Comunicación con Soporte
+
+### 5. Git y Deploy
+
+---
+
+## Historia de los Prompts pedidos en esta conversación (Enero 2026)
+
+### Prompt 1: Mejora de importes y PDF
+- "Cambia los importes para que muestren el valor completo con separación de miles y decimales, y aumentar el tamaño de letra."
+- **Contexto:** Solicitud de mejora visual y de formato en el PDF de control posterior.
+
+### Prompt 2: Límite de payload para escrutinio masivo
+- "request entity too large" → "Aumentar el límite de payload para escrutinio masivo."
+- **Contexto:** Error al procesar muchos tickets, se pide aumentar el límite de payload en Express.
+
+### Prompt 3: Carga de extractos y modalidad
+- "No me deja subir los XML" → "Depurar carga de extractos y modalidad."
+- **Contexto:** Problemas al cargar extractos XML, se solicita logging y validación de modalidad.
+
+### Prompt 4: Lógica de letras en escrutinio
+- "Nunca encuentra ganadores de letras" → "Corregir lógica de escrutinio de letras."
+- **Contexto:** El sistema no detecta ganadores de letras, se revisa la lógica y se normaliza la comparación.
+
+### Prompt 5: Deploy y variables de entorno en Hostinger
+- "Error de base de datos: Access denied for user ''@'::1'" → "Depurar conexión a base de datos en producción."
+- **Contexto:** Problemas de conexión en producción, se revisan variables de entorno y configuración de la base de datos.
+
+### Prompt 6: Unificación de almacenamiento de extractos
+- "La carga de extractos debe almacenarse en una tabla unificada por juego para control posterior."
+- **Contexto:** Solicitud de que todos los extractos (de cualquier fuente) se almacenen en una tabla unificada y que el control posterior use siempre esa tabla.
+
+---
+*Esta sección documenta los prompts y pedidos realizados por el usuario en la sesión de enero 2026, incluyendo contexto y acciones técnicas derivadas de cada uno.*
+
+### Prompt 12 - Expansión de Juegos en Control Posterior
+> "Expandir la selección de juegos en Control Posterior para incluir Tombolina, Quini 6, Brinco y Loto, no solo Quiniela y Poceada. Implementar detección automática del tipo de juego al cargar datos de Control Previo."
+>
+> **Contexto:**
+> - El usuario desea que el Control Posterior soporte todos los juegos de la plataforma.
+> - Se implementó un grid de selección y lógica de normalización de nombres.
+
+### Prompt 13 - Loto 5, Alineación en una Fila y Modo de Carga Tombolina
+> "falta loto 5 y quiero que esten todos los juegos en la misma fila se entiende eso o no ademas tombolina debe mostrare la otra forma de cargar el cml la misma de poceada y realizar la busqueda de ganador me da el error que te muestro"
+>
+> **Contexto:**
+> - Se añadió Loto 5 Plus a la lista de juegos.
+> - Se cambió el layout de selección a una fila con scroll horizontal para mejorar la visibilidad.
+> - Se cambió el modo de carga de extractos de Tombolina para que use el formato de "lista" (como Poceada) en lugar del grid de provincias.
+> - Se corrigió el error "No hay registros del TXT" para Tombolina capturando los registros en el backend.
+
+### Prompt 14 - Número de Sorteo Dinámico (Dashboard vs ZIP)
+> "otro problema que tengo es que poceada no esta leyendo el numero de sorteo en el control posterior si entro por la programacion del dashboard debe tomar ese numero dirtectamnte y si entro por control previo el bootn debe tomar el del zip el numero de sorteo"
+>
+> **Contexto:**
+> - Se ajustó `initControlPosterior` para leer el sorteo desde `sessionStorage` si se viene del dashboard.
+> - Se ajustó `cargarDatosControlPrevio` para normalizar el número de sorteo independientemente de si el backend lo devuelve como string o como objeto.
+
+### Prompt 15 - Mejoras Reporte Tombolina y Escrutinio Profesional
+> "Tombolina PDF Report. Incluir recaudación total (válida y anulada) en la primera imagen. Ajustar PDF a valores específicos de Tombolina. Incluir total ganadores, total premios pagados. Desglose de ganadores por categoría. Incluir 'agency breakdown' similar a Quiniela."
+>
+> **Contexto:**
+> - Se mejoró el controlador de Tombolina para decodificar números correctamente.
+> - Se actualizó el motor de escrutinio con tabla de premios completa y premios por letras.
+> - Se añadió la lógica de "Estímulo Agenciero" (1%).
+> - Se rediseñó el Acta PDF de Tombolina con resumen ejecutivo, comparación y extracto visual.
+> - Se añadieron tarjetas de recaudación y listado de tickets en el frontend.
+
+### Prompt 16 - Mejoras PDF Poceada y Documentación
+> "en el pdf de poceada tambien hay que agegar el total de ganadores y la cantidad de premios acertados es decior la plata de premios acertados totales y ademas agrega lso prompt a el md y actuliza documentacion depsues de hacer lo que te ipod"
+>
+> **Contexto:**
+> - Se añadieron cajas de resumen general al PDF de Poceada (Ganadores, Premios, Recaudación, Tasa Devolución).
+> - Se procedió a actualizar `prompt.md` y `DOCUMENTACION.md`.
+
+---
+
+---
+
+## Sesion: 31 de Enero 2026
+
+### Prompt 17 - Error SQL Dashboard y Layout
+> "Fix Dashboard Stats Error. Investigar y arreglar error SQL 'created_at' y layout de reportes que no se ajustaban a pantalla."
+>
+> **Contexto:**
+> - Error en consola: `Unknown column 'created_at'` al consultar estadísticas.
+> - Problema visual: Los 8 indicadores del Dashboard se amontonaban en pantallas pequeñas.
+
+### Prompt 18 - Fallo estructural en Front (Pantalla Oscura)
+> "usuarioa y reporte tiene mal todavia el frontves la pantalla como se ve o no"
+>
+> **Contexto:**
+> - El usuario envió un screenshot mostrando que el contenido de Reportes se rendizaba fuera de lugar (esquina inferior derecha) y el resto de la pantalla se veía oscura.
+> - Se diagnosticó un error de etiquetas `</div>` mal cerradas en el HTML.
+
+### Prompt 19 - Actualización de Documentación
+> "bueno agrega todos las modificaciones a documentacion.md en base a lo utlimo qwu ehicimos y depues agrega los nuevo prompt a prompt.md podes o no"
+>
+> **Contexto:** Solicitud de sincronizar todos los cambios técnicos y de interfaz realizados en los archivos de documentación del proyecto.
+
+*Fin de registros de la sesión - 31 de Enero 2026*
