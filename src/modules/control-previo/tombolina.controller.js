@@ -103,6 +103,9 @@ async function procesarZipTombolina(req, res) {
     let totalRegistros = 0, totalApuestas = 0, totalAnulados = 0;
     let totalRecaudacion = 0;
     let totalRecaudacionAnulada = 0;
+    let recaudacionCaba = 0;
+    let recaudacionProvincias = 0;
+    let recaudacionWeb = 0;
     let numeroSorteo = '';
     let registrosNTF = [];
 
@@ -120,6 +123,7 @@ async function procesarZipTombolina(req, res) {
       const cancelDate = extraerCampo(line, NTF_GENERIC.FECHA_CANCELACION);
       const isCanceled = cancelDate !== '';
       const valor = parseInt(extraerCampo(line, NTF_GENERIC.VALOR_APUESTA)) / 100;
+      const codProvincia = extraerCampo(line, NTF_GENERIC.PROVINCIA);
 
       const letters = extraerCampo(line, NTF_TOMBOLINA.LETRAS);
       const cantNumeros = parseInt(extraerCampo(line, NTF_TOMBOLINA.CANTIDAD_NUMEROS)) || 0;
@@ -132,10 +136,21 @@ async function procesarZipTombolina(req, res) {
       } else {
         totalApuestas++;
         totalRecaudacion += valor;
+
+        // Separación triple: Web (88880), CABA (51), Provincias
+        const agencia = extraerCampo(line, NTF_GENERIC.AGENCIA).trim();
+        if (agencia === '88880') {
+          recaudacionWeb += valor;
+        } else if (codProvincia === '51') {
+          recaudacionCaba += valor;
+        } else {
+          recaudacionProvincias += valor;
+        }
+
         registrosNTF.push({
           numeroTicket: ticket,
           valorApuesta: valor,
-          agencia: extraerCampo(line, NTF_GENERIC.PROVINCIA) + extraerCampo(line, NTF_GENERIC.AGENCIA),
+          agencia: codProvincia + agencia,
           cantidadNumeros: cantNumeros || numeros.length,
           numeros: numeros,
           letras: letters,
@@ -152,6 +167,9 @@ async function procesarZipTombolina(req, res) {
       totalAnulados,
       totalRecaudacion,
       totalRecaudacionAnulada,
+      recaudacionCaba,
+      recaudacionProvincias,
+      recaudacionWeb,
       // Campos normalizados para app.js
       registros: totalApuestas,
       recaudacion: totalRecaudacion,

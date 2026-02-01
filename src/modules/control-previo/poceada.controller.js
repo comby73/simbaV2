@@ -643,6 +643,32 @@ async function procesarArchivoNTF(content) {
     }
   }
 
+  // Calcular recaudación CABA vs Provincias vs Web
+  let recaudacionCaba = 0;
+  let recaudacionProvincias = 0;
+  let recaudacionWeb = 0;
+
+  // Recorrer registros de provincias calculados antes
+  for (const key in provincias) {
+    const prov = provincias[key];
+    if (prov.codigo === '51') {
+      // Para CABA, restamos lo que fue venta web (agencia 88880)
+      // En Poceada, cada provincia guarda sus propios totales de ventaWeb
+      // Pero el usuario quiere un total general de Web por separado.
+    }
+  }
+
+  // Refinamos la lógica: recorremos los registros parseados para mayor precisión
+  for (const reg of registrosParseados) {
+    if (reg.esVentaWeb) {
+      recaudacionWeb += reg.importe;
+    } else if (reg.agenciaCompleta.startsWith('51')) {
+      recaudacionCaba += reg.importe;
+    } else {
+      recaudacionProvincias += reg.importe;
+    }
+  }
+
   return {
     numeroSorteo,
     resumen: {
@@ -650,6 +676,9 @@ async function procesarArchivoNTF(content) {
       anulados,
       apuestasTotal,
       recaudacion,
+      recaudacionCaba,
+      recaudacionProvincias,
+      recaudacionWeb,
       ventaWeb: totalVentaWeb
     },
     provincias: provincias || {},

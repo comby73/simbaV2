@@ -986,3 +986,24 @@ CREATE TABLE control_previo_tombolina (
 - **Extracción Inteligente**: Implementado módulo de OCR basado en IA (Groq Llama 3.2 Vision) que permite extraer números y letras de extractos desde capturas de pantalla, fotos o archivos PDF.
 - **Flujo de Trabajo**: El sistema pre-procesa la imagen, consulta a la IA y carga automáticamente los resultados en la interfaz para su previsualización y guardado definitivo en la tabla de extractos.
 - **Integración**: Los extractos cargados por OCR quedan inmediatamente disponibles para ser utilizados en el proceso de Control Posterior.
+---
+
+### Actualizaciones 31 de Enero y 1 de Febrero 2026 (Versión 2.6)
+
+**Segmentación Detallada de Recaudación:**
+- **Triple Discriminación**: Implementada la lógica para separar la recaudación en tres categorías críticas para la facturación:
+    - **Venta Web**: Recaudación proveniente de la agencia **88880** (Cuenta Corriente).
+    - **CABA Propia**: Recaudación de la provincia **51**, excluyendo la venta web.
+    - **Provincias (Interior)**: Recaudación consolidada de todas las jurisdicciones fuera de CABA.
+- **Base de Datos**: Se añadieron las columnas `recaudacion_caba`, `recaudacion_provincias` y `recaudacion_web` a las tablas `control_previo_quiniela`, `control_previo_poceada` y `control_previo_tombolina`.
+- **Automatización**: Los controladores de Quiniela, Poceada y Tombolina ahora calculan estos valores automáticamente durante el procesamiento del archivo NTF v2.
+
+**Actualización de Tabla de Juegos:**
+- **Nuevos Juegos en Sistema**: Se agregaron formalmente **BRINCO** y **TOMBOLINA** a la tabla maestra `juegos`.
+    - **Brinco**: Configuración nacional de 6 números (00-39).
+    - **Tombolina**: Configuración local de 20 números con soporte para letras.
+- **Configuración Dinámica**: Se definió el JSON de configuración para premios y rangos numéricos de cada juego para su uso en validaciones de frontend y backend.
+
+**Estabilidad y Corrección de Errores:**
+- **SQL Parameter Count**: Se corrigió el error `ER_WRONG_VALUE_COUNT_ON_ROW` en el helper de control previo, asegurando que el número de marcadores de posición (`?`) coincida exactamente con las nuevas columnas agregadas.
+- **Robustez en Tombolina**: Mejora en el parseo de agencias para asegurar que el código de provincia siempre se concatene correctamente al número de agencia (formato de 8 dígitos).

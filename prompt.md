@@ -224,3 +224,35 @@
 > **Contexto:** Solicitud de sincronizar todos los cambios técnicos y de interfaz realizados en los archivos de documentación del proyecto.
 
 *Fin de registros de la sesión - 31 de Enero 2026*
+
+---
+
+## Sesión: 1 de Febrero 2026
+
+### Prompt 20 - Segmentación de Recaudación por Jurisdicción
+> "Separating CABA Revenue. Modificar el esquema de la base de datos para almacenar y diferenciar correctamente los datos de recaudación de CABA de los de otras provincias dentro de los registros de control previo."
+
+> "bueno pero pocada no me esta cargando en la tabla por un lado todos los 51 la recuadacion sola pido y por otro los distinto a 51 se etneiden esto lo necesito para todos los juegos"
+
+> "perdon hay otro valro que debe ir aparte de la recuadacion debe ser caba caba de la cta cote 88880 y provicnias por o que despues va a seguir que es el calculo de la facturacion se etneiden el como separara la recaudacion caba son todas las 51 qu eno sea la 88880, esta venta web y despues provincias es decir a lo que tenemos hay que sacarle a caba la venta de la cta 88880"
+
+> **Contexto:**
+> - Se implementó una segmentación triple de recaudación: Web (Agencia 88880), CABA (Provincia 51 sin web) e Interior (Resto de provincias).
+> - Se actualizaron las tablas `control_previo_quiniela`, `control_previo_poceada` y `control_previo_tombolina` con nuevas columnas.
+> - Se modificaron los controladores para calcular estos montos en tiempo real durante el procesamiento del NTF.
+
+### Prompt 21 - Error de Conteo de Parámetros SQL
+> "Error guardando Control Previo Poceada: Error: Column count doesn't match value count at row 1... este erro me da al pasar a la tabla"
+
+> **Contexto:**
+> - Al agregar las nuevas columnas de recaudación, la sentencia INSERT en `control-previo.helper.js` quedó con menos placeholders (`?`) de los necesarios.
+> - Se corrigió la consulta SQL para sincronizarla con la nueva estructura de la tabla.
+
+### Prompt 22 - Gestión de Juegos y Utilidad de Tablas
+> "tombolina es como poceada pero sno acumula pozo, para que se sua esa tabla? esta tabla para que se usa le falta el brinco y tombolina"
+
+> **Contexto:**
+> - Se explicó la importancia de la tabla de Tombolina para auditoría (Hash), facturación y como base para el escrutinio.
+> - Se agregaron formalmente **BRINCO** y **TOMBOLINA** a la tabla maestra `juegos` tanto en local como las instrucciones para el servidor de producción Hostinger.
+
+*Fin de registros de la sesión - 1 de Febrero 2026*

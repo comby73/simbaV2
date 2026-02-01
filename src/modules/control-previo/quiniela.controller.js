@@ -344,6 +344,9 @@ const procesarZip = async (req, res) => {
         apuestasTotal: resultadosTxt.apuestas,
         recaudacion: resultadosTxt.recaudacion,
         recaudacionAnulada: resultadosTxt.recaudacionAnulada,
+        recaudacionCaba: resultadosTxt.recaudacionCaba || 0,
+        recaudacionProvincias: resultadosTxt.recaudacionProvincias || 0,
+        recaudacionWeb: resultadosTxt.recaudacionWeb || 0,
 
         // Por provincia
         provincias: resultadosTxt.provincias,
@@ -441,10 +444,15 @@ async function procesarArchivoNTF(content) {
 
   let numeroSorteo = null;
   let registros = 0;
-  let anulados = 0;
   let apuestas = 0;
   let recaudacion = 0;
   let recaudacionAnulada = 0;
+  let anulados = 0;
+
+  // Nuevas variables para segmentación de recaudación
+  let recaudacionCaba = 0;
+  let recaudacionProvincias = 0;
+  let recaudacionWeb = 0;
 
   // Array de registros parseados para el Control Posterior
   const registrosParseados = [];
@@ -589,10 +597,19 @@ async function procesarArchivoNTF(content) {
       tiposSorteo[tipoSorteo].apuestas++;
       tiposSorteo[tipoSorteo].recaudacion += valorApuesta;
 
+      // Nueva separación por origen de venta (CABA vs Web vs Provincias)
       if (esOnline) {
+        recaudacionWeb += valorApuesta;
         onlineRecaudacion += valorApuesta;
         for (let i = 0; i < 7; i++) {
           onlineApuestas += parseInt(loteriasJugadas.charAt(i)) || 0;
+        }
+      } else {
+        const codProvincia = extraerCampo(line, NTF_GENERIC.PROVINCIA);
+        if (codProvincia === '51') {
+          recaudacionCaba += valorApuesta;
+        } else {
+          recaudacionProvincias += valorApuesta;
         }
       }
     } else {
@@ -635,7 +652,11 @@ async function procesarArchivoNTF(content) {
       total: totalAgenciasAmigas,
       validas: agenciasAmigasValidas,
       invalidas: erroresAgenciasAmigas.length
-    }
+    },
+    // NUEVO: Separación de recaudación CABA vs Provincias vs Web
+    recaudacionCaba: recaudacionCaba,
+    recaudacionProvincias: recaudacionProvincias,
+    recaudacionWeb: recaudacionWeb
   };
 }
 

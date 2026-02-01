@@ -202,6 +202,9 @@ async function guardarControlPrevioQuiniela(resultado, usuario, nombreArchivo) {
       total_apuestas: datosCalculados?.apuestasTotal || 0,
       total_anulados: datosCalculados?.registrosAnulados || 0,
       total_recaudacion: datosCalculados?.recaudacion || 0,
+      recaudacion_caba: datosCalculados?.recaudacionCaba || 0,
+      recaudacion_provincias: datosCalculados?.recaudacionProvincias || 0,
+      recaudacion_web: datosCalculados?.recaudacionWeb || 0,
       nombre_archivo_zip: nombreArchivo,
       hash_archivo: seguridad?.hashCalculado || null,
       hash_verificado: seguridad?.verificado || false,
@@ -223,13 +226,18 @@ async function guardarControlPrevioQuiniela(resultado, usuario, nombreArchivo) {
       await query(
         `UPDATE control_previo_quiniela SET 
           total_registros = ?, total_tickets = ?, total_apuestas = ?, total_anulados = ?,
-          total_recaudacion = ?, nombre_archivo_zip = ?, hash_archivo = ?, hash_verificado = ?,
+          total_recaudacion = ?, recaudacion_caba = ?, recaudacion_provincias = ?,
+          recaudacion_web = ?,
+          nombre_archivo_zip = ?, hash_archivo = ?, hash_verificado = ?,
           comparacion_xml = ?, datos_adicionales = ?, usuario_id = ?, usuario_nombre = ?,
           updated_at = NOW()
          WHERE id = ?`,
         [
           datosGuardar.total_registros, datosGuardar.total_tickets, datosGuardar.total_apuestas,
-          datosGuardar.total_anulados, datosGuardar.total_recaudacion, datosGuardar.nombre_archivo_zip,
+          datosGuardar.total_anulados, datosGuardar.total_recaudacion,
+          datosGuardar.recaudacion_caba, datosGuardar.recaudacion_provincias,
+          datosGuardar.recaudacion_web,
+          datosGuardar.nombre_archivo_zip,
           datosGuardar.hash_archivo, datosGuardar.hash_verificado, datosGuardar.comparacion_xml,
           datosGuardar.datos_adicionales, datosGuardar.usuario_id, datosGuardar.usuario_nombre,
           existe[0].id
@@ -242,13 +250,17 @@ async function guardarControlPrevioQuiniela(resultado, usuario, nombreArchivo) {
       const result = await query(
         `INSERT INTO control_previo_quiniela 
          (fecha, numero_sorteo, modalidad, total_registros, total_tickets, total_apuestas,
-          total_anulados, total_recaudacion, nombre_archivo_zip, hash_archivo, hash_verificado,
+          total_anulados, total_recaudacion, recaudacion_caba, recaudacion_provincias,
+          recaudacion_web, nombre_archivo_zip, hash_archivo, hash_verificado,
           comparacion_xml, datos_adicionales, usuario_id, usuario_nombre)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         [
           datosGuardar.fecha, datosGuardar.numero_sorteo, datosGuardar.modalidad,
           datosGuardar.total_registros, datosGuardar.total_tickets, datosGuardar.total_apuestas,
-          datosGuardar.total_anulados, datosGuardar.total_recaudacion, datosGuardar.nombre_archivo_zip,
+          datosGuardar.total_anulados, datosGuardar.total_recaudacion,
+          datosGuardar.recaudacion_caba, datosGuardar.recaudacion_provincias,
+          datosGuardar.recaudacion_web,
+          datosGuardar.nombre_archivo_zip,
           datosGuardar.hash_archivo, datosGuardar.hash_verificado, datosGuardar.comparacion_xml,
           datosGuardar.datos_adicionales, datosGuardar.usuario_id, datosGuardar.usuario_nombre
         ]
@@ -319,6 +331,9 @@ async function guardarControlPrevioPoceada(resultado, usuario, nombreArchivo) {
       total_apuestas: resumen?.apuestasTotal || 0,
       total_anulados: resumen?.anulados || 0,
       total_recaudacion: resumen?.recaudacion || 0,
+      recaudacion_caba: resumen?.recaudacionCaba || 0,
+      recaudacion_provincias: resumen?.recaudacionProvincias || 0,
+      recaudacion_web: resumen?.recaudacionWeb || 0,
       nombre_archivo_zip: nombreArchivo,
       hash_archivo: seguridad?.hashCalculado || null,
       hash_verificado: seguridad?.verificado || false,
@@ -340,13 +355,18 @@ async function guardarControlPrevioPoceada(resultado, usuario, nombreArchivo) {
       await query(
         `UPDATE control_previo_poceada SET 
           total_registros = ?, total_tickets = ?, total_apuestas = ?, total_anulados = ?,
-          total_recaudacion = ?, nombre_archivo_zip = ?, hash_archivo = ?, hash_verificado = ?,
+          total_recaudacion = ?, recaudacion_caba = ?, recaudacion_provincias = ?,
+          recaudacion_web = ?,
+          nombre_archivo_zip = ?, hash_archivo = ?, hash_verificado = ?,
           comparacion_xml = ?, distribucion_premios = ?, pozos_arrastre = ?, datos_adicionales = ?,
           usuario_id = ?, usuario_nombre = ?, updated_at = NOW()
          WHERE id = ?`,
         [
           datosGuardar.total_registros, datosGuardar.total_tickets, datosGuardar.total_apuestas,
-          datosGuardar.total_anulados, datosGuardar.total_recaudacion, datosGuardar.nombre_archivo_zip,
+          datosGuardar.total_anulados, datosGuardar.total_recaudacion,
+          datosGuardar.recaudacion_caba, datosGuardar.recaudacion_provincias,
+          datosGuardar.recaudacion_web,
+          datosGuardar.nombre_archivo_zip,
           datosGuardar.hash_archivo, datosGuardar.hash_verificado, datosGuardar.comparacion_xml,
           datosGuardar.distribucion_premios, datosGuardar.pozos_arrastre, datosGuardar.datos_adicionales,
           datosGuardar.usuario_id, datosGuardar.usuario_nombre, existe[0].id
@@ -359,14 +379,17 @@ async function guardarControlPrevioPoceada(resultado, usuario, nombreArchivo) {
       const result = await query(
         `INSERT INTO control_previo_poceada 
          (fecha, numero_sorteo, total_registros, total_tickets, total_apuestas,
-          total_anulados, total_recaudacion, nombre_archivo_zip, hash_archivo, hash_verificado,
+          total_anulados, total_recaudacion, recaudacion_caba, recaudacion_provincias,
+          recaudacion_web, nombre_archivo_zip, hash_archivo, hash_verificado,
           comparacion_xml, distribucion_premios, pozos_arrastre, datos_adicionales,
           usuario_id, usuario_nombre)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         [
           datosGuardar.fecha, datosGuardar.numero_sorteo, datosGuardar.total_registros,
           datosGuardar.total_tickets, datosGuardar.total_apuestas, datosGuardar.total_anulados,
-          datosGuardar.total_recaudacion, datosGuardar.nombre_archivo_zip, datosGuardar.hash_archivo,
+          datosGuardar.total_recaudacion, datosGuardar.recaudacion_caba, datosGuardar.recaudacion_provincias,
+          datosGuardar.recaudacion_web,
+          datosGuardar.nombre_archivo_zip, datosGuardar.hash_archivo,
           datosGuardar.hash_verificado, datosGuardar.comparacion_xml, datosGuardar.distribucion_premios,
           datosGuardar.pozos_arrastre, datosGuardar.datos_adicionales, datosGuardar.usuario_id,
           datosGuardar.usuario_nombre
@@ -471,6 +494,9 @@ async function guardarControlPrevioTombolina(resultado, usuario, nombreArchivo) 
       total_apuestas: datosCalculados?.totalApuestas || 0,
       total_anulados: datosCalculados?.totalAnulados || 0,
       total_recaudacion: datosCalculados?.totalRecaudacion || 0,
+      recaudacion_caba: datosCalculados?.recaudacionCaba || 0,
+      recaudacion_provincias: datosCalculados?.recaudacionProvincias || 0,
+      recaudacion_web: datosCalculados?.recaudacionWeb || 0,
       nombre_archivo_zip: nombreArchivo,
       hash_archivo: resultado.seguridad?.hashCalculado || null,
       usuario_id: usuario?.id || null,
@@ -484,12 +510,17 @@ async function guardarControlPrevioTombolina(resultado, usuario, nombreArchivo) 
       await query(
         `UPDATE control_previo_tombolina SET 
           total_registros = ?, total_tickets = ?, total_apuestas = ?, total_anulados = ?,
-          total_recaudacion = ?, nombre_archivo_zip = ?, hash_archivo = ?, 
+          total_recaudacion = ?, recaudacion_caba = ?, recaudacion_provincias = ?,
+          recaudacion_web = ?,
+          nombre_archivo_zip = ?, hash_archivo = ?, 
           usuario_id = ?, usuario_nombre = ?, updated_at = NOW()
          WHERE id = ?`,
         [
           datosGuardar.total_registros, datosGuardar.total_tickets, datosGuardar.total_apuestas,
-          datosGuardar.total_anulados, datosGuardar.total_recaudacion, datosGuardar.nombre_archivo_zip,
+          datosGuardar.total_anulados, datosGuardar.total_recaudacion,
+          datosGuardar.recaudacion_caba, datosGuardar.recaudacion_provincias,
+          datosGuardar.recaudacion_web,
+          datosGuardar.nombre_archivo_zip,
           datosGuardar.hash_archivo, datosGuardar.usuario_id, datosGuardar.usuario_nombre, id
         ]
       );
@@ -497,13 +528,16 @@ async function guardarControlPrevioTombolina(resultado, usuario, nombreArchivo) 
       const result = await query(
         `INSERT INTO control_previo_tombolina 
          (fecha, numero_sorteo, total_registros, total_tickets, total_apuestas,
-          total_anulados, total_recaudacion, nombre_archivo_zip, hash_archivo,
+          total_anulados, total_recaudacion, recaudacion_caba, recaudacion_provincias,
+          recaudacion_web, nombre_archivo_zip, hash_archivo,
           usuario_id, usuario_nombre)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         [
           datosGuardar.fecha, datosGuardar.numero_sorteo, datosGuardar.total_registros,
           datosGuardar.total_tickets, datosGuardar.total_apuestas, datosGuardar.total_anulados,
-          datosGuardar.total_recaudacion, datosGuardar.nombre_archivo_zip, datosGuardar.hash_archivo,
+          datosGuardar.total_recaudacion, datosGuardar.recaudacion_caba, datosGuardar.recaudacion_provincias,
+          datosGuardar.recaudacion_web,
+          datosGuardar.nombre_archivo_zip, datosGuardar.hash_archivo,
           datosGuardar.usuario_id, datosGuardar.usuario_nombre
         ]
       );
