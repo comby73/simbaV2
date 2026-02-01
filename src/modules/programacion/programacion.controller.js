@@ -813,8 +813,10 @@ const listarProgramacion = async (req, res) => {
     }
 
     if (mes) {
-      sql += ' AND DATE_FORMAT(fecha_sorteo, \'%Y-%m\') = ?';
-      params.push(mes);
+      // mes viene como "2026-01", extraemos año y mes numéricos
+      const [anio, mesNum] = mes.split('-').map(Number);
+      sql += ' AND YEAR(fecha_sorteo) = ? AND MONTH(fecha_sorteo) = ?';
+      params.push(anio, mesNum);
     }
 
     if (modalidad) {
@@ -831,7 +833,11 @@ const listarProgramacion = async (req, res) => {
     let countSql = 'SELECT COUNT(*) as total FROM programacion_sorteos WHERE activo = 1';
     const countParams = [];
     if (juego) { countSql += ' AND juego = ?'; countParams.push(juego); }
-    if (mes) { countSql += ' AND DATE_FORMAT(fecha_sorteo, \'%Y-%m\') = ?'; countParams.push(mes); }
+    if (mes) {
+      const [anioC, mesNumC] = mes.split('-').map(Number);
+      countSql += ' AND YEAR(fecha_sorteo) = ? AND MONTH(fecha_sorteo) = ?';
+      countParams.push(anioC, mesNumC);
+    }
     if (modalidad) { countSql += ' AND modalidad_codigo = ?'; countParams.push(modalidad); }
 
     const [{ total }] = await query(countSql, countParams);
