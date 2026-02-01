@@ -329,10 +329,12 @@ const cargarExcelQuiniela = async (req, res) => {
       if (registro.numero_sorteo && registro.fecha_sorteo) {
         registros.push(registro);
 
-        // Extraer mes
+        // Extraer mes y asignar mes_carga individual por registro
         if (registro.fecha_sorteo) {
           const fecha = new Date(registro.fecha_sorteo);
-          mesSet.add(`${fecha.getFullYear()}-${String(fecha.getMonth() + 1).padStart(2, '0')}`);
+          const mesRegistro = `${fecha.getFullYear()}-${String(fecha.getMonth() + 1).padStart(2, '0')}`;
+          registro.mes_carga = mesRegistro;
+          mesSet.add(mesRegistro);
         }
       }
     });
@@ -344,7 +346,7 @@ const cargarExcelQuiniela = async (req, res) => {
       return errorResponse(res, 'No se encontraron registros válidos en el Excel', 400);
     }
 
-    // Determinar mes de carga
+    // Determinar mes de carga (para historial, se usa el primer mes encontrado)
     const meses = Array.from(mesSet).sort();
     const mesCarga = meses[0] || new Date().toISOString().slice(0, 7);
 
@@ -396,7 +398,7 @@ const cargarExcelQuiniela = async (req, res) => {
           reg.prov_montevideo, reg.prov_santiago, reg.prov_mendoza, reg.prov_entrerios,
           reg.fecha_inicio_pago, reg.inicio_pago_ute, reg.fecha_prescripcion,
           reg.fecha_apertura_vtas, reg.hora_apertura_vtas, reg.fecha_cierre_vtas, reg.hora_cierre_vtas,
-          reg.dias_vta, mesCarga, req.file.originalname
+          reg.dias_vta, reg.mes_carga || mesCarga, req.file.originalname
         ]);
         insertados++;
       } catch (err) {
@@ -617,10 +619,12 @@ const cargarExcelGenerico = async (req, res) => {
         }
         registrosPorJuego[nombreJuego].push(registro);
 
-        // Extraer mes
+        // Extraer mes y asignar mes_carga individual por registro
         if (registro.fecha_sorteo) {
           const fecha = new Date(registro.fecha_sorteo);
-          mesSet.add(`${fecha.getFullYear()}-${String(fecha.getMonth() + 1).padStart(2, '0')}`);
+          const mesRegistro = `${fecha.getFullYear()}-${String(fecha.getMonth() + 1).padStart(2, '0')}`;
+          registro.mes_carga = mesRegistro;
+          mesSet.add(mesRegistro);
         }
       }
     });
@@ -634,7 +638,7 @@ const cargarExcelGenerico = async (req, res) => {
       return errorResponse(res, 'No se encontraron registros válidos en el Excel', 400);
     }
 
-    // Determinar mes de carga
+    // Determinar mes de carga (para historial, se usa el primer mes encontrado)
     const meses = Array.from(mesSet).sort();
     const mesCarga = meses[0] || new Date().toISOString().slice(0, 7);
 
@@ -689,7 +693,7 @@ const cargarExcelGenerico = async (req, res) => {
             reg.prov_montevideo, reg.prov_santiago, reg.prov_mendoza, reg.prov_entrerios,
             reg.fecha_inicio_pago, reg.inicio_pago_ute, reg.fecha_prescripcion,
             reg.fecha_apertura_vtas, reg.hora_apertura_vtas, reg.fecha_cierre_vtas, reg.hora_cierre_vtas,
-            reg.dias_vta, mesCarga, req.file.originalname
+            reg.dias_vta, reg.mes_carga || mesCarga, req.file.originalname
           ]);
           insertados++;
           resumenJuegos[juego].insertados++;
@@ -809,7 +813,7 @@ const listarProgramacion = async (req, res) => {
     }
 
     if (mes) {
-      sql += ' AND mes_carga = ?';
+      sql += ' AND DATE_FORMAT(fecha_sorteo, \'%Y-%m\') = ?';
       params.push(mes);
     }
 
@@ -827,7 +831,7 @@ const listarProgramacion = async (req, res) => {
     let countSql = 'SELECT COUNT(*) as total FROM programacion_sorteos WHERE activo = 1';
     const countParams = [];
     if (juego) { countSql += ' AND juego = ?'; countParams.push(juego); }
-    if (mes) { countSql += ' AND mes_carga = ?'; countParams.push(mes); }
+    if (mes) { countSql += ' AND DATE_FORMAT(fecha_sorteo, \'%Y-%m\') = ?'; countParams.push(mes); }
     if (modalidad) { countSql += ' AND modalidad_codigo = ?'; countParams.push(modalidad); }
 
     const [{ total }] = await query(countSql, countParams);
