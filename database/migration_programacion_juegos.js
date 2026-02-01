@@ -18,22 +18,29 @@ function isProduction() {
 }
 
 const getDbConfig = () => {
-    if (isProduction()) {
-        return {
-            host: '127.0.0.1',
-            port: 3306,
-            user: 'u870508525_simba',
-            password: 'Machu1733*',
-            database: 'u870508525_control_loteri'
-        };
+  const base = {
+    host: process.env.DB_HOST,
+    port: Number(process.env.DB_PORT || 3306),
+    user: process.env.DB_USER,
+    password: process.env.DB_PASSWORD,
+    database: process.env.DB_NAME,
+  };
+  if (isProduction()) {
+    // Fail fast in production if any variable is missing
+    const missing = Object.entries(base).filter(([, v]) => !v).map(([k]) => k);
+    if (missing.length) {
+      throw new Error(`Missing required DB env vars in production: ${missing.join(', ')}`);
     }
-    return {
-        host: process.env.DB_HOST || 'localhost',
-        port: process.env.DB_PORT || 3306,
-        user: process.env.DB_USER || 'root',
-        password: process.env.DB_PASSWORD || '',
-        database: process.env.DB_NAME || 'control_loterias'
-    };
+    return base;
+  }
+  // Development-safe defaults
+  return {
+    host: base.host || 'localhost',
+    port: base.port,
+    user: base.user || 'root',
+    password: base.password || '',
+    database: base.database || 'control_loterias',
+  };
 };
 
 async function migrate() {
