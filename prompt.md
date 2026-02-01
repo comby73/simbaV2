@@ -115,7 +115,21 @@
 - Validar procesamiento de archivos ZIP de Poceada
 - Solucionar error "Ruta no encontrada" al procesar Poceada
 
-## Historia de los Prompts y Cambios (Enero 2026)
+
+## Historia de los Prompts y Cambios (Enero-Febrero 2026)
+### Prompt 23 - Problemas de Deploy y Fusión de Ramas (1 de Febrero 2026)
+> "pro subiem tod aunque no tengas cambios a la rama principal"
+> "pero porque no lo veo en miogithub"
+> "si quer la fecha que tiene es de hace 3 dias y noi esta subiendo ningun cambio a hostinger desde github"
+> "si hacelo aver que pasa"
+> "bueno aGREGA LO QUE HICISTE A MI MD DOCUMENTACION Y PRMOPT"
+
+**Contexto:**
+- El usuario detecta que los cambios subidos a la rama `principal` no activaban el deploy automático en Hostinger/Vercel, ya que el sistema solo monitoreaba la rama `main`.
+- Se realizó la fusión de `principal` en `main` y se subió todo el contenido actualizado.
+- Se documentó el procedimiento en `DOCUMENTACION.md` y en este historial de prompts.
+
+*Fin de registros de la sesión - 1 de Febrero 2026*
 
 ### 1. Problemas de Deploy y 503 en Hostinger
 

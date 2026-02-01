@@ -36,11 +36,25 @@ El sistema permite:
 │  MySQL (control_loterias)                                   │
 │  XAMPP localhost:3306                                       │
 └─────────────────────────────────────────────────────────────┘
-```
+
+
+## 📁 Estructura de Archivos
 
 ---
 
-## 📁 Estructura de Archivos
+## 🗂️ Historial de Deploy y Control de Versiones
+
+### 1 de Febrero 2026: Solución de despliegue automático (Hostinger/Vercel)
+
+- Se detectó que el deploy automático estaba configurado para la rama `main` y no para `principal`.
+- Se realizó la fusión de la rama `principal` en `main` usando:
+  - `git checkout main`
+  - `git merge principal`
+  - `git push origin main`
+- Esto permitió que los cambios recientes se reflejen en producción y se active el despliegue automático.
+- Se recomienda mantener la rama `main` como rama principal para despliegues automáticos.
+
+---
 
 ```
 simbaV2/
