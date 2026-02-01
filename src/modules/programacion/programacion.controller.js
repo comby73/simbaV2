@@ -277,13 +277,23 @@ const cargarExcelQuiniela = async (req, res) => {
         const cell = row.getCell(colIndex);
         let value = cell.value;
 
-        // Manejar fechas
+        // Manejar fechas y horas
         if (value instanceof Date) {
           if (campo.includes('fecha')) {
             value = value.toISOString().split('T')[0];
           } else if (campo.includes('hora')) {
-            value = value.toTimeString().split(' ')[0];
+            // Usar UTC para evitar desfasaje por timezone local
+            const hh = String(value.getUTCHours()).padStart(2, '0');
+            const mm = String(value.getUTCMinutes()).padStart(2, '0');
+            const ss = String(value.getUTCSeconds()).padStart(2, '0');
+            value = `${hh}:${mm}:${ss}`;
           }
+        } else if (typeof value === 'number' && campo.includes('hora')) {
+          // Excel puede enviar hora como decimal (ej: 0.4375 = 10:30)
+          const totalMinutes = Math.round(value * 24 * 60);
+          const hh = String(Math.floor(totalMinutes / 60)).padStart(2, '0');
+          const mm = String(totalMinutes % 60).padStart(2, '0');
+          value = `${hh}:${mm}:00`;
         }
 
         // Manejar valores numéricos para provincias
@@ -560,13 +570,23 @@ const cargarExcelGenerico = async (req, res) => {
         const cell = row.getCell(colIndex);
         let value = cell.value;
 
-        // Manejar fechas
+        // Manejar fechas y horas
         if (value instanceof Date) {
           if (campo.includes('fecha')) {
             value = value.toISOString().split('T')[0];
           } else if (campo.includes('hora')) {
-            value = value.toTimeString().split(' ')[0];
+            // Usar UTC para evitar desfasaje por timezone local
+            const hh = String(value.getUTCHours()).padStart(2, '0');
+            const mm = String(value.getUTCMinutes()).padStart(2, '0');
+            const ss = String(value.getUTCSeconds()).padStart(2, '0');
+            value = `${hh}:${mm}:${ss}`;
           }
+        } else if (typeof value === 'number' && campo.includes('hora')) {
+          // Excel puede enviar hora como decimal (ej: 0.4375 = 10:30)
+          const totalMinutes = Math.round(value * 24 * 60);
+          const hh = String(Math.floor(totalMinutes / 60)).padStart(2, '0');
+          const mm = String(totalMinutes % 60).padStart(2, '0');
+          value = `${hh}:${mm}:00`;
         }
 
         // Manejar valores numéricos para provincias
