@@ -807,16 +807,17 @@ const listarProgramacion = async (req, res) => {
     let sql = 'SELECT * FROM programacion_sorteos WHERE activo = 1';
     const params = [];
 
+    console.log('[DEBUG listarProgramacion] query params:', { juego, mes, modalidad, limit, offset });
+
     if (juego) {
       sql += ' AND juego = ?';
       params.push(juego);
     }
 
     if (mes) {
-      // mes viene como "2026-01", extraemos año y mes numéricos
-      const [anio, mesNum] = mes.split('-').map(Number);
-      sql += ' AND YEAR(fecha_sorteo) = ? AND MONTH(fecha_sorteo) = ?';
-      params.push(anio, mesNum);
+      // mes viene como "2026-01", usamos LEFT para compatibilidad con DATE y VARCHAR
+      sql += ' AND LEFT(fecha_sorteo, 7) = ? COLLATE utf8mb4_general_ci';
+      params.push(mes);
     }
 
     if (modalidad) {
@@ -827,16 +828,21 @@ const listarProgramacion = async (req, res) => {
     sql += ' ORDER BY fecha_sorteo DESC, hora_sorteo ASC LIMIT ? OFFSET ?';
     params.push(parseInt(limit), parseInt(offset));
 
+    console.log('[DEBUG listarProgramacion] SQL:', sql);
+    console.log('[DEBUG listarProgramacion] params:', params);
     const sorteos = await query(sql, params);
+    console.log('[DEBUG listarProgramacion] resultados:', sorteos.length);
+    if (sorteos.length > 0) {
+      console.log('[DEBUG listarProgramacion] primer sorteo fecha_sorteo:', sorteos[0].fecha_sorteo, 'tipo:', typeof sorteos[0].fecha_sorteo);
+    }
 
     // Contar total
     let countSql = 'SELECT COUNT(*) as total FROM programacion_sorteos WHERE activo = 1';
     const countParams = [];
     if (juego) { countSql += ' AND juego = ?'; countParams.push(juego); }
     if (mes) {
-      const [anioC, mesNumC] = mes.split('-').map(Number);
-      countSql += ' AND YEAR(fecha_sorteo) = ? AND MONTH(fecha_sorteo) = ?';
-      countParams.push(anioC, mesNumC);
+      countSql += ' AND LEFT(fecha_sorteo, 7) = ? COLLATE utf8mb4_general_ci';
+      countParams.push(mes);
     }
     if (modalidad) { countSql += ' AND modalidad_codigo = ?'; countParams.push(modalidad); }
 
