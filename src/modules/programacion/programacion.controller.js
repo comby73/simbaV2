@@ -807,17 +807,18 @@ const listarProgramacion = async (req, res) => {
     let sql = 'SELECT * FROM programacion_sorteos WHERE activo = 1';
     const params = [];
 
-    console.log('[DEBUG listarProgramacion] query params:', { juego, mes, modalidad, limit, offset });
-
     if (juego) {
       sql += ' AND juego = ?';
       params.push(juego);
     }
 
     if (mes) {
-      // mes viene como "2026-01", usamos LEFT para compatibilidad con DATE y VARCHAR
-      sql += ' AND LEFT(fecha_sorteo, 7) = ? COLLATE utf8mb4_general_ci';
-      params.push(mes);
+      // mes viene como "2026-01", filtramos por rango de fechas del mes
+      const inicioMes = mes + '-01';
+      const [anio, mesNum] = mes.split('-').map(Number);
+      const finMes = mesNum === 12 ? `${anio + 1}-01-01` : `${anio}-${String(mesNum + 1).padStart(2, '0')}-01`;
+      sql += ' AND fecha_sorteo >= ? AND fecha_sorteo < ?';
+      params.push(inicioMes, finMes);
     }
 
     if (modalidad) {
@@ -828,21 +829,18 @@ const listarProgramacion = async (req, res) => {
     sql += ' ORDER BY fecha_sorteo DESC, hora_sorteo ASC LIMIT ? OFFSET ?';
     params.push(parseInt(limit), parseInt(offset));
 
-    console.log('[DEBUG listarProgramacion] SQL:', sql);
-    console.log('[DEBUG listarProgramacion] params:', params);
     const sorteos = await query(sql, params);
-    console.log('[DEBUG listarProgramacion] resultados:', sorteos.length);
-    if (sorteos.length > 0) {
-      console.log('[DEBUG listarProgramacion] primer sorteo fecha_sorteo:', sorteos[0].fecha_sorteo, 'tipo:', typeof sorteos[0].fecha_sorteo);
-    }
 
     // Contar total
     let countSql = 'SELECT COUNT(*) as total FROM programacion_sorteos WHERE activo = 1';
     const countParams = [];
     if (juego) { countSql += ' AND juego = ?'; countParams.push(juego); }
     if (mes) {
-      countSql += ' AND LEFT(fecha_sorteo, 7) = ? COLLATE utf8mb4_general_ci';
-      countParams.push(mes);
+      const inicioMesC = mes + '-01';
+      const [anioC, mesNumC] = mes.split('-').map(Number);
+      const finMesC = mesNumC === 12 ? `${anioC + 1}-01-01` : `${anioC}-${String(mesNumC + 1).padStart(2, '0')}-01`;
+      countSql += ' AND fecha_sorteo >= ? AND fecha_sorteo < ?';
+      countParams.push(inicioMesC, finMesC);
     }
     if (modalidad) { countSql += ' AND modalidad_codigo = ?'; countParams.push(modalidad); }
 
