@@ -234,6 +234,9 @@ function navigateTo(view) {
     case 'extractos':
       initOCRExtractos();
       break;
+    case 'juegos-offline':
+      initJuegosOffline();
+      break;
   }
 }
 
@@ -8509,4 +8512,330 @@ function exportarEscrutiniosCSV() {
 // Cerrar modal genérico
 function cerrarModal(el) {
   if (el) el.remove();
+}
+
+// ============================================================
+// JUEGOS OFFLINE - Hipicas, Telekino, Money Las Vegas
+// ============================================================
+
+function initJuegosOffline() {
+  console.log('[SIMBA] Inicializando Juegos Offline');
+
+  // Seleccionar Hipicas por defecto
+  seleccionarJuegoOffline('hipicas');
+
+  // Setup upload area
+  setupHipicasUpload();
+
+  // Limpiar resultados previos
+  const resultadosCard = document.getElementById('hipicas-resultados-card');
+  if (resultadosCard) resultadosCard.style.display = 'none';
+
+  const archivoInfo = document.getElementById('hipicas-archivo-info');
+  if (archivoInfo) archivoInfo.style.display = 'none';
+}
+
+function seleccionarJuegoOffline(juego) {
+  // Toggle cards
+  document.querySelectorAll('.juego-card').forEach(card => {
+    card.classList.remove('active');
+    if (card.dataset.juego === juego) {
+      card.classList.add('active');
+    }
+  });
+
+  // Toggle secciones
+  document.querySelectorAll('[id^="seccion-"]').forEach(sec => {
+    if (sec.closest('#view-juegos-offline')) {
+      sec.style.display = 'none';
+    }
+  });
+
+  const seccion = document.getElementById(`seccion-${juego}`);
+  if (seccion) seccion.style.display = 'block';
+}
+
+function setupHipicasUpload() {
+  const uploadArea = document.getElementById('hipicas-upload-area');
+  const fileInput = document.getElementById('hipicas-archivo-input');
+
+  if (!uploadArea || !fileInput) return;
+
+  // Limpiar listeners previos clonando el elemento
+  const newUploadArea = uploadArea.cloneNode(true);
+  uploadArea.parentNode.replaceChild(newUploadArea, uploadArea);
+
+  const newFileInput = document.getElementById('hipicas-archivo-input');
+
+  // Click para seleccionar archivo
+  newUploadArea.addEventListener('click', (e) => {
+    if (e.target.tagName !== 'INPUT') {
+      newFileInput.click();
+    }
+  });
+
+  // File input change
+  newFileInput.addEventListener('change', (e) => {
+    if (e.target.files.length > 0) {
+      procesarArchivoHipicas(e.target.files[0]);
+    }
+  });
+
+  // Drag & Drop
+  newUploadArea.addEventListener('dragover', (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    newUploadArea.style.borderColor = 'var(--accent)';
+    newUploadArea.style.background = 'rgba(0, 255, 136, 0.05)';
+  });
+
+  newUploadArea.addEventListener('dragleave', (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    newUploadArea.style.borderColor = '';
+    newUploadArea.style.background = '';
+  });
+
+  newUploadArea.addEventListener('drop', (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    newUploadArea.style.borderColor = '';
+    newUploadArea.style.background = '';
+
+    const files = e.dataTransfer.files;
+    if (files.length > 0) {
+      const file = files[0];
+      if (!file.name.toLowerCase().endsWith('.txt')) {
+        showToast('Solo se permiten archivos TXT', 'error');
+        return;
+      }
+      procesarArchivoHipicas(file);
+    }
+  });
+}
+
+async function procesarArchivoHipicas(file) {
+  const archivoInfo = document.getElementById('hipicas-archivo-info');
+  const nombreArchivo = document.getElementById('hipicas-nombre-archivo');
+  const lineasInfo = document.getElementById('hipicas-lineas-info');
+  const resultadosCard = document.getElementById('hipicas-resultados-card');
+  const uploadArea = document.getElementById('hipicas-upload-area');
+
+  // Mostrar info del archivo
+  if (archivoInfo) archivoInfo.style.display = 'block';
+  if (nombreArchivo) nombreArchivo.textContent = file.name;
+  if (lineasInfo) lineasInfo.textContent = `${(file.size / 1024).toFixed(1)} KB`;
+
+  // Cambiar estilo del upload area
+  if (uploadArea) {
+    uploadArea.style.borderColor = 'var(--accent)';
+    uploadArea.innerHTML = `
+      <div style="padding: 1rem;">
+        <i class="fas fa-spinner fa-spin fa-2x" style="color: var(--accent);"></i>
+        <p style="margin-top: 0.5rem; color: var(--accent);">Procesando ${file.name}...</p>
+      </div>
+    `;
+  }
+
+  try {
+    const response = await juegosOfflineAPI.hipicas.procesarTXT(file);
+
+    if (response.success) {
+      showToast(response.message || `Hipicas procesado: ${response.data.insertados} nuevos, ${response.data.actualizados} actualizados`, 'success');
+      mostrarResultadosHipicas(response.data);
+    } else {
+      throw new Error(response.message || 'Error procesando archivo');
+    }
+  } catch (error) {
+    console.error('Error procesando TXT Hipicas:', error);
+    showToast('Error: ' + error.message, 'error');
+    if (resultadosCard) resultadosCard.style.display = 'none';
+  } finally {
+    // Restaurar upload area
+    if (uploadArea) {
+      uploadArea.style.borderColor = '';
+      uploadArea.innerHTML = `
+        <i class="fas fa-cloud-upload-alt fa-3x" style="color: var(--text-muted); margin-bottom: 1rem;"></i>
+        <h4>Arrastrá el archivo TXT aquí</h4>
+        <p style="color: var(--text-muted); margin: 0.5rem 0;">o hacé click para seleccionarlo</p>
+        <input type="file" id="hipicas-archivo-input" accept=".txt" hidden>
+        <span class="badge" style="margin-top: 0.5rem;">Formato: TXT de Turfito</span>
+      `;
+      // Re-setup upload listeners
+      setupHipicasUpload();
+    }
+  }
+}
+
+function mostrarResultadosHipicas(datos) {
+  const resultadosCard = document.getElementById('hipicas-resultados-card');
+  if (!resultadosCard) return;
+  resultadosCard.style.display = 'block';
+
+  // Stats
+  document.getElementById('hipicas-total-agencias').textContent = datos.totalAgencias || 0;
+  document.getElementById('hipicas-recaudacion-total').textContent = formatMoneyHipicas(datos.recaudacionTotal || 0);
+  document.getElementById('hipicas-total-premios').textContent = formatMoneyHipicas(datos.totalPremios || 0);
+  document.getElementById('hipicas-total-sorteos').textContent = datos.totalSorteos || 0;
+
+  // Tabla de resultados
+  const tbody = document.querySelector('#hipicas-tabla-resultados tbody');
+  if (!tbody) return;
+  tbody.innerHTML = '';
+
+  const registros = datos.registros || [];
+
+  // Totales para footer
+  let totalRecaudacion = 0;
+  let totalCancelaciones = 0;
+  let totalDevoluciones = 0;
+  let totalPremios = 0;
+
+  registros.forEach(reg => {
+    totalRecaudacion += reg.recaudacion_total || 0;
+    totalCancelaciones += reg.importe_cancelaciones || 0;
+    totalDevoluciones += reg.devoluciones || 0;
+    totalPremios += reg.total_premios || 0;
+
+    const tr = document.createElement('tr');
+    tr.innerHTML = `
+      <td>${reg.sorteo || '-'}</td>
+      <td>${reg.hipodromo_nombre || '-'}</td>
+      <td>${reg.reunion || '-'}</td>
+      <td>${reg.agency || '-'}</td>
+      <td style="text-align: right;">${formatMoneyHipicas(reg.recaudacion_total || 0)}</td>
+      <td style="text-align: right;">${formatMoneyHipicas(reg.importe_cancelaciones || 0)}</td>
+      <td style="text-align: right;">${formatMoneyHipicas(reg.devoluciones || 0)}</td>
+      <td style="text-align: right;">${formatMoneyHipicas(reg.total_premios || 0)}</td>
+    `;
+    tbody.appendChild(tr);
+  });
+
+  // Footer totals
+  document.getElementById('hipicas-foot-recaudacion').textContent = formatMoneyHipicas(totalRecaudacion);
+  document.getElementById('hipicas-foot-cancelaciones').textContent = formatMoneyHipicas(totalCancelaciones);
+  document.getElementById('hipicas-foot-devoluciones').textContent = formatMoneyHipicas(totalDevoluciones);
+  document.getElementById('hipicas-foot-premios').textContent = formatMoneyHipicas(totalPremios);
+
+  // Info de procesamiento
+  if (datos.lineasProcesadas || datos.insertados !== undefined) {
+    const infoHtml = `
+      <div style="margin-top: 1rem; padding: 0.75rem; background: var(--bg-input); border-radius: 8px; font-size: 0.85rem; color: var(--text-muted);">
+        <i class="fas fa-info-circle"></i>
+        Líneas procesadas: ${datos.lineasProcesadas || 0} |
+        Ignoradas: ${datos.lineasIgnoradas || 0} |
+        Nuevos: ${datos.insertados || 0} |
+        Actualizados: ${datos.actualizados || 0}
+        ${datos.errores ? `<br><span style="color: var(--danger);"><i class="fas fa-exclamation-triangle"></i> Errores: ${datos.errores.join(', ')}</span>` : ''}
+      </div>
+    `;
+    const existingInfo = resultadosCard.querySelector('.procesamiento-info');
+    if (existingInfo) existingInfo.remove();
+
+    const infoDiv = document.createElement('div');
+    infoDiv.className = 'procesamiento-info';
+    infoDiv.innerHTML = infoHtml;
+    resultadosCard.querySelector('.card-body').appendChild(infoDiv);
+  }
+}
+
+function formatMoneyHipicas(amount) {
+  return '$' + Number(amount || 0).toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
+
+async function cargarHistorialHipicas() {
+  const fecha = document.getElementById('hipicas-filtro-fecha')?.value || '';
+  const hipodromo = document.getElementById('hipicas-filtro-hipodromo')?.value || '';
+  const tbody = document.getElementById('hipicas-tabla-historial');
+
+  if (!tbody) return;
+  tbody.innerHTML = '<tr><td colspan="9" style="text-align: center; padding: 2rem;"><i class="fas fa-spinner fa-spin"></i> Cargando...</td></tr>';
+
+  try {
+    const params = {};
+    if (fecha) params.fecha = fecha;
+    if (hipodromo) params.hipodromo = hipodromo;
+
+    const response = await juegosOfflineAPI.hipicas.obtenerFacturacion(params);
+
+    if (!response.success || !response.data?.registros?.length) {
+      tbody.innerHTML = '<tr><td colspan="9" style="text-align: center; padding: 2rem; color: var(--text-muted);"><i class="fas fa-inbox"></i> No hay registros</td></tr>';
+      return;
+    }
+
+    tbody.innerHTML = '';
+    response.data.registros.forEach(reg => {
+      const tr = document.createElement('tr');
+      tr.innerHTML = `
+        <td>${reg.fecha_sorteo ? reg.fecha_sorteo.substring(0, 10) : '-'}</td>
+        <td>${reg.sorteo || '-'}</td>
+        <td>${reg.hipodromo_nombre || '-'}</td>
+        <td>${reg.reunion || '-'}</td>
+        <td>${reg.agency || '-'}</td>
+        <td style="text-align: right;">${formatMoneyHipicas(reg.recaudacion_total)}</td>
+        <td style="text-align: right;">${formatMoneyHipicas(reg.importe_cancelaciones)}</td>
+        <td style="text-align: right;">${formatMoneyHipicas(reg.total_premios)}</td>
+        <td>
+          <button class="btn btn-sm" style="background: var(--danger); color: white; padding: 0.25rem 0.5rem; font-size: 0.75rem;"
+                  onclick="eliminarRegistroHipicas(${reg.id})" title="Eliminar">
+            <i class="fas fa-trash"></i>
+          </button>
+        </td>
+      `;
+      tbody.appendChild(tr);
+    });
+  } catch (error) {
+    console.error('Error cargando historial hipicas:', error);
+    tbody.innerHTML = `<tr><td colspan="9" style="text-align: center; padding: 2rem; color: var(--danger);"><i class="fas fa-exclamation-triangle"></i> Error: ${error.message}</td></tr>`;
+  }
+}
+
+async function eliminarRegistroHipicas(id) {
+  if (!confirm('¿Estás seguro de eliminar este registro?')) return;
+
+  try {
+    const response = await juegosOfflineAPI.hipicas.eliminarFacturacion(id);
+    if (response.success) {
+      showToast('Registro eliminado', 'success');
+      cargarHistorialHipicas();
+    }
+  } catch (error) {
+    showToast('Error eliminando: ' + error.message, 'error');
+  }
+}
+
+function exportarHipicasExcel() {
+  const tabla = document.getElementById('hipicas-tabla-resultados');
+  if (!tabla) return;
+
+  const rows = tabla.querySelectorAll('tbody tr');
+  if (rows.length === 0) {
+    showToast('No hay datos para exportar', 'warning');
+    return;
+  }
+
+  const headers = ['Sorteo', 'Hipódromo', 'Reunión', 'Agencia', 'Recaudación', 'Cancelaciones', 'Devoluciones', 'Premios'];
+  const csvRows = [headers.join(',')];
+
+  rows.forEach(row => {
+    const cells = row.querySelectorAll('td');
+    const rowData = Array.from(cells).map(cell => {
+      let val = cell.textContent.trim().replace(/\$/g, '').replace(/,/g, '');
+      if (val.includes(' ')) val = `"${val}"`;
+      return val;
+    });
+    csvRows.push(rowData.join(','));
+  });
+
+  const csvContent = csvRows.join('\n');
+  const blob = new Blob(['\ufeff' + csvContent], { type: 'text/csv;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `hipicas_${new Date().toISOString().split('T')[0]}.csv`;
+  a.click();
+
+  URL.revokeObjectURL(url);
+  showToast('Archivo CSV descargado', 'success');
 }

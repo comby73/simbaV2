@@ -225,3 +225,31 @@ const programacionAPI = {
     return apiRequest(url);
   }
 };
+
+// Juegos Offline API
+const juegosOfflineAPI = {
+  hipicas: {
+    procesarTXT: async (file) => {
+      const formData = new FormData();
+      formData.append('archivo', file);
+      const token = getToken();
+      const response = await fetch(`${API_BASE}/juegos-offline/hipicas/procesar-txt`, {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${token}` },
+        body: formData
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.message || 'Error procesando archivo TXT');
+      return data;
+    },
+
+    obtenerFacturacion: (params = {}) => {
+      const query = new URLSearchParams(params).toString();
+      return apiRequest(`/juegos-offline/hipicas/facturacion${query ? `?${query}` : ''}`);
+    },
+
+    eliminarFacturacion: (id) => apiRequest(`/juegos-offline/hipicas/facturacion/${id}`, {
+      method: 'DELETE'
+    })
+  }
+};

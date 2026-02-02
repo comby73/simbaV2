@@ -5,7 +5,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Control de Loterías</title>
-  <link rel="stylesheet" href="css/styles.css?v=20260202a">
+  <link rel="stylesheet" href="css/styles.css?v=20260202b">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
 </head>
 
@@ -107,6 +107,11 @@
         </a>
         <a class="nav-item" data-view="agencias">
           <i class="fas fa-building"></i> Agencias
+        </a>
+
+        <div class="nav-section">Facturación</div>
+        <a class="nav-item" data-view="juegos-offline">
+          <i class="fas fa-horse-head"></i> Juegos Offline
         </a>
 
         <div class="nav-section admin-only">Administración</div>
@@ -2403,6 +2408,211 @@
         </div>
       </section>
 
+      <!-- Juegos Offline -->
+      <section id="view-juegos-offline" class="view hidden">
+        <div class="page-header">
+          <h1><i class="fas fa-horse-head"></i> Juegos Offline</h1>
+          <p>Procesamiento de facturación: Hipicas, Telekino y Money Las Vegas</p>
+        </div>
+
+        <!-- Selección de Juego -->
+        <div class="card" style="border-left: 4px solid var(--warning);">
+          <div class="card-header">
+            <h3><i class="fas fa-dice"></i> Seleccionar Juego</h3>
+          </div>
+          <div class="card-body">
+            <div class="form-row" style="display: flex; flex-wrap: wrap; gap: 1rem;">
+              <div class="form-group" style="flex: 1; min-width: 180px;">
+                <label class="radio-card" onclick="seleccionarJuegoOffline('hipicas')" style="cursor:pointer; padding: 1rem; border: 2px solid var(--warning); border-radius: 8px; display: block; text-align: center;">
+                  <input type="radio" name="juego-offline" value="hipicas" checked style="display:none;">
+                  <div>
+                    <div style="font-size: 2rem;">&#x1F40E;</div>
+                    <strong>Hipicas</strong>
+                    <p class="text-muted" style="margin: 0; font-size: 0.8rem;">Palermo, La Plata, San Isidro</p>
+                  </div>
+                </label>
+              </div>
+              <div class="form-group" style="flex: 1; min-width: 180px;">
+                <label class="radio-card" style="cursor:not-allowed; padding: 1rem; border: 2px solid var(--border-color); border-radius: 8px; display: block; text-align: center; opacity: 0.5;">
+                  <input type="radio" name="juego-offline" value="telekino" disabled style="display:none;">
+                  <div>
+                    <div style="font-size: 2rem;">&#x1F3B0;</div>
+                    <strong>Telekino</strong>
+                    <p class="text-muted" style="margin: 0; font-size: 0.8rem;">Proximamente</p>
+                  </div>
+                </label>
+              </div>
+              <div class="form-group" style="flex: 1; min-width: 180px;">
+                <label class="radio-card" style="cursor:not-allowed; padding: 1rem; border: 2px solid var(--border-color); border-radius: 8px; display: block; text-align: center; opacity: 0.5;">
+                  <input type="radio" name="juego-offline" value="money" disabled style="display:none;">
+                  <div>
+                    <div style="font-size: 2rem;">&#x1F4B0;</div>
+                    <strong>Money Las Vegas</strong>
+                    <p class="text-muted" style="margin: 0; font-size: 0.8rem;">Proximamente</p>
+                  </div>
+                </label>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Sección Hipicas -->
+        <div id="seccion-hipicas">
+          <!-- Cargar Archivo TXT -->
+          <div class="card">
+            <div class="card-header">
+              <h3><i class="fas fa-file-upload"></i> 1. Cargar Archivo TXT</h3>
+            </div>
+            <div class="card-body">
+              <div class="upload-area" id="hipicas-upload-area" style="padding: 2rem; text-align: center;">
+                <i class="fas fa-file-alt" style="font-size: 3rem; color: var(--warning); margin-bottom: 1rem;"></i>
+                <h4>Arrastre el archivo TXT aqui o haga clic para seleccionar</h4>
+                <p class="text-muted">Archivo de facturación Hipicas (.txt) - El sistema detecta el hipodromo automaticamente</p>
+                <button class="btn btn-warning" style="margin-top: 1rem;" onclick="document.getElementById('hipicas-archivo-input').click()">
+                  <i class="fas fa-folder-open"></i> Seleccionar Archivo
+                </button>
+                <input type="file" id="hipicas-archivo-input" accept=".txt" hidden>
+              </div>
+
+              <!-- Info del archivo cargado -->
+              <div id="hipicas-archivo-info" style="display: none; margin-top: 1rem; padding: 1rem; background: var(--bg-input); border-radius: 8px;">
+                <div style="display: flex; gap: 2rem; flex-wrap: wrap; align-items: center;">
+                  <span><i class="fas fa-file"></i> <strong id="hipicas-nombre-archivo">-</strong></span>
+                  <span><i class="fas fa-database"></i> <strong id="hipicas-lineas-info">-</strong></span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Resultados -->
+          <div class="card" id="hipicas-resultados-card" style="display: none;">
+            <div class="card-header" style="display: flex; justify-content: space-between; align-items: center;">
+              <h3><i class="fas fa-chart-bar"></i> 2. Resultados del Procesamiento</h3>
+            </div>
+            <div class="card-body">
+              <!-- Resumen -->
+              <div class="stats-grid" style="grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));">
+                <div class="stat-card">
+                  <div class="stat-icon" style="background: var(--warning); color: #000;"><i class="fas fa-building"></i></div>
+                  <div class="stat-value" id="hipicas-total-agencias">0</div>
+                  <div class="stat-label">Total Agencias</div>
+                </div>
+                <div class="stat-card">
+                  <div class="stat-icon blue"><i class="fas fa-dollar-sign"></i></div>
+                  <div class="stat-value" id="hipicas-recaudacion-total">$0</div>
+                  <div class="stat-label">Recaudacion Total</div>
+                </div>
+                <div class="stat-card">
+                  <div class="stat-icon" style="background: var(--success); color: #fff;"><i class="fas fa-trophy"></i></div>
+                  <div class="stat-value" id="hipicas-total-premios">$0</div>
+                  <div class="stat-label">Total Premios</div>
+                </div>
+                <div class="stat-card">
+                  <div class="stat-icon" style="background: var(--info); color: #fff;"><i class="fas fa-horse-head"></i></div>
+                  <div class="stat-value" id="hipicas-total-sorteos">0</div>
+                  <div class="stat-label">Sorteos Procesados</div>
+                </div>
+              </div>
+
+              <!-- Tabla de Datos -->
+              <div class="table-responsive" style="margin-top: 2rem; max-height: 500px; overflow-y: auto;">
+                <table class="table" id="hipicas-tabla-resultados">
+                  <thead>
+                    <tr>
+                      <th>Sorteo</th>
+                      <th>Hipodromo</th>
+                      <th>Reunion</th>
+                      <th>Agencia</th>
+                      <th>Recaudacion</th>
+                      <th>Cancelaciones</th>
+                      <th>Devoluciones</th>
+                      <th>Premios</th>
+                    </tr>
+                  </thead>
+                  <tbody></tbody>
+                  <tfoot>
+                    <tr style="font-weight: bold; background: var(--bg-input);">
+                      <td colspan="4">TOTALES</td>
+                      <td id="hipicas-foot-recaudacion">$0</td>
+                      <td id="hipicas-foot-cancelaciones">$0</td>
+                      <td id="hipicas-foot-devoluciones">$0</td>
+                      <td id="hipicas-foot-premios">$0</td>
+                    </tr>
+                  </tfoot>
+                </table>
+              </div>
+            </div>
+          </div>
+
+          <!-- Historial -->
+          <div class="card">
+            <div class="card-header" style="display: flex; justify-content: space-between; align-items: center;">
+              <h3><i class="fas fa-history"></i> Historial de Cargas</h3>
+              <button class="btn btn-sm btn-secondary" onclick="cargarHistorialHipicas()">
+                <i class="fas fa-sync"></i> Actualizar
+              </button>
+            </div>
+            <div class="card-body">
+              <div class="form-row" style="gap: 1rem; margin-bottom: 1rem;">
+                <div class="form-group" style="flex: 1;">
+                  <label>Filtrar por fecha</label>
+                  <input type="date" id="hipicas-filtro-fecha" class="form-control" onchange="cargarHistorialHipicas()">
+                </div>
+                <div class="form-group" style="flex: 1;">
+                  <label>Filtrar por hipodromo</label>
+                  <select id="hipicas-filtro-hipodromo" class="form-control" onchange="cargarHistorialHipicas()">
+                    <option value="">Todos</option>
+                    <option value="0099">Palermo (HP)</option>
+                    <option value="0021">La Plata (LP)</option>
+                    <option value="0020">San Isidro (SI)</option>
+                  </select>
+                </div>
+              </div>
+              <div class="table-responsive" style="max-height: 400px; overflow-y: auto;">
+                <table class="table" id="hipicas-tabla-historial">
+                  <thead>
+                    <tr>
+                      <th>Fecha</th>
+                      <th>Sorteo</th>
+                      <th>Hipodromo</th>
+                      <th>Agencia</th>
+                      <th>Recaudacion</th>
+                      <th>Premios</th>
+                      <th>Archivo</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr><td colspan="7" class="text-center text-muted">Use los filtros para buscar registros</td></tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Sección Telekino (futuro) -->
+        <div id="seccion-telekino" style="display: none;">
+          <div class="card">
+            <div class="card-body text-center" style="padding: 3rem;">
+              <i class="fas fa-tools" style="font-size: 3rem; color: var(--text-muted);"></i>
+              <h3 class="text-muted" style="margin-top: 1rem;">Telekino - Proximamente</h3>
+              <p class="text-muted">Este modulo esta en desarrollo</p>
+            </div>
+          </div>
+        </div>
+
+        <!-- Sección Money Las Vegas (futuro) -->
+        <div id="seccion-money" style="display: none;">
+          <div class="card">
+            <div class="card-body text-center" style="padding: 3rem;">
+              <i class="fas fa-tools" style="font-size: 3rem; color: var(--text-muted);"></i>
+              <h3 class="text-muted" style="margin-top: 1rem;">Money Las Vegas - Proximamente</h3>
+              <p class="text-muted">Este modulo esta en desarrollo</p>
+            </div>
+          </div>
+        </div>
+      </section>
+
     </main>
   </div>
 
@@ -2481,9 +2691,9 @@
   <!-- Toast Container -->
   <div id="toast-container"></div>
 
-  <script src="js/api.js?v=20260202a"></script>
-  <script src="js/ocr-extractos.js?v=20260202a"></script>
-  <script src="js/app.js?v=20260202a"></script>
+  <script src="js/api.js?v=20260202b"></script>
+  <script src="js/ocr-extractos.js?v=20260202b"></script>
+  <script src="js/app.js?v=20260202b"></script>
 </body>
 
 </html>
