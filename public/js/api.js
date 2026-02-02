@@ -194,7 +194,21 @@ const agenciasAPI = {
     const query = new URLSearchParams(params).toString();
     return apiRequest(`/agencias${query ? `?${query}` : ''}`);
   },
-  buscar: (numero) => apiRequest(`/agencias/buscar/${numero}`)
+  buscar: (numero) => apiRequest(`/agencias/buscar/${numero}`),
+  cargarExcel: async (file, reemplazar = false) => {
+    const formData = new FormData();
+    formData.append('excel', file);
+    formData.append('reemplazar', reemplazar);
+    const token = getToken();
+    const response = await fetch(`${API_BASE}/agencias/cargar-excel`, {
+      method: 'POST',
+      headers: { 'Authorization': `Bearer ${token}` },
+      body: formData
+    });
+    const data = await response.json();
+    if (!response.ok) throw new Error(data.message || 'Error cargando Excel de agencias');
+    return data;
+  }
 };
 
 // Extractos API
