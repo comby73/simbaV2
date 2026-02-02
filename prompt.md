@@ -352,4 +352,34 @@
 ### Prompt 31 - Actualizar documentación
 > "necesito que me actualices el prompt y la documentacion.md con este cambio complejo que armamos"
 
+### Prompt 32 - Reportes: columnas con ceros para Hipicas
+> "miras ticket apuestas, anuadas ganadores" (screenshot mostrando Tickets=0, Apuestas=0, Anulados=0, Ganadores=0 para Hipicas)
+>
+> **Problema:** La vista totalizada mostraba columnas en 0 para Hipicas porque no tiene tickets/apuestas/ganadores.
+> **Solución:**
+> - Columnas que no aplican a Hipicas muestran `-` en vez de 0
+> - Agregadas columnas Cancelaciones y Devoluciones en vistas totalizado y agencias_venta
+> - Hipicas muestra Cancelaciones/Devoluciones, otros juegos muestran Tickets/Apuestas/Anulados
+> - Cache busters actualizados a 20260202c/d
+
+### Prompt 33 - Función agenciasAPI.cargarExcel faltante
+> Screenshot mostrando error "agenciasAPI.cargarExcel is not a function"
+>
+> **Problema:** La función `cargarExcel` se usaba en app.js pero no existía en api.js
+> **Solución:** Agregada `agenciasAPI.cargarExcel(file, reemplazar)` con FormData y fetch a `/agencias/cargar-excel`
+
+### Prompt 34 - Nueva vista Totalizado por Agencia
+> "cuando pongo varios juegos vos no podes agruparme por cta cte... me gustaria que aparezca por cta cte agrupando la suma de la recaudacion de todos los juegos"
+>
+> **Problema:** Al seleccionar varios juegos, aparecía una fila por cada juego por agencia, sin sumar totales.
+> **Solución:**
+> - Nueva opción "🏢 Totalizado por Agencia" en selector de vistas del dashboard
+> - Agrupa por agencia sumando recaudación, cancelaciones, devoluciones, tickets, premios de todos los juegos
+> - Muestra badges de colores indicando qué juegos tiene cada agencia
+> - Pide datos como `totalizado` al backend y agrupa en frontend
+> - Archivos: app.js (lógica agrupación + render), index.html (opción selector)
+
+### Prompt 35 - Actualizar prompt.md y DOCUMENTACION.md
+> "bueno cargame el prompt y documentacion.md"
+
 *Fin de registros de la sesión - 2 de Febrero 2026*

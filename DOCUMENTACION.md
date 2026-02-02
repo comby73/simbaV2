@@ -1160,20 +1160,50 @@ CREATE TABLE facturacion_turfito (
 
 ### Cache Busters Actualizados
 
-Todos los assets actualizados a `v=20260202b`.
+Todos los assets actualizados a `v=20260202d`.
 
 **Archivos modificados:**
-- `public/index.html` - Menú, sección hipicas, historial con cancelaciones, checkbox reportes
-- `public/js/app.js` - Funciones juegos offline + columnas cancelaciones en reportes
-- `public/js/api.js` - API client juegosOfflineAPI
+- `public/index.html` - Menú, sección hipicas, historial con cancelaciones, checkbox reportes, vista agrupada
+- `public/js/app.js` - Funciones juegos offline + columnas cancelaciones en reportes + vista agrupada por agencia
+- `public/js/api.js` - API client juegosOfflineAPI + agenciasAPI.cargarExcel
 - `src/app.js` - Registro ruta juegos-offline
 - `src/modules/juegos-offline/hipicas.controller.js` - NUEVO
 - `src/modules/juegos-offline/juegos-offline.routes.js` - NUEVO
 - `src/modules/historial/historial.controller.js` - Integración hipicas en dashboard
 
+### Columnas condicionales por tipo de juego
+
+En las vistas totalizado, agencias_venta y agrupado_agencia, las columnas muestran `-` cuando no aplican al juego:
+
+| Columna | Hipicas | Otros juegos |
+|---|---|---|
+| Recaudación | ✅ monto | ✅ monto |
+| Cancelaciones | ✅ monto | `-` |
+| Devoluciones | ✅ monto | `-` |
+| Tickets | `-` | ✅ cantidad |
+| Apuestas | `-` | ✅ cantidad |
+| Anulados | `-` | ✅ cantidad |
+| Ganadores | `-` | ✅ cantidad |
+| Premios | ✅ monto | ✅ monto |
+
+### Fix: agenciasAPI.cargarExcel
+
+Faltaba la función `cargarExcel` en el API client de agencias. Se agregó en `api.js` con FormData y fetch a `POST /agencias/cargar-excel`.
+
+### Nueva vista: Totalizado por Agencia
+
+**Descripción:** Agrupa datos de TODOS los juegos seleccionados por agencia/cta_cte, sumando totales.
+
+**Funcionamiento:**
+- Nueva opción "🏢 Totalizado por Agencia" en el selector de vistas del dashboard
+- Pide datos como `totalizado` al backend (una fila por agencia por juego)
+- En el frontend agrupa por clave de agencia sumando: recaudación, cancelaciones, devoluciones, tickets, apuestas, anulados, ganadores, premios
+- Muestra badges de colores indicando qué juegos tiene cada agencia (ej: `HIPI` `QUIN`)
+- Ordenable por cualquier columna, por defecto ordena por recaudación descendente
+
 ---
 
-**Versión del Documento**: 2.8
+**Versión del Documento**: 2.9
 **Última actualización**: 2 de Febrero, 2026
 **Estado**:
 - ✅ Quiniela: Completo y Optimizado
@@ -1182,5 +1212,6 @@ Todos los assets actualizados a `v=20260202b`.
 - ✅ Programación: Filtro por mes corregido, horas UTC, mes_carga individual
 - ✅ Deploy: Sincronización main ↔ principal para Hostinger
 - ✅ Juegos Offline - Hipicas: Parser TXT Turfito, facturación por agencia, integrado en reportes
+- ✅ Reportes: Vista agrupada por agencia, columnas condicionales, cancelaciones/devoluciones
 - 📋 Pendiente: Telekino y Money Las Vegas (placeholder creado)
 - 📋 Pendiente en producción: CREATE TABLE facturacion_turfito + ALTER TABLE programacion_sorteos
