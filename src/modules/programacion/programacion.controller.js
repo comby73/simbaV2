@@ -353,11 +353,12 @@ const cargarExcelQuiniela = async (req, res) => {
     // Insertar/actualizar en BD
     let insertados = 0;
     let actualizados = 0;
+    let errores = [];
 
     for (const reg of registros) {
       try {
         // Intentar insertar
-        await query(`
+        const result = await query(`
           INSERT INTO programacion_sorteos (
             juego, numero_sorteo, fecha_sorteo, hora_sorteo,
             modalidad_codigo, modalidad_nombre,
@@ -400,12 +401,19 @@ const cargarExcelQuiniela = async (req, res) => {
           reg.fecha_apertura_vtas, reg.hora_apertura_vtas, reg.fecha_cierre_vtas, reg.hora_cierre_vtas,
           reg.dias_vta, reg.mes_carga || mesCarga, req.file.originalname
         ]);
-        insertados++;
+        if (result.affectedRows === 1) {
+          insertados++;
+        } else if (result.affectedRows === 2) {
+          actualizados++;
+        }
       } catch (err) {
         if (err.code === 'ER_DUP_ENTRY') {
           actualizados++;
         } else {
-          console.error('Error insertando registro:', err.message);
+          console.error('Error insertando registro:', err.message, 'Sorteo:', reg.numero_sorteo);
+          if (errores.length < 5) {
+            errores.push(`Sorteo ${reg.numero_sorteo}: ${err.message}`);
+          }
         }
       }
     }
@@ -420,9 +428,10 @@ const cargarExcelQuiniela = async (req, res) => {
       registrosProcesados: registros.length,
       insertados,
       actualizados,
+      errores: errores.length > 0 ? errores : undefined,
       mesCarga,
       archivo: req.file.originalname
-    }, `Programación cargada: ${insertados} nuevos, ${actualizados} actualizados`);
+    }, `Programación cargada: ${insertados} nuevos, ${actualizados} actualizados${errores.length > 0 ? '. ERRORES: ' + errores.join(' | ') : ''}`);
 
   } catch (error) {
     console.error('Error cargando Excel:', error);
