@@ -859,6 +859,37 @@ const obtenerDatosDashboard = async (req, res) => {
         resultados = resultados.concat(tombolinaData);
       }
 
+      // Hipicas (desde facturacion_turfito)
+      if (!juego || juego === 'hipicas') {
+        let whereH = '';
+        const paramsH = [];
+        if (fechaDesde) { whereH += ' AND fecha_sorteo >= ?'; paramsH.push(fechaDesde); }
+        if (fechaHasta) { whereH += ' AND fecha_sorteo <= ?'; paramsH.push(fechaHasta); }
+        if (agencia) { whereH += ' AND agency LIKE ?'; paramsH.push(`%${agencia}%`); }
+
+        const sqlH = `
+          SELECT
+            NULL as id, fecha_sorteo as fecha, sorteo, 'H' as modalidad,
+            COUNT(*) as total_registros, 0 as total_tickets, 0 as total_apuestas,
+            0 as total_anulados,
+            SUM(recaudacion_total) as recaudacion_total,
+            SUM(total_premios) as total_premios,
+            SUM(importe_cancelaciones) as cancelaciones,
+            SUM(devoluciones) as devoluciones,
+            0 as total_ganadores,
+            '' as usuario_nombre,
+            MAX(created_at) as created_at,
+            'hipicas' as juego
+          FROM facturacion_turfito
+          WHERE 1=1 ${whereH}
+          GROUP BY fecha_sorteo, sorteo
+          ORDER BY fecha_sorteo DESC, sorteo DESC
+          LIMIT ${maxLimit} OFFSET ${offsetNum}
+        `;
+        const hipicasData = await query(sqlH, paramsH);
+        resultados = resultados.concat(hipicasData);
+      }
+
       // Ordenar combinados por fecha
       resultados.sort((a, b) => {
         const fechaComp = new Date(b.fecha) - new Date(a.fecha);
@@ -1171,6 +1202,39 @@ const obtenerDatosDashboard = async (req, res) => {
         }
       }
 
+      // Hipicas totalizado por agencia
+      if (!juego || juego === 'hipicas') {
+        let whereHT = '';
+        const paramsHT = [];
+        if (fechaDesde) { whereHT += ' AND fecha_sorteo >= ?'; paramsHT.push(fechaDesde); }
+        if (fechaHasta) { whereHT += ' AND fecha_sorteo <= ?'; paramsHT.push(fechaHasta); }
+        if (agencia) { whereHT += ' AND agency LIKE ?'; paramsHT.push(`%${agencia}%`); }
+
+        const hipicasTot = await query(`
+          SELECT
+            agency as agencia,
+            agency as codigo,
+            agency as nombre,
+            'CABA' as codigo_provincia,
+            SUM(recaudacion_total) as total_recaudacion,
+            SUM(importe_cancelaciones) as cancelaciones,
+            SUM(devoluciones) as devoluciones,
+            SUM(total_premios) as total_premios,
+            0 as total_ganadores,
+            0 as total_tickets,
+            0 as total_apuestas,
+            0 as total_anulados,
+            COUNT(DISTINCT CONCAT(fecha_sorteo, sorteo)) as total_sorteos,
+            'hipicas' as juego
+          FROM facturacion_turfito
+          WHERE 1=1 ${whereHT}
+          GROUP BY agency
+          ORDER BY total_recaudacion DESC
+        `, paramsHT);
+
+        resultados = resultados.concat(hipicasTot);
+      }
+
       // Ordenar por premios
       resultados.sort((a, b) => parseFloat(b.total_premios) - parseFloat(a.total_premios));
 
@@ -1260,6 +1324,38 @@ const obtenerDatosDashboard = async (req, res) => {
         }
       });
 
+      // Hipicas ventas por agencia
+      if (!juego || juego === 'hipicas') {
+        let whereHV = '';
+        const paramsHV = [];
+        if (fechaDesde) { whereHV += ' AND fecha_sorteo >= ?'; paramsHV.push(fechaDesde); }
+        if (fechaHasta) { whereHV += ' AND fecha_sorteo <= ?'; paramsHV.push(fechaHasta); }
+        if (agencia) { whereHV += ' AND agency LIKE ?'; paramsHV.push(`%${agencia}%`); }
+
+        const hipicasVentas = await query(`
+          SELECT
+            agency as agencia,
+            agency as codigo,
+            'CABA' as codigo_provincia,
+            0 as total_tickets,
+            0 as total_apuestas,
+            0 as total_anulados,
+            SUM(recaudacion_total) as total_recaudacion,
+            SUM(importe_cancelaciones) as cancelaciones,
+            SUM(devoluciones) as devoluciones,
+            SUM(total_premios) as total_premios,
+            COUNT(DISTINCT CONCAT(fecha_sorteo, sorteo)) as total_sorteos,
+            'hipicas' as juego
+          FROM facturacion_turfito
+          WHERE 1=1 ${whereHV}
+          GROUP BY agency
+          ORDER BY total_recaudacion DESC
+        `, paramsHV);
+
+        hipicasVentas.forEach(row => { row.nombre = row.agencia; });
+        resultados = resultados.concat(hipicasVentas);
+      }
+
     } else if (tipoConsulta === 'comparativo') {
       // Comparativo entre juegos
       const paramsC = [];
@@ -1331,6 +1427,40 @@ const obtenerDatosDashboard = async (req, res) => {
           total_ganadores: poceadaPremios?.total_ganadores || 0
         }
       ];
+
+      // Hipicas comparativo
+      let whereHC = '';
+      const paramsHC = [];
+      if (fechaDesde) { whereHC += ' AND fecha_sorteo >= ?'; paramsHC.push(fechaDesde); }
+      if (fechaHasta) { whereHC += ' AND fecha_sorteo <= ?'; paramsHC.push(fechaHasta); }
+
+      const [hipicasComp] = await query(`
+        SELECT
+          COUNT(DISTINCT CONCAT(fecha_sorteo, sorteo)) as total_sorteos,
+          COALESCE(SUM(recaudacion_total), 0) as total_recaudacion,
+          COALESCE(SUM(total_premios), 0) as total_premios,
+          COALESCE(SUM(importe_cancelaciones), 0) as cancelaciones,
+          COALESCE(SUM(devoluciones), 0) as devoluciones,
+          COUNT(DISTINCT agency) as total_agencias
+        FROM facturacion_turfito
+        WHERE 1=1 ${whereHC}
+      `, paramsHC);
+
+      if (parseInt(hipicasComp?.total_sorteos) > 0) {
+        resultados.push({
+          juego: 'hipicas',
+          total_sorteos: hipicasComp?.total_sorteos || 0,
+          total_recaudacion: hipicasComp?.total_recaudacion || 0,
+          total_tickets: 0,
+          total_apuestas: 0,
+          total_anulados: 0,
+          cancelaciones: hipicasComp?.cancelaciones || 0,
+          devoluciones: hipicasComp?.devoluciones || 0,
+          total_premios: hipicasComp?.total_premios || 0,
+          total_ganadores: 0,
+          total_agencias: hipicasComp?.total_agencias || 0
+        });
+      }
     }
 
     return successResponse(res, {
@@ -1560,6 +1690,39 @@ const obtenerStatsDashboard = async (req, res) => {
         `, [j, ...paramsQ]);
         provinciasGen.forEach(p => provinciasSet.add(String(p.codigo_provincia)));
       }
+    }
+
+    // Hipicas (desde facturacion_turfito)
+    if (!juego || juego === 'hipicas') {
+      let whereH = '';
+      const paramsH = [];
+      if (fechaDesde) { whereH += ' AND fecha_sorteo >= ?'; paramsH.push(fechaDesde); }
+      if (fechaHasta) { whereH += ' AND fecha_sorteo <= ?'; paramsH.push(fechaHasta); }
+
+      const [hipStats] = await query(`
+        SELECT
+          COUNT(DISTINCT CONCAT(fecha_sorteo, sorteo)) as sorteos,
+          COALESCE(SUM(recaudacion_total), 0) as recaudacion,
+          COALESCE(SUM(total_premios), 0) as premios,
+          COALESCE(SUM(importe_cancelaciones), 0) as cancelaciones,
+          COALESCE(SUM(devoluciones), 0) as devoluciones,
+          COUNT(DISTINCT agency) as agencias
+        FROM facturacion_turfito
+        WHERE 1=1 ${whereH}
+      `, paramsH);
+
+      stats.total_recaudacion += parseFloat(hipStats?.recaudacion || 0);
+      stats.total_premios += parseFloat(hipStats?.premios || 0);
+      stats.total_sorteos += parseInt(hipStats?.sorteos || 0);
+      stats.total_cancelaciones = (stats.total_cancelaciones || 0) + parseFloat(hipStats?.cancelaciones || 0);
+      stats.total_devoluciones = (stats.total_devoluciones || 0) + parseFloat(hipStats?.devoluciones || 0);
+
+      // Agencias de hipicas
+      const agenciasH = await query(`
+        SELECT DISTINCT agency FROM facturacion_turfito
+        WHERE total_premios > 0 ${whereH}
+      `, paramsH);
+      agenciasH.forEach(a => agenciasSet.add('HIP-' + a.agency));
     }
 
     // NUEVO: Contar agencias ÚNICAS de CABA (51) con ventas desde control_previo_agencias

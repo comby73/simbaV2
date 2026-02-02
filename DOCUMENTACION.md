@@ -1090,7 +1090,90 @@ Todos los assets actualizados a `v=20260202a`:
 
 ---
 
-**Versión del Documento**: 2.7
+## Actualizaciones 2 de Febrero 2026 - Parte 2 (Versión 2.8)
+
+### Nuevo Módulo: Juegos Offline - Hipicas (Turfito)
+
+**Descripción:** Sección completa para procesar archivos TXT de facturación de carreras de caballos (formato Turfito).
+
+**Hipódromos soportados:**
+| Código | Nombre | Abreviatura |
+|--------|---------|-------------|
+| 0099 | Palermo | HP |
+| 0021 | La Plata | LP |
+| 0020 | San Isidro | SI |
+
+**Backend:**
+- `src/modules/juegos-offline/hipicas.controller.js` - Parser TXT posicional (port de Python TurfitoLoader)
+  - Campos: codigo_juego(0-4), provincia_agencia(4-11), reunion(19-22), fecha(22-30), ventas(30-42), cancelaciones(42-54), devoluciones(53-66), premios(64-78)
+  - Agrupa por sorteo+agencia, acumula montos
+  - UPSERT con ON DUPLICATE KEY UPDATE
+- `src/modules/juegos-offline/juegos-offline.routes.js` - Rutas con multer (memory storage, 10MB, solo TXT)
+- Registrado en `src/app.js` como `/api/juegos-offline`
+
+**Endpoints:**
+- `POST /api/juegos-offline/hipicas/procesar-txt` - Subir y procesar archivo TXT
+- `GET /api/juegos-offline/hipicas/facturacion` - Consultar facturación con filtros (fecha, hipodromo, sorteo)
+- `DELETE /api/juegos-offline/hipicas/facturacion/:id` - Eliminar registro
+
+**Frontend:**
+- Menú: Nuevo ítem "Juegos Offline" con icono `fa-horse-head` bajo sección "Facturación"
+- Sección HTML: Selector de juego (Hipicas activo, Telekino/Money deshabilitados), upload drag&drop, stats grid, tabla resultados con footer totales, historial con filtros
+- Funciones JS: `initJuegosOffline()`, `seleccionarJuegoOffline()`, `setupHipicasUpload()`, `procesarArchivoHipicas()`, `mostrarResultadosHipicas()`, `cargarHistorialHipicas()`, `eliminarRegistroHipicas()`, `exportarHipicasExcel()`
+- API client: `juegosOfflineAPI.hipicas` en api.js
+
+**Tabla BD: `facturacion_turfito`**
+```sql
+CREATE TABLE facturacion_turfito (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  sorteo VARCHAR(50) NOT NULL,
+  fecha_sorteo DATE NOT NULL,
+  hipodromo_codigo VARCHAR(10) NOT NULL,
+  hipodromo_nombre VARCHAR(50) NOT NULL,
+  reunion VARCHAR(10),
+  agency VARCHAR(20) NOT NULL,
+  recaudacion_total DECIMAL(14,2) DEFAULT 0.00,
+  importe_cancelaciones DECIMAL(14,2) DEFAULT 0.00,
+  devoluciones DECIMAL(14,2) DEFAULT 0.00,
+  total_premios DECIMAL(14,2) DEFAULT 0.00,
+  archivo_origen VARCHAR(255),
+  usuario_id INT,
+  UNIQUE KEY uq_sorteo_agency (sorteo, agency),
+  KEY idx_fecha (fecha_sorteo),
+  KEY idx_hipodromo (hipodromo_codigo)
+);
+```
+
+### Integración de Hipicas en Reportes Dashboard
+
+**Problema:** Los datos de Hipicas no aparecían en los reportes y faltaban columnas de Cancelaciones/Devoluciones.
+
+**Cambios en `historial.controller.js`:**
+- `obtenerDatosDashboard()`: Agregado bloque hipicas en las 4 vistas (detallado, totalizado, agencias_venta, comparativo)
+- `obtenerStatsDashboard()`: Suma recaudación, premios, cancelaciones y devoluciones de hipicas
+
+**Cambios en frontend:**
+- Agregado checkbox "HIPICAS" al selector de juegos del dashboard
+- Vistas detallado y comparativo ahora muestran columnas Cancelaciones y Devoluciones
+- Historial de Hipicas muestra todas las columnas: Fecha, Sorteo, Hipódromo, Agencia, Recaudación, Cancelaciones, Devoluciones, Premios
+- Modalidad "H" = Hipicas en `getModalidadNombre()`
+
+### Cache Busters Actualizados
+
+Todos los assets actualizados a `v=20260202b`.
+
+**Archivos modificados:**
+- `public/index.html` - Menú, sección hipicas, historial con cancelaciones, checkbox reportes
+- `public/js/app.js` - Funciones juegos offline + columnas cancelaciones en reportes
+- `public/js/api.js` - API client juegosOfflineAPI
+- `src/app.js` - Registro ruta juegos-offline
+- `src/modules/juegos-offline/hipicas.controller.js` - NUEVO
+- `src/modules/juegos-offline/juegos-offline.routes.js` - NUEVO
+- `src/modules/historial/historial.controller.js` - Integración hipicas en dashboard
+
+---
+
+**Versión del Documento**: 2.8
 **Última actualización**: 2 de Febrero, 2026
 **Estado**:
 - ✅ Quiniela: Completo y Optimizado
@@ -1098,4 +1181,6 @@ Todos los assets actualizados a `v=20260202a`:
 - ✅ Tombolina: Control Previo y Escrutinio Profesional
 - ✅ Programación: Filtro por mes corregido, horas UTC, mes_carga individual
 - ✅ Deploy: Sincronización main ↔ principal para Hostinger
-- 📋 Pendiente en producción: ALTER TABLE para columnas codigo_juego y tipo_juego
+- ✅ Juegos Offline - Hipicas: Parser TXT Turfito, facturación por agencia, integrado en reportes
+- 📋 Pendiente: Telekino y Money Las Vegas (placeholder creado)
+- 📋 Pendiente en producción: CREATE TABLE facturacion_turfito + ALTER TABLE programacion_sorteos

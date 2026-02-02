@@ -323,4 +323,33 @@
 >
 > **Contexto:** Solicitud de actualizar ambos archivos con los cambios de la sesión del 2 de febrero.
 
+### Prompt 29 - Implementar sección Juegos Offline (Hipicas)
+> Solicitud de crear sección completa "Juegos Offline" con parser TXT de Turfito para Hipicas.
+> Se proporcionó el código Python del TurfitoLoader como referencia.
+>
+> **Implementado:**
+> - Backend: `hipicas.controller.js` (parser TXT posicional), `juegos-offline.routes.js` (multer upload)
+> - Frontend: sección HTML con upload drag&drop, stats, tabla resultados, historial con filtros
+> - API client: `juegosOfflineAPI.hipicas` en api.js
+> - Tabla BD: `facturacion_turfito` con UNIQUE KEY (sorteo, agency)
+> - Hipódromos: Palermo (0099/HP), La Plata (0021/LP), San Isidro (0020/SI)
+
+### Prompt 30 - Integrar Hipicas en Reportes y agregar Cancelaciones
+> "llevaste esto recaudacion a los juegos de reportes se lo sumaste o no el calculo por agencia pero ademas me tenes que mostrar cancelaciones que no me estars mostrando"
+>
+> **Problemas identificados:**
+> - El historial de Hipicas no mostraba Cancelaciones ni Devoluciones
+> - Los datos de Hipicas no aparecían en la sección Reportes/Dashboard
+>
+> **Solución:**
+> - Agregado columnas Cancelaciones y Devoluciones al historial HTML y JS
+> - Integrado Hipicas en `obtenerDatosDashboard()` (detallado, totalizado, agencias_venta, comparativo)
+> - Integrado Hipicas en `obtenerStatsDashboard()` (recaudación, premios, cancelaciones, devoluciones)
+> - Agregado checkbox "HIPICAS" al selector de juegos del dashboard
+> - Agregado columnas Cancelaciones/Devoluciones en vistas detallado y comparativo
+> - Archivos modificados: historial.controller.js, app.js, index.html
+
+### Prompt 31 - Actualizar documentación
+> "necesito que me actualices el prompt y la documentacion.md con este cambio complejo que armamos"
+
 *Fin de registros de la sesión - 2 de Febrero 2026*

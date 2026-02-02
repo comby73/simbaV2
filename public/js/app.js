@@ -7186,6 +7186,8 @@ function renderTablaDashboard(tipoConsulta) {
         ${sortableHeader('Apuestas', 'total_apuestas', 'text-end')}
         ${sortableHeader('Anulados', 'total_anulados', 'text-end')}
         ${sortableHeader('Recaudaci\u00f3n', 'recaudacion_total', 'text-end')}
+        ${sortableHeader('Cancelaciones', 'cancelaciones', 'text-end')}
+        ${sortableHeader('Devoluciones', 'devoluciones', 'text-end')}
         ${sortableHeader('Premios', 'total_premios', 'text-end')}
         ${sortableHeader('Ganadores', 'total_ganadores', 'text-end')}
       </tr>
@@ -7205,6 +7207,8 @@ function renderTablaDashboard(tipoConsulta) {
         <td class="text-end">${formatNumber(item.total_apuestas || 0)}</td>
         <td class="text-end text-warning">${formatNumber(item.total_anulados || 0)}</td>
         <td class="text-end text-primary"><strong>$${formatNumber(item.recaudacion_total || 0)}</strong></td>
+        <td class="text-end" style="color: #ff9800;">$${formatNumber(item.cancelaciones || 0)}</td>
+        <td class="text-end" style="color: #ff9800;">$${formatNumber(item.devoluciones || 0)}</td>
         <td class="text-end text-success"><strong>$${formatNumber(item.total_premios || 0)}</strong></td>
         <td class="text-end">${formatNumber(item.total_ganadores || 0)}</td>
       </tr>
@@ -7219,6 +7223,8 @@ function renderTablaDashboard(tipoConsulta) {
         <th class="text-end">Apuestas</th>
         <th class="text-end">Anulados</th>
         <th class="text-end">Recaudación</th>
+        <th class="text-end">Cancelaciones</th>
+        <th class="text-end">Devoluciones</th>
         <th class="text-end">Premios</th>
         <th class="text-end">Ganadores</th>
         <th class="text-end">% Premios</th>
@@ -7237,6 +7243,8 @@ function renderTablaDashboard(tipoConsulta) {
           <td class="text-end">${formatNumber(item.total_apuestas || 0)}</td>
           <td class="text-end text-warning">${formatNumber(item.total_anulados || 0)}</td>
           <td class="text-end text-primary"><strong>$${formatNumber(item.total_recaudacion || 0)}</strong></td>
+          <td class="text-end" style="color: #ff9800;">$${formatNumber(item.cancelaciones || 0)}</td>
+          <td class="text-end" style="color: #ff9800;">$${formatNumber(item.devoluciones || 0)}</td>
           <td class="text-end text-success"><strong>$${formatNumber(item.total_premios || 0)}</strong></td>
           <td class="text-end">${formatNumber(item.total_ganadores || 0)}</td>
           <td class="text-end"><span class="badge bg-info">${porcentaje}%</span></td>
@@ -7253,7 +7261,9 @@ function getModalidadNombre(modalidad) {
     'P': 'Primera',
     'M': 'Matutina',
     'V': 'Vespertina',
-    'N': 'Nocturna'
+    'N': 'Nocturna',
+    'H': 'Hipicas',
+    'U': 'Única'
   };
   return nombres[modalidad] || modalidad;
 }
@@ -8770,10 +8780,10 @@ async function cargarHistorialHipicas() {
         <td>${reg.fecha_sorteo ? reg.fecha_sorteo.substring(0, 10) : '-'}</td>
         <td>${reg.sorteo || '-'}</td>
         <td>${reg.hipodromo_nombre || '-'}</td>
-        <td>${reg.reunion || '-'}</td>
         <td>${reg.agency || '-'}</td>
         <td style="text-align: right;">${formatMoneyHipicas(reg.recaudacion_total)}</td>
         <td style="text-align: right;">${formatMoneyHipicas(reg.importe_cancelaciones)}</td>
+        <td style="text-align: right;">${formatMoneyHipicas(reg.devoluciones)}</td>
         <td style="text-align: right;">${formatMoneyHipicas(reg.total_premios)}</td>
         <td>
           <button class="btn btn-sm" style="background: var(--danger); color: white; padding: 0.25rem 0.5rem; font-size: 0.75rem;"
