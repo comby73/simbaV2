@@ -6949,6 +6949,7 @@ async function buscarDashboard() {
     let tipoBackend = tipoConsulta;
     if (tipoConsulta === 'agencias') tipoBackend = 'totalizado';
     if (tipoConsulta === 'agencias_venta') tipoBackend = 'agencias_venta';
+    if (tipoConsulta === 'agrupado_agencia') tipoBackend = 'totalizado';
 
     // Cargar datos y estadísticas en paralelo
     const [datosResponse, statsResponse] = await Promise.all([
@@ -7262,6 +7263,99 @@ function renderTablaDashboard(tipoConsulta) {
           <td class="text-end text-success"><strong>$${formatNumber(item.total_premios || 0)}</strong></td>
           <td class="text-end">${formatNumber(item.total_ganadores || 0)}</td>
           <td class="text-end"><span class="badge bg-info">${porcentaje}%</span></td>
+        </tr>
+      `;
+    }).join('');
+
+  } else if (tipoConsulta === 'agrupado_agencia') {
+    // Agrupar datos por agencia/cta_cte sumando todos los juegos
+    const agrupado = {};
+    dashboardData.forEach(item => {
+      // Clave: usar agencia o cta_cte limpio
+      const clave = (item.cta_cte || item.agencia || 'SIN-AGENCIA').replace(/-/g, '').trim();
+      if (!agrupado[clave]) {
+        agrupado[clave] = {
+          agencia: clave,
+          nombre: item.nombre || clave,
+          codigo_provincia: item.codigo_provincia,
+          juegos: new Set(),
+          total_sorteos: 0,
+          total_recaudacion: 0,
+          cancelaciones: 0,
+          devoluciones: 0,
+          total_tickets: 0,
+          total_apuestas: 0,
+          total_anulados: 0,
+          total_ganadores: 0,
+          total_premios: 0
+        };
+      }
+      const g = agrupado[clave];
+      g.juegos.add(item.juego);
+      g.total_sorteos += parseInt(item.total_sorteos) || 0;
+      g.total_recaudacion += parseFloat(item.total_recaudacion) || 0;
+      g.cancelaciones += parseFloat(item.cancelaciones) || 0;
+      g.devoluciones += parseFloat(item.devoluciones) || 0;
+      g.total_tickets += parseInt(item.total_tickets) || 0;
+      g.total_apuestas += parseInt(item.total_apuestas) || 0;
+      g.total_anulados += parseInt(item.total_anulados) || 0;
+      g.total_ganadores += parseInt(item.total_ganadores) || 0;
+      g.total_premios += parseFloat(item.total_premios) || 0;
+    });
+
+    const listaAgrupada = Object.values(agrupado);
+
+    // Ordenar
+    const sortCol = dashboardSortColumn || 'total_recaudacion';
+    const sortDir = dashboardSortColumn ? dashboardSortDirection : 'desc';
+    listaAgrupada.sort((a, b) => {
+      const va = a[sortCol] || 0;
+      const vb = b[sortCol] || 0;
+      return sortDir === 'asc' ? va - vb : vb - va;
+    });
+
+    // Actualizar contador
+    const countEl = document.getElementById('dash-results-count');
+    if (countEl) countEl.textContent = listaAgrupada.length;
+
+    thead.innerHTML = `
+      <tr>
+        ${sortableHeader('Agencia', 'agencia', '')}
+        <th>Juegos</th>
+        ${sortableHeader('Sorteos', 'total_sorteos', 'text-end')}
+        ${sortableHeader('Recaudación', 'total_recaudacion', 'text-end')}
+        ${sortableHeader('Cancelaciones', 'cancelaciones', 'text-end')}
+        ${sortableHeader('Devoluciones', 'devoluciones', 'text-end')}
+        ${sortableHeader('Tickets', 'total_tickets', 'text-end')}
+        ${sortableHeader('Apuestas', 'total_apuestas', 'text-end')}
+        ${sortableHeader('Anulados', 'total_anulados', 'text-end')}
+        ${sortableHeader('Ganadores', 'total_ganadores', 'text-end')}
+        ${sortableHeader('Premios', 'total_premios', 'text-end')}
+      </tr>
+    `;
+
+    tbody.innerHTML = listaAgrupada.map(item => {
+      const esProvincia = item.codigo_provincia && item.codigo_provincia !== '51' && item.codigo_provincia !== 'CABA';
+      const displayAgencia = esProvincia
+        ? `<span class="badge bg-secondary" style="font-size: 0.85rem; padding: 0.4rem 0.6rem;">${item.nombre}</span>`
+        : `<strong style="font-family: monospace; font-size: 0.95rem;">${item.agencia}</strong>`;
+
+      const juegosArr = [...item.juegos];
+      const juegoBadges = juegosArr.map(j => `<span class="badge game-${j}" style="font-size: 0.7rem; margin: 1px;">${j.toUpperCase().substring(0,4)}</span>`).join(' ');
+
+      return `
+        <tr>
+          <td>${displayAgencia}</td>
+          <td>${juegoBadges}</td>
+          <td class="text-end">${formatNumber(item.total_sorteos)}</td>
+          <td class="text-end text-primary"><strong>$${formatNumber(item.total_recaudacion)}</strong></td>
+          <td class="text-end" style="color: #ff9800;">${item.cancelaciones > 0 ? '$' + formatNumber(item.cancelaciones) : '-'}</td>
+          <td class="text-end" style="color: #ff9800;">${item.devoluciones > 0 ? '$' + formatNumber(item.devoluciones) : '-'}</td>
+          <td class="text-end">${item.total_tickets > 0 ? formatNumber(item.total_tickets) : '-'}</td>
+          <td class="text-end">${item.total_apuestas > 0 ? formatNumber(item.total_apuestas) : '-'}</td>
+          <td class="text-end text-warning">${item.total_anulados > 0 ? formatNumber(item.total_anulados) : '-'}</td>
+          <td class="text-end">${item.total_ganadores > 0 ? formatNumber(item.total_ganadores) : '-'}</td>
+          <td class="text-end text-success"><strong>$${formatNumber(item.total_premios)}</strong></td>
         </tr>
       `;
     }).join('');
