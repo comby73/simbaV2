@@ -7090,16 +7090,18 @@ function renderTablaDashboard(tipoConsulta) {
   const tbody = document.getElementById('table-dashboard-body');
 
   if (tipoConsulta === 'agencias' || tipoConsulta === 'totalizado') {
-    // Vista por Agencia - Premios pagados + recaudación + anuladas
+    // Vista por Agencia - Premios pagados + recaudación + cancelaciones/devoluciones
     thead.innerHTML = `
       <tr>
         ${sortableHeader('Agencia / Provincia', 'agencia', '')}
         <th>Juego</th>
         ${sortableHeader('Sorteos', 'total_sorteos', 'text-end')}
+        ${sortableHeader('Recaudaci\u00f3n', 'total_recaudacion', 'text-end')}
+        ${sortableHeader('Cancelaciones', 'cancelaciones', 'text-end')}
+        ${sortableHeader('Devoluciones', 'devoluciones', 'text-end')}
         ${sortableHeader('Tickets', 'total_tickets', 'text-end')}
         ${sortableHeader('Apuestas', 'total_apuestas', 'text-end')}
         ${sortableHeader('Anulados', 'total_anulados', 'text-end')}
-        ${sortableHeader('Recaudaci\u00f3n', 'total_recaudacion', 'text-end')}
         ${sortableHeader('Ganadores', 'total_ganadores', 'text-end')}
         ${sortableHeader('Premios Pagados', 'total_premios', 'text-end')}
       </tr>
@@ -7121,16 +7123,20 @@ function renderTablaDashboard(tipoConsulta) {
         ? `<span class="badge bg-secondary" style="font-size: 0.85rem; padding: 0.4rem 0.6rem;">${item.nombre || item.agencia}</span>`
         : `<strong style="font-family: monospace; font-size: 0.95rem;">${ctaCtePura}</strong>`;
 
+      const esHipicas = item.juego === 'hipicas';
+
       return `
         <tr>
           <td>${displayAgencia}</td>
           <td><span class="badge game-${item.juego}">${(item.juego || '').toUpperCase()}</span></td>
           <td class="text-end">${formatNumber(item.total_sorteos || 0)}</td>
-          <td class="text-end">${formatNumber(item.total_tickets || 0)}</td>
-          <td class="text-end">${formatNumber(item.total_apuestas || 0)}</td>
-          <td class="text-end text-warning">${formatNumber(item.total_anulados || 0)}</td>
           <td class="text-end text-primary">$${formatNumber(item.total_recaudacion || 0)}</td>
-          <td class="text-end">${formatNumber(item.total_ganadores || 0)}</td>
+          <td class="text-end" style="color: #ff9800;">${esHipicas ? '$' + formatNumber(item.cancelaciones || 0) : '-'}</td>
+          <td class="text-end" style="color: #ff9800;">${esHipicas ? '$' + formatNumber(item.devoluciones || 0) : '-'}</td>
+          <td class="text-end">${esHipicas ? '-' : formatNumber(item.total_tickets || 0)}</td>
+          <td class="text-end">${esHipicas ? '-' : formatNumber(item.total_apuestas || 0)}</td>
+          <td class="text-end text-warning">${esHipicas ? '-' : formatNumber(item.total_anulados || 0)}</td>
+          <td class="text-end">${esHipicas ? '-' : formatNumber(item.total_ganadores || 0)}</td>
           <td class="text-end text-success"><strong>$${formatNumber(item.total_premios || 0)}</strong></td>
         </tr>
       `;
@@ -7143,11 +7149,14 @@ function renderTablaDashboard(tipoConsulta) {
         ${sortableHeader('Agencia / Provincia', 'agencia', '')}
         <th>Juego</th>
         ${sortableHeader('Sorteos', 'total_sorteos', 'text-end')}
+        ${sortableHeader('Recaudaci\u00f3n', 'total_recaudacion', 'text-end')}
+        ${sortableHeader('Cancelaciones', 'cancelaciones', 'text-end')}
+        ${sortableHeader('Devoluciones', 'devoluciones', 'text-end')}
         ${sortableHeader('Tickets', 'total_tickets', 'text-end')}
         ${sortableHeader('Apuestas', 'total_apuestas', 'text-end')}
         ${sortableHeader('Anulados', 'total_anulados', 'text-end')}
         ${sortableHeader('$ Anulados', 'total_recaudacion_anulada', 'text-end')}
-        ${sortableHeader('Recaudaci\u00f3n', 'total_recaudacion', 'text-end')}
+        ${sortableHeader('Premios', 'total_premios', 'text-end')}
       </tr>
     `;
 
@@ -7161,16 +7170,21 @@ function renderTablaDashboard(tipoConsulta) {
         ? `<span class="badge bg-secondary">${item.nombre || item.agencia}</span>`
         : `<strong>${item.agencia || item.codigo || '-'}</strong>`;
 
+      const esHipicas = item.juego === 'hipicas';
+
       return `
         <tr>
           <td>${displayAgencia}</td>
           <td><span class="badge game-${item.juego}">${(item.juego || '').toUpperCase()}</span></td>
           <td class="text-end">${formatNumber(item.total_sorteos || 0)}</td>
-          <td class="text-end">${formatNumber(item.total_tickets || 0)}</td>
-          <td class="text-end">${formatNumber(item.total_apuestas || 0)}</td>
-          <td class="text-end text-warning">${formatNumber(item.total_anulados || 0)}</td>
-          <td class="text-end text-warning">$${formatNumber(item.total_recaudacion_anulada || 0)}</td>
           <td class="text-end text-primary"><strong>$${formatNumber(item.total_recaudacion || 0)}</strong></td>
+          <td class="text-end" style="color: #ff9800;">${esHipicas ? '$' + formatNumber(item.cancelaciones || 0) : '-'}</td>
+          <td class="text-end" style="color: #ff9800;">${esHipicas ? '$' + formatNumber(item.devoluciones || 0) : '-'}</td>
+          <td class="text-end">${esHipicas ? '-' : formatNumber(item.total_tickets || 0)}</td>
+          <td class="text-end">${esHipicas ? '-' : formatNumber(item.total_apuestas || 0)}</td>
+          <td class="text-end text-warning">${esHipicas ? '-' : formatNumber(item.total_anulados || 0)}</td>
+          <td class="text-end text-warning">${esHipicas ? '-' : '$' + formatNumber(item.total_recaudacion_anulada || 0)}</td>
+          <td class="text-end text-success"><strong>$${formatNumber(item.total_premios || 0)}</strong></td>
         </tr>
       `;
     }).join('');
