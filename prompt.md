@@ -270,3 +270,57 @@
 > - Se agregaron formalmente **BRINCO** y **TOMBOLINA** a la tabla maestra `juegos` tanto en local como las instrucciones para el servidor de producción Hostinger.
 
 *Fin de registros de la sesión - 1 de Febrero 2026*
+
+---
+
+## Sesión: 2 de Febrero 2026
+
+### Prompt 23 - Fix Filtro de Mes en Programación
+> "pero en programacion tengo un problema cuando quiero consultar la preogramacion por mes pongo enero y me trae febre y enero junto pero pongo febrero y no me trae nada"
+>
+> **Contexto:**
+> - Al seleccionar "enero 2026" en el filtro mostraba enero + febrero juntos
+> - Al seleccionar "febrero 2026" no mostraba nada
+> - Causa: `mes_carga` se asignaba como el primer mes del Excel para TODOS los registros
+> - Fix: Cada registro ahora tiene su propio `mes_carga` según su `fecha_sorteo`
+> - Fix filtro: Se cambió de `mes_carga = ?` a `fecha_sorteo >= ? AND fecha_sorteo < ?` (rango de fechas)
+
+### Prompt 24 - Error de Collation MySQL
+> "Error: Illegal mix of collations (utf8mb4_unicode_ci,COERCIBLE) and (utf8mb4_general_ci,COERCIBLE)"
+>
+> **Contexto:**
+> - Primer intento usó `DATE_FORMAT` con COLLATE → error de collation
+> - Segundo intento usó `LEFT()` con COLLATE → error "COLLATION not valid for CHARACTER SET binary"
+> - Solución final: usar rango de fechas `fecha_sorteo >= '2026-01-01' AND fecha_sorteo < '2026-02-01'`
+
+### Prompt 25 - Servidor se apaga solo
+> "el servidor se apaga solo"
+>
+> **Contexto:**
+> - Error de sintaxis JS: comillas simples de `'%Y-%m'` dentro de string SQL rompían el código
+> - Se resolvió eliminando DATE_FORMAT y usando rango BETWEEN con fecha_sorteo
+
+### Prompt 26 - Deploy Hostinger rama incorrecta
+> "mira ayer hice el deployer asi con deberia tener la version que tiene de api?"
+>
+> **Contexto:**
+> - Hostinger desplegaba desde rama `principal` pero los commits iban a `main`
+> - Se sincronizó `principal` con `main` usando merge + push
+> - Se actualizaron todos los cache busters a `20260202a`
+
+### Prompt 27 - Programación no inserta registros en producción
+> "Programación cargada: 0 nuevos, 0 actualizados. Juegos: Quiniela - Total procesados: 250 registros"
+>
+> **Contexto:**
+> - La función genérica `cargarProgramacionExcelGenerico` usa columnas `codigo_juego` y `tipo_juego`
+> - Estas columnas NO existen en la tabla de producción (Hostinger)
+> - Los 250 INSERT fallan silenciosamente (error capturado pero no reportado)
+> - Se mejoró el conteo usando `affectedRows` y se agregó reporte de errores en la respuesta
+> - Solución: ejecutar ALTER TABLE en producción para agregar las columnas faltantes
+
+### Prompt 28 - Actualizar documentación
+> "bueno entonces hay que agregar cosas al prompt y al documentacion.md o no"
+>
+> **Contexto:** Solicitud de actualizar ambos archivos con los cambios de la sesión del 2 de febrero.
+
+*Fin de registros de la sesión - 2 de Febrero 2026*

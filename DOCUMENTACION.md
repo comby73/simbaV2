@@ -1021,3 +1021,81 @@ CREATE TABLE control_previo_tombolina (
 **Estabilidad y Corrección de Errores:**
 - **SQL Parameter Count**: Se corrigió el error `ER_WRONG_VALUE_COUNT_ON_ROW` en el helper de control previo, asegurando que el número de marcadores de posición (`?`) coincida exactamente con las nuevas columnas agregadas.
 - **Robustez en Tombolina**: Mejora en el parseo de agencias para asegurar que el código de provincia siempre se concatene correctamente al número de agencia (formato de 8 dígitos).
+
+---
+
+## 🆕 Actualizaciones 2 de Febrero 2026 (Versión 2.7)
+
+### Fix Filtro de Mes en Programación
+
+**Problema:** Al filtrar programación por mes, "enero" mostraba enero + febrero, y "febrero" no mostraba nada.
+
+**Causa raíz:** La variable `mesCarga` se calculaba como `meses[0]` (el primer mes ordenado del Excel) y se asignaba a TODOS los registros del archivo. Si el Excel contenía sorteos de enero y febrero, todos quedaban con `mes_carga = "2026-01"`.
+
+**Solución (2 partes):**
+1. **Importación**: Cada registro ahora calcula su propio `mes_carga` basado en su `fecha_sorteo` individual
+2. **Filtro SQL**: Se cambió de `mes_carga = ?` a `fecha_sorteo >= ? AND fecha_sorteo < ?` (rango de fechas por mes)
+
+**Intentos fallidos documentados:**
+- `DATE_FORMAT(fecha_sorteo, '%Y-%m') = ?` → Error de collation (`utf8mb4_unicode_ci` vs `utf8mb4_general_ci`)
+- `LEFT(fecha_sorteo, 7) = ? COLLATE utf8mb4_general_ci` → Error "COLLATION not valid for CHARACTER SET binary"
+- `DATE_FORMAT` con comillas simples dentro de string JS → Error de sintaxis que crasheaba el servidor
+
+**Archivos modificados:**
+- `src/modules/programacion/programacion.controller.js`: Filtro por rango de fechas, mes_carga individual por registro
+
+### Fix hora_sorteo en Programación (ExcelJS)
+
+**Problema:** Las horas de sorteo se mostraban incorrectas (ej: 05:58 en vez de 10:15) por desfasaje de timezone.
+
+**Causa raíz:** `value.toTimeString().split(' ')[0]` convierte usando timezone local (UTC-3 para Argentina).
+
+**Solución:** Se cambió a `getUTCHours/Minutes/Seconds` para fechas y manejo de formato decimal de Excel.
+
+**Archivos modificados:**
+- `src/modules/programacion/programacion.controller.js`: Ambas funciones de carga de Excel
+
+### Sincronización de Ramas Git (main ↔ principal)
+
+**Problema:** Los commits iban a `main` pero Hostinger desplegaba desde `principal`.
+
+**Solución:** Se estableció flujo de sincronización: commit en `main` → merge en `principal` → push ambas.
+
+### Mejora en Reporte de Errores de Carga
+
+**Problema:** Al cargar Excel en producción, decía "0 nuevos, 0 actualizados" con 250 registros procesados, sin mostrar errores.
+
+**Causa raíz:** La función genérica `cargarProgramacionExcelGenerico` usa columnas `codigo_juego` y `tipo_juego` que no existían en la tabla de producción.
+
+**Solución:**
+- Se mejoró el conteo usando `result.affectedRows` (1 = nuevo, 2 = actualizado)
+- Se agregó captura y reporte de errores en la respuesta (máximo 5 errores mostrados)
+- Se debe ejecutar en producción:
+```sql
+ALTER TABLE programacion_sorteos
+ADD COLUMN codigo_juego varchar(10) NULL AFTER juego,
+ADD COLUMN tipo_juego varchar(50) NULL AFTER codigo_juego;
+```
+
+### Cache Busters Actualizados
+
+Todos los assets actualizados a `v=20260202a`:
+- `css/styles.css`
+- `js/api.js`
+- `js/ocr-extractos.js`
+- `js/app.js`
+
+**Archivos modificados:**
+- `public/index.html`
+
+---
+
+**Versión del Documento**: 2.7
+**Última actualización**: 2 de Febrero, 2026
+**Estado**:
+- ✅ Quiniela: Completo y Optimizado
+- ✅ Poceada: Control Previo completo, Escrutinio completo, Modal 4 Pozos de Arrastre
+- ✅ Tombolina: Control Previo y Escrutinio Profesional
+- ✅ Programación: Filtro por mes corregido, horas UTC, mes_carga individual
+- ✅ Deploy: Sincronización main ↔ principal para Hostinger
+- 📋 Pendiente en producción: ALTER TABLE para columnas codigo_juego y tipo_juego
