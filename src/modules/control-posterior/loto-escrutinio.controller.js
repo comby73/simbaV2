@@ -124,11 +124,10 @@ function ganadoresTexto(n) {
  * Recibe:
  * - registrosNTF: array de registros parseados del control previo
  * - extracto: { numeros: [6 números], plus: número PLUS (0-9) }
- * - datosControlPrevio: datos del control previo para comparación
- * - premios: { tradicional, match, desquite, saleOSale } - montos de premios por modalidad
+ * - datosControlPrevio: datos del control previo para comparación (incluye datosOficiales.modalidades con premios del XML)
  */
 const ejecutar = async (req, res) => {
-  const { registrosNTF, extracto, datosControlPrevio, premios } = req.body;
+  const { registrosNTF, extracto, datosControlPrevio } = req.body;
 
   if (!registrosNTF || !extracto) {
     return errorResponse(res, 'Faltan datos para ejecutar el escrutinio', 400);
@@ -146,7 +145,11 @@ const ejecutar = async (req, res) => {
     console.log(`Extracto (6 números): ${extracto.numeros.join(', ')}`);
     console.log(`Número PLUS: ${extracto.plus != null ? extracto.plus : 'N/A'}`);
 
-    const resultado = runScrutiny(registrosNTF, extracto, datosControlPrevio, premios);
+    // Extraer premios del XML (datosOficiales.modalidades) automáticamente
+    const modalidadesXml = datosControlPrevio?.datosOficiales?.modalidades || {};
+    console.log(`Modalidades XML disponibles: ${Object.keys(modalidadesXml).join(', ') || 'NINGUNA'}`);
+
+    const resultado = runScrutiny(registrosNTF, extracto, datosControlPrevio, modalidadesXml);
 
     console.log(`\nRESULTADOS:`);
     for (const mod of ['Tradicional', 'Match', 'Desquite', 'Sale o Sale']) {
@@ -177,12 +180,12 @@ const ejecutar = async (req, res) => {
 /**
  * Ejecuta el escrutinio completo de Loto con 4 modalidades
  */
-function runScrutiny(registrosNTF, extracto, datosControlPrevio, premiosConfig) {
+function runScrutiny(registrosNTF, extracto, datosControlPrevio, modalidadesXml) {
   const extractNumbers = new Set(extracto.numeros.map(n => parseInt(n)));
   const numeroPLUS = extracto.plus != null ? parseInt(extracto.plus) : null;
 
-  // Premios por modalidad (vienen del XML o se ingresan manualmente)
-  const premiosPorModalidad = premiosConfig || {};
+  // Premios por modalidad vienen del XML (datosOficiales.modalidades)
+  const xmlMods = modalidadesXml || {};
 
   // Estructura de resultados por modalidad
   const porModalidad = {};
@@ -293,65 +296,114 @@ function runScrutiny(registrosNTF, extracto, datosControlPrevio, premiosConfig) 
       aplicarReglaSaleOSale(modResult);
     }
 
-    // Calcular premios por nivel
-    const premioModalidad = premiosPorModalidad[mod.toLowerCase()] ||
-                            premiosPorModalidad[mod] || 0;
+    // Obtener premios del XML para esta modalidad
+    const xmlMod = xmlMods[mod] || {};
+    const xmlPremios = xmlMod.premios || {};
 
-    // Distribuir premio: 1er premio = todo el pozo si hay ganadores de 6
-    // Si no hay de 6, el pozo queda vacante (excepto Sale o Sale)
+    // Mapeo nivel → nodo XML de premio
+    const nivelToXml = {
+      6: xmlPremios.primerPremio,  // 6 aciertos = 1er premio
+      5: xmlPremios.segundoPremio, // 5 aciertos = 2do premio
+      4: xmlPremios.tercerPremio   // 4 aciertos = 3er premio
+    };
+
+    // Calcular premios por nivel usando TOTALES del XML
     for (const nivel of [6, 5, 4]) {
       const nivelData = modResult.porNivel[nivel];
-      // Para Sale o Sale, el premio se asigna al nivel más alto con ganadores
-      // Para las demás modalidades, cada nivel tiene su propio pozo
-      if (nivelData.ganadores > 0 && premioModalidad > 0) {
-        if (mod === 'Sale o Sale') {
-          // En Sale o Sale el premio entero va al nivel ganador (ya resuelto en aplicarReglaSaleOSale)
-          if (nivelData._esSaleOSale) {
-            nivelData.premioUnitario = premioModalidad / nivelData.ganadores;
-            nivelData.totalPremios = premioModalidad;
-          }
-        } else {
-          // Para Tradicional/Match/Desquite: solo el 1er premio usa el pozo completo
-          if (nivel === 6) {
-            nivelData.premioUnitario = premioModalidad / nivelData.ganadores;
-            nivelData.totalPremios = premioModalidad;
-          }
-          // 2do y 3er premio son fracciones del pozo (si aplica configuración específica)
+      const xmlNivel = nivelToXml[nivel];
+      const pozoXml = parseFloat(xmlNivel?.totales || 0);
+
+      // Guardar pozo XML para referencia
+      nivelData.pozoXml = pozoXml;
+
+      if (mod === 'Sale o Sale') {
+        // En Sale o Sale: cascada - solo el nivel marcado recibe todo el pozo del 1er premio
+        const pozoSOS = parseFloat(xmlPremios.primerPremio?.totales || 0);
+        if (nivelData.ganadores > 0 && nivelData._esSaleOSale) {
+          nivelData.premioUnitario = pozoSOS / nivelData.ganadores;
+          nivelData.totalPremios = pozoSOS;
+        } else if (nivelData.ganadores === 0 && nivel === 6) {
+          nivelData.pozoVacante = pozoSOS;
         }
-        totalGanadores += nivelData.ganadores;
-        totalPremios += nivelData.totalPremios;
-      } else if (nivelData.ganadores === 0) {
-        nivelData.pozoVacante = nivel === 6 ? premioModalidad : 0;
+      } else if (mod === 'Desquite') {
+        // Desquite: solo 1er premio (6 aciertos)
+        if (nivel === 6) {
+          if (nivelData.ganadores > 0 && pozoXml > 0) {
+            nivelData.premioUnitario = pozoXml / nivelData.ganadores;
+            nivelData.totalPremios = pozoXml;
+          } else if (nivelData.ganadores === 0) {
+            nivelData.pozoVacante = pozoXml;
+          }
+        }
+        // niveles 5 y 4 no aplican en Desquite
+      } else {
+        // Tradicional / Match: 3 niveles con pozo independiente del XML
+        if (nivelData.ganadores > 0 && pozoXml > 0) {
+          nivelData.premioUnitario = pozoXml / nivelData.ganadores;
+          nivelData.totalPremios = pozoXml;
+        } else if (nivelData.ganadores === 0) {
+          nivelData.pozoVacante = pozoXml;
+        }
       }
+
+      totalGanadores += nivelData.ganadores;
+      totalPremios += nivelData.totalPremios;
       nivelData.ganadoresTexto = ganadoresTexto(nivelData.ganadores);
     }
 
-    // Premio agenciero (solo si hay ganador de 1er premio)
+    // Premio agenciero del XML
+    const xmlAgenciero = xmlPremios.agenciero;
+    const pozoAgenciero = parseFloat(xmlAgenciero?.totales || 0);
     if (modResult.porNivel[6].ganadores > 0) {
       modResult.agenciero.ganadores = modResult.porNivel[6].agenciasGanadoras.length;
-      modResult.agenciero.totalPremios = modResult.agenciero.ganadores * PREMIO_AGENCIERO;
-      totalPremios += modResult.agenciero.totalPremios;
+      // Para Sale o Sale: agenciero solo si ganan con 6 aciertos exactos
+      if (mod === 'Sale o Sale' && !modResult.porNivel[6]._esSaleOSale) {
+        modResult.agenciero.ganadores = 0;
+      }
+      if (modResult.agenciero.ganadores > 0) {
+        modResult.agenciero.premioUnitario = pozoAgenciero > 0 ?
+          pozoAgenciero / modResult.agenciero.ganadores : PREMIO_AGENCIERO;
+        modResult.agenciero.totalPremios = modResult.agenciero.ganadores * modResult.agenciero.premioUnitario;
+        totalPremios += modResult.agenciero.totalPremios;
+      }
     }
+
+    // Fondo de reserva/compensador del XML (informativo)
+    modResult.fondoReserva = parseFloat(xmlPremios.fondoReserva?.monto || 0);
+    modResult.fondoCompensador = parseFloat(xmlPremios.fondoCompensador?.monto || 0);
   }
 
-  // Procesar PLUS: verificar si algún registro PLUS tiene el número coincidente
+  // Procesar Multiplicador (PLUS):
+  // Un ganador de Multiplicador es quien tiene:
+  //   1) 6 aciertos en cualquier otra modalidad (Tradicional, Match, Desquite, SOS)
+  //   2) Su número PLUS coincide con el número PLUS sorteado
+  // El premio extra = 2x el premio original de esa modalidad (total 3x)
+  // Agenciero Multiplicador = $500.000 fijo
   let ganadoresPlus = 0;
   let premioExtraPlus = 0;
+  const xmlMultiplicador = xmlMods['Multiplicador'] || {};
 
   if (numeroPLUS != null) {
     for (const reg of registrosPlus) {
-      if (reg.numeroPlus === numeroPLUS) {
+      const plusDelTicket = parseInt(reg.numeroPlus);
+      if (plusDelTicket === numeroPLUS) {
         ganadoresPlus++;
-        // El PLUS duplica el premio del Tradicional
-        // Se vincula al premio del Tradicional del mismo ticket
+        // El premio Multiplicador es 2x el premio que obtuvo en la otra modalidad
+        // Por ahora contamos ganadores; el premio real depende de qué modalidad ganó
       }
+    }
+    if (ganadoresPlus > 0) {
+      // El fondo compensador del Multiplicador del XML
+      const fondoMultiplicador = parseFloat(xmlMultiplicador.premios?.fondoCompensador?.monto || 0);
+      console.log(`  Multiplicador: ${ganadoresPlus} ganadores PLUS. Fondo compensador: $${fondoMultiplicador}`);
     }
   }
 
   // Comparación con control previo
-  const cpRegistros = datosControlPrevio?.resumen?.registros || totalRegistros;
-  const cpApuestas = datosControlPrevio?.resumen?.apuestasTotal || totalApuestas;
-  const cpRecaudacion = datosControlPrevio?.resumen?.recaudacion || totalRecaudacion;
+  // Los datos se envían como spread de datosCalculados/resumen, así que los campos están al nivel raíz
+  const cpRegistros = datosControlPrevio?.registros || datosControlPrevio?.resumen?.registros || totalRegistros;
+  const cpApuestas = datosControlPrevio?.apuestasTotal || datosControlPrevio?.resumen?.apuestasTotal || totalApuestas;
+  const cpRecaudacion = datosControlPrevio?.recaudacion || datosControlPrevio?.resumen?.recaudacion || totalRecaudacion;
 
   return {
     numeroSorteo: datosControlPrevio?.sorteo || datosControlPrevio?.numeroSorteo || 'S/N',
