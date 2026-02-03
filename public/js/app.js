@@ -7,7 +7,9 @@ let provincias = [];
 
 const PREFIJOS_JUEGOS = {
   'QNL': { nombre: 'Quiniela', api: 'procesarQuiniela' },
-  'PCD': { nombre: 'Poceada', api: 'procesarPoceada' }
+  'PCD': { nombre: 'Poceada', api: 'procesarPoceada' },
+  'LTO': { nombre: 'Loto', api: 'procesarLoto' },
+  'LOT': { nombre: 'Loto', api: 'procesarLoto' }
 };
 
 function detectarTipoJuego(fileName) {
@@ -793,7 +795,8 @@ function mostrarResultadosCP(data) {
   
   // Normalizar datos según el juego
   const isPoceada = data.tipoJuego === 'Poceada';
-  const calc = isPoceada ? data.resumen : data.datosCalculados;
+  const isLoto = data.tipoJuego === 'Loto';
+  const calc = (isPoceada || isLoto) ? data.resumen : data.datosCalculados;
   const oficial = data.datosOficiales;
   
   console.log('🔍 calc.online:', calc.online);
@@ -804,7 +807,7 @@ function mostrarResultadosCP(data) {
   const gameBadge = document.getElementById('cp-juego-detectado');
   if (gameBadge) {
     gameBadge.textContent = data.tipoJuego;
-    gameBadge.className = `badge badge-${isPoceada ? 'primary' : 'success'}`;
+    gameBadge.className = `badge badge-${isPoceada ? 'primary' : (isLoto ? 'warning' : 'success')}`;
   }
   
   // Mostrar sección de resultados
@@ -843,7 +846,9 @@ function mostrarResultadosCP(data) {
   document.getElementById('cp-sorteo-badge').textContent = `Sorteo: ${data.sorteo || calc.numeroSorteo}`;
   
   // Tablas
-  if (isPoceada) {
+  if (isLoto) {
+    renderTablasLoto(data);
+  } else if (isPoceada) {
     renderTablasPoceada(data);
   } else {
     renderTablasQuiniela(data);
@@ -1567,6 +1572,77 @@ function renderDistribucionPremiosPoceada(data) {
   }
 }
 
+function renderTablasLoto(data) {
+  const tbodyRecProv = document.querySelector('#cp-tabla-recaudacion-prov tbody');
+  const tbodyProv = document.querySelector('#cp-tabla-provincias tbody');
+
+  if (tbodyRecProv && data.provincias) {
+    tbodyRecProv.innerHTML = '';
+    tbodyProv.innerHTML = '';
+    const totalRec = data.resumen?.recaudacion || 1;
+    const totalApuestas = data.resumen?.apuestasTotal || 1;
+
+    for (const [nombre, prov] of Object.entries(data.provincias)) {
+      if (!prov || typeof prov !== 'object') continue;
+      const recaudacion = prov.recaudacion || 0;
+      const apuestas = prov.apuestas || 0;
+      const ventaWeb = prov.ventaWeb || 0;
+
+      if (recaudacion > 0 || apuestas > 0) {
+        const pRec = totalRec > 0 ? ((recaudacion / totalRec) * 100).toFixed(2) : '0.00';
+        const pAp = totalApuestas > 0 ? ((apuestas / totalApuestas) * 100).toFixed(2) : '0.00';
+        const webIndicator = ventaWeb > 0 ? ` <span class="badge badge-info" title="${ventaWeb} ventas web">🌐 ${ventaWeb}</span>` : '';
+
+        if (recaudacion > 0) {
+          tbodyRecProv.innerHTML += `
+            <tr>
+              <td><strong>${nombre}</strong>${webIndicator}</td>
+              <td>$${formatNumber(Math.round(recaudacion))}</td>
+              <td>${pRec}%</td>
+            </tr>`;
+        }
+        if (apuestas > 0) {
+          tbodyProv.innerHTML += `
+            <tr>
+              <td><strong>${nombre}</strong></td>
+              <td>${formatNumber(apuestas)}</td>
+              <td>${pAp}%</td>
+            </tr>`;
+        }
+      }
+    }
+  }
+
+  // Mostrar resumen por modalidad de Loto
+  const modalidadesContainer = document.getElementById('cp-loto-modalidades');
+  if (modalidadesContainer && data.modalidades) {
+    modalidadesContainer.classList.remove('hidden');
+    const tbody = modalidadesContainer.querySelector('tbody');
+    if (tbody) {
+      tbody.innerHTML = '';
+      for (const [mod, datos] of Object.entries(data.modalidades)) {
+        if (datos.registros > 0) {
+          tbody.innerHTML += `
+            <tr>
+              <td><strong>${mod}</strong></td>
+              <td>${formatNumber(datos.registros)}</td>
+              <td>${formatNumber(datos.apuestas)}</td>
+              <td>$${formatNumber(Math.round(datos.recaudacion))}</td>
+            </tr>`;
+        }
+      }
+    }
+  }
+
+  // Ocultar cards específicas de Poceada
+  const pcdEspecifico = document.getElementById('cp-poceada-especifico');
+  if (pcdEspecifico) pcdEspecifico.classList.add('hidden');
+  const premiosCard = document.getElementById('cp-comparacion-premios-card');
+  if (premiosCard) { premiosCard.classList.add('hidden'); premiosCard.style.display = 'none'; }
+  const distCard = document.getElementById('cp-distribucion-premios-card');
+  if (distCard) distCard.classList.add('hidden');
+}
+
 function renderTablasQuiniela(data) {
   const calc = data.datosCalculados;
   const tbodyRecProv = document.querySelector('#cp-tabla-recaudacion-prov tbody');
@@ -1888,8 +1964,10 @@ let cpstDatosControlPrevio = null;
 let cpstResultados = null;
 let cpstNumeroSorteo = '';
 let cpstModalidadSorteo = ''; // R=Previa, P=Primera, M=Matutina, V=Vespertina, N=Nocturna
-let cpstJuegoSeleccionado = 'Quiniela'; // 'Quiniela' o 'Poceada'
-let cpstExtractoPoceada = null; // {numeros: [8 nums], letras: [4 letras]}
+let cpstJuegoSeleccionado = 'Quiniela'; // 'Quiniela', 'Poceada' o 'Loto'
+let cpstExtractoPoceada = null; // {numeros: [20 nums], letras: [4 letras]}
+let cpstExtractoLoto = null; // {numeros: [6 nums], plus: number|null}
+let cpstPremiosLoto = null; // {tradicional, match, desquite, saleOSale}
 
 // Mapeo de códigos de modalidad a nombres
 const MODALIDADES_NOMBRE = {
@@ -1923,9 +2001,9 @@ function seleccionarJuegoPosterior(juego) {
   const subtitulo = document.getElementById('cpst-subtitulo');
   if (titulo) titulo.textContent = `Control Posterior - ${juego}`;
   if (subtitulo) {
-    subtitulo.textContent = juego === 'Poceada' 
-      ? 'Escrutinio de ganadores por aciertos (6, 7 u 8)'
-      : 'Análisis de ganadores post-sorteo';
+    if (juego === 'Poceada') subtitulo.textContent = 'Escrutinio de ganadores por aciertos (6, 7 u 8)';
+    else if (juego === 'Loto') subtitulo.textContent = 'Escrutinio Loto: 4 modalidades (Tradicional, Match, Desquite, Sale o Sale)';
+    else subtitulo.textContent = 'Análisis de ganadores post-sorteo';
   }
   
   // Actualizar estilos de las tarjetas de radio
@@ -1946,27 +2024,36 @@ function seleccionarJuegoPosterior(juego) {
   // Mostrar/ocultar secciones según el juego
   const extractoQuiniela = document.getElementById('cpst-extracto-quiniela-card');
   const extractoPoceada = document.getElementById('cpst-extracto-poceada-card');
+  const extractoLoto = document.getElementById('cpst-extracto-loto-card');
   const detalleQuiniela = document.getElementById('cpst-detalle-quiniela');
   const detallePoceada = document.getElementById('cpst-detalle-poceada');
-  
+  const detalleLoto = document.getElementById('cpst-detalle-loto');
+
+  // Ocultar todos primero
+  extractoQuiniela?.classList.add('hidden');
+  extractoPoceada?.classList.add('hidden');
+  extractoLoto?.classList.add('hidden');
+  detalleQuiniela?.classList.add('hidden');
+  detallePoceada?.classList.add('hidden');
+  detalleLoto?.classList.add('hidden');
+
   if (juego === 'Quiniela') {
     extractoQuiniela?.classList.remove('hidden');
-    extractoPoceada?.classList.add('hidden');
     detalleQuiniela?.classList.remove('hidden');
-    detallePoceada?.classList.add('hidden');
+  } else if (juego === 'Loto') {
+    extractoLoto?.classList.remove('hidden');
+    detalleLoto?.classList.remove('hidden');
   } else {
-    extractoQuiniela?.classList.add('hidden');
     extractoPoceada?.classList.remove('hidden');
-    detalleQuiniela?.classList.add('hidden');
     detallePoceada?.classList.remove('hidden');
   }
   
   // Actualizar hint de modalidad
   const hintModalidad = document.getElementById('cpst-hint-modalidad');
   if (hintModalidad) {
-    hintModalidad.textContent = juego === 'Poceada'
-      ? '💡 Para Poceada solo se procesarán registros de tipo POC'
-      : '💡 Al cargar XMLs, solo se procesarán los de la modalidad detectada';
+    if (juego === 'Poceada') hintModalidad.textContent = '💡 Para Poceada solo se procesarán registros de tipo POC';
+    else if (juego === 'Loto') hintModalidad.textContent = '💡 Loto: ingrese 6 números (0-45) y opcionalmente el número PLUS (0-9)';
+    else hintModalidad.textContent = '💡 Al cargar XMLs, solo se procesarán los de la modalidad detectada';
   }
   
   // Limpiar resultados anteriores
@@ -3482,6 +3569,11 @@ async function ejecutarEscrutinio() {
       showToast('Cargue el extracto de Poceada (20 números del sorteo + 4 letras)', 'warning');
       return;
     }
+  } else if (cpstJuegoSeleccionado === 'Loto') {
+    if (!cpstExtractoLoto || cpstExtractoLoto.numeros.length < 6) {
+      showToast('Cargue el extracto de Loto (6 números del sorteo)', 'warning');
+      return;
+    }
   }
   
   if (!cpstDatosControlPrevio) {
@@ -3503,7 +3595,30 @@ async function ejecutarEscrutinio() {
   try {
     const token = getToken();
     
-    if (cpstJuegoSeleccionado === 'Poceada') {
+    if (cpstJuegoSeleccionado === 'Loto') {
+      // Ejecutar escrutinio de Loto
+      const response = await fetch(`${API_BASE}/control-posterior/loto/escrutinio`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({
+          registrosNTF: cpstRegistrosNTF,
+          extracto: cpstExtractoLoto,
+          datosControlPrevio: cpstDatosControlPrevio,
+          premios: cpstPremiosLoto || {}
+        })
+      });
+
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.message);
+
+      cpstResultados = data.data;
+      mostrarResultadosEscrutinioLoto(cpstResultados);
+      showToast('Escrutinio Loto completado', 'success');
+
+    } else if (cpstJuegoSeleccionado === 'Poceada') {
       // Ejecutar escrutinio de Poceada
       const response = await fetch(`${API_BASE}/control-posterior/poceada/escrutinio`, {
         method: 'POST',
@@ -3835,8 +3950,182 @@ function mostrarResultadosEscrutinioPoceada(resultado) {
   `;
 }
 
-// La función generarRegistrosSimulados fue removida
-// Ahora se usan los registros reales parseados del archivo TXT (cpstRegistrosNTF)
+// ============= LOTO ESCRUTINIO FUNCIONES =============
+
+function cargarExtractoLoto() {
+  const numeros = [];
+  for (let i = 1; i <= 6; i++) {
+    const input = document.getElementById(`cpst-loto-num-${i}`);
+    if (!input || input.value === '') {
+      showToast(`Ingrese el número ${i} del extracto`, 'warning');
+      return;
+    }
+    const num = parseInt(input.value);
+    if (isNaN(num) || num < 0 || num > 45) {
+      showToast(`Número ${i} debe estar entre 0 y 45`, 'warning');
+      return;
+    }
+    numeros.push(num);
+  }
+
+  // Número PLUS (opcional)
+  const plusInput = document.getElementById('cpst-loto-plus');
+  let plus = null;
+  if (plusInput && plusInput.value !== '') {
+    plus = parseInt(plusInput.value);
+    if (isNaN(plus) || plus < 0 || plus > 9) {
+      showToast('Número PLUS debe estar entre 0 y 9', 'warning');
+      return;
+    }
+  }
+
+  cpstExtractoLoto = { numeros, plus };
+
+  // Preview
+  const preview = document.getElementById('cpst-loto-preview');
+  if (preview) {
+    preview.innerHTML = `
+      <div style="padding: 0.5rem; background: var(--bg-input); border-radius: 6px; margin-top: 0.5rem;">
+        <strong>Extracto cargado:</strong>
+        <span style="font-family: monospace; color: var(--warning);">
+          ${numeros.map(n => n.toString().padStart(2, '0')).join(' - ')}
+        </span>
+        ${plus != null ? `<br><strong>PLUS:</strong> <span class="badge badge-warning">${plus}</span>` : ''}
+      </div>`;
+  }
+
+  showToast('Extracto Loto cargado correctamente', 'success');
+}
+
+function cargarPremiosLoto() {
+  const tradicional = parseFloat(document.getElementById('cpst-loto-premio-trad')?.value || 0);
+  const match = parseFloat(document.getElementById('cpst-loto-premio-match')?.value || 0);
+  const desquite = parseFloat(document.getElementById('cpst-loto-premio-desq')?.value || 0);
+  const saleOSale = parseFloat(document.getElementById('cpst-loto-premio-sos')?.value || 0);
+
+  cpstPremiosLoto = { tradicional, match, desquite, saleOSale };
+  showToast('Premios Loto cargados', 'success');
+}
+
+function mostrarResultadosEscrutinioLoto(resultado) {
+  document.getElementById('cpst-resultados').classList.remove('hidden');
+
+  // Ocultar otras tablas
+  document.getElementById('cpst-detalle-quiniela')?.classList.add('hidden');
+  document.getElementById('cpst-detalle-poceada')?.classList.add('hidden');
+  const detalleLoto = document.getElementById('cpst-detalle-loto');
+  if (detalleLoto) detalleLoto.classList.remove('hidden');
+
+  // Resumen general
+  document.getElementById('cpst-total-ganadores').textContent = formatNumber(resultado.totalGanadores);
+  document.getElementById('cpst-total-premios').textContent = '$' + formatNumber(resultado.totalPremios);
+
+  // Tasa de devolución
+  if (resultado.comparacion && resultado.comparacion.recaudacion.controlPrevio > 0) {
+    const tasa = (resultado.totalPremios / resultado.comparacion.recaudacion.controlPrevio * 100).toFixed(2);
+    document.getElementById('cpst-tasa-devolucion').textContent = tasa + '%';
+  }
+
+  // Tabla comparación
+  if (resultado.comparacion) {
+    const tbody = document.querySelector('#cpst-tabla-comparacion tbody');
+    if (tbody) {
+      tbody.innerHTML = '';
+      const reg = resultado.comparacion.registros;
+      const apu = resultado.comparacion.apuestas;
+      const rec = resultado.comparacion.recaudacion;
+      tbody.innerHTML += `
+        <tr><td>Registros</td><td>${formatNumber(reg.controlPrevio)}</td><td>${formatNumber(reg.controlPosterior)}</td>
+        <td class="${reg.coincide ? 'text-success' : 'text-danger'}">${reg.coincide ? '✓ OK' : '✗ DIF'}</td></tr>
+        <tr><td>Apuestas</td><td>${formatNumber(apu.controlPrevio)}</td><td>${formatNumber(apu.controlPosterior)}</td>
+        <td class="${apu.coincide ? 'text-success' : 'text-danger'}">${apu.coincide ? '✓ OK' : '✗ DIF'}</td></tr>
+        <tr><td>Recaudación</td><td>$${formatNumber(rec.controlPrevio)}</td><td>$${formatNumber(rec.controlPosterior)}</td>
+        <td class="${rec.coincide ? 'text-success' : 'text-danger'}">${rec.coincide ? '✓ OK' : '✗ DIF'}</td></tr>`;
+    }
+  }
+
+  // Tabla de resultados por modalidad
+  const tbodyLoto = document.getElementById('cpst-tabla-loto-body');
+  if (tbodyLoto) {
+    tbodyLoto.innerHTML = '';
+    const modalidades = ['Tradicional', 'Match', 'Desquite', 'Sale o Sale'];
+    const badges = { 'Tradicional': 'warning', 'Match': 'primary', 'Desquite': 'info', 'Sale o Sale': 'success' };
+
+    for (const mod of modalidades) {
+      const modData = resultado.porModalidad?.[mod];
+      if (!modData) continue;
+
+      for (const nivel of [6, 5, 4]) {
+        const nivelData = modData.porNivel?.[nivel] || { ganadores: 0, premioUnitario: 0, totalPremios: 0, pozoVacante: 0 };
+        const nombreNivel = nivel === 6 ? '1er Premio (6)' : (nivel === 5 ? '2do Premio (5)' : '3er Premio (4)');
+        tbodyLoto.innerHTML += `
+          <tr>
+            <td><span class="badge badge-${badges[mod]}">${mod}</span></td>
+            <td>${nombreNivel}</td>
+            <td>${formatNumber(nivelData.ganadores)}<br><small class="text-muted">${nivelData.ganadoresTexto || ''}</small></td>
+            <td>$${formatNumber(nivelData.premioUnitario)}</td>
+            <td>$${formatNumber(nivelData.totalPremios)}</td>
+            <td>${nivelData.pozoVacante > 0 ? '$' + formatNumber(nivelData.pozoVacante) : '-'}</td>
+          </tr>`;
+      }
+
+      // Agenciero para esta modalidad
+      if (modData.agenciero && modData.agenciero.ganadores > 0) {
+        tbodyLoto.innerHTML += `
+          <tr style="background: var(--surface-hover);">
+            <td><span class="badge badge-${badges[mod]}">${mod}</span></td>
+            <td><span class="badge badge-info">AGENCIERO</span></td>
+            <td>${formatNumber(modData.agenciero.ganadores)}</td>
+            <td>$${formatNumber(modData.agenciero.premioUnitario)}</td>
+            <td>$${formatNumber(modData.agenciero.totalPremios)}</td>
+            <td>-</td>
+          </tr>`;
+      }
+    }
+
+    // PLUS
+    if (resultado.plus && resultado.plus.ganadores > 0) {
+      tbodyLoto.innerHTML += `
+        <tr style="background: rgba(234, 179, 8, 0.1);">
+          <td colspan="2"><span class="badge badge-warning">PLUS</span> Número ${resultado.plus.numero}</td>
+          <td>${formatNumber(resultado.plus.ganadores)}</td>
+          <td>-</td>
+          <td>$${formatNumber(resultado.plus.premioExtra)}</td>
+          <td>-</td>
+        </tr>`;
+    }
+
+    // Total
+    tbodyLoto.innerHTML += `
+      <tr style="font-weight: bold; border-top: 2px solid var(--border-color);">
+        <td colspan="2">TOTAL</td>
+        <td>${formatNumber(resultado.totalGanadores)}</td>
+        <td>-</td>
+        <td>$${formatNumber(resultado.totalPremios)}</td>
+        <td>-</td>
+      </tr>`;
+  }
+
+  // Extracto utilizado
+  const detTipos = document.getElementById('cpst-detalle-tipos');
+  if (detTipos && cpstExtractoLoto) {
+    detTipos.innerHTML = `
+      <div class="alert" style="background: var(--bg-input); padding: 1rem; border-radius: 8px; margin-bottom: 1rem;">
+        <h4 style="margin-bottom: 0.5rem;"><i class="fas fa-info-circle"></i> Extracto Utilizado</h4>
+        <div style="display: flex; gap: 2rem; flex-wrap: wrap; margin-top: 0.5rem;">
+          <div>
+            <strong>Números (6):</strong>
+            <span style="font-family: monospace; font-size: 1.1rem; color: var(--warning);">
+              ${cpstExtractoLoto.numeros.map(n => n.toString().padStart(2, '0')).join(' - ')}
+            </span>
+          </div>
+          ${cpstExtractoLoto.plus != null ? `<div><strong>PLUS:</strong> <span class="badge badge-warning" style="font-size: 1.1rem;">${cpstExtractoLoto.plus}</span></div>` : ''}
+        </div>
+      </div>`;
+  }
+}
+
+// ============= FIN LOTO ESCRUTINIO =============
 
 function mostrarResultadosEscrutinio(resultado) {
   document.getElementById('cpst-resultados').classList.remove('hidden');
@@ -5150,7 +5439,9 @@ function getModalidadNombre(modalidad) {
     'P': 'Primera',
     'M': 'Matutina',
     'V': 'Vespertina',
-    'N': 'Nocturna'
+    'N': 'Nocturna',
+    'U': 'Única',
+    'H': 'Hipicas'
   };
   return nombres[modalidad] || modalidad;
 }

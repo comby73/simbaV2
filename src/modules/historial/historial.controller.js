@@ -805,6 +805,37 @@ const obtenerDatosDashboard = async (req, res) => {
         resultados = resultados.concat(poceadaData);
       }
 
+      if (!juego || juego === 'loto') {
+        const paramsL = [];
+        let whereL = '';
+        if (fechaDesde) { whereL += ' AND cp.created_at >= ?'; paramsL.push(fechaDesde); }
+        if (fechaHasta) { whereL += ' AND cp.created_at <= ?'; paramsL.push(fechaHasta + ' 23:59:59'); }
+        if (sorteoDesde) { whereL += ' AND cp.numero_sorteo >= ?'; paramsL.push(sorteoDesde); }
+        if (sorteoHasta) { whereL += ' AND cp.numero_sorteo <= ?'; paramsL.push(sorteoHasta); }
+
+        const sqlL = `
+          SELECT
+            cp.id, DATE(cp.created_at) as fecha, cp.numero_sorteo as sorteo, 'U' as modalidad,
+            cp.registros_validos as total_registros,
+            (cp.registros_validos + cp.registros_anulados) as total_tickets,
+            cp.apuestas_total as total_apuestas,
+            cp.registros_anulados as total_anulados,
+            cp.recaudacion as recaudacion_total,
+            COALESCE(el.total_premios, 0) as total_premios,
+            COALESCE(el.total_ganadores, 0) as total_ganadores,
+            NULL as usuario_nombre,
+            cp.created_at,
+            'loto' as juego
+          FROM control_previo_loto cp
+          LEFT JOIN escrutinio_loto el ON cp.numero_sorteo = el.numero_sorteo
+          WHERE 1=1 ${whereL}
+          ORDER BY cp.created_at DESC
+          LIMIT ${maxLimit} OFFSET ${offsetNum}
+        `;
+        const lotoData = await query(sqlL, paramsL);
+        resultados = resultados.concat(lotoData);
+      }
+
       // Ordenar combinados por fecha
       resultados.sort((a, b) => {
         const fechaComp = new Date(b.fecha) - new Date(a.fecha);
@@ -1253,6 +1284,45 @@ const obtenerStatsDashboard = async (req, res) => {
           }
         } catch (e) {}
       });
+    }
+
+    // Loto
+    if (!juego || juego === 'loto') {
+      let whereL = '';
+      const paramsL = [];
+      if (fechaDesde) { whereL += ' AND created_at >= ?'; paramsL.push(fechaDesde); }
+      if (fechaHasta) { whereL += ' AND created_at <= ?'; paramsL.push(fechaHasta + ' 23:59:59'); }
+      if (sorteoDesde) { whereL += ' AND numero_sorteo >= ?'; paramsL.push(sorteoDesde); }
+      if (sorteoHasta) { whereL += ' AND numero_sorteo <= ?'; paramsL.push(sorteoHasta); }
+
+      const [cpL] = await query(`
+        SELECT
+          COUNT(*) as sorteos,
+          COALESCE(SUM(recaudacion), 0) as recaudacion,
+          COALESCE(SUM(registros_validos + registros_anulados), 0) as tickets,
+          COALESCE(SUM(apuestas_total), 0) as apuestas
+        FROM control_previo_loto
+        WHERE 1=1 ${whereL}
+      `, paramsL);
+
+      let whereLe = '';
+      const paramsLe = [];
+      if (fechaDesde) { whereLe += ' AND fecha_sorteo >= ?'; paramsLe.push(fechaDesde); }
+      if (fechaHasta) { whereLe += ' AND fecha_sorteo <= ?'; paramsLe.push(fechaHasta); }
+      if (sorteoDesde) { whereLe += ' AND numero_sorteo >= ?'; paramsLe.push(sorteoDesde); }
+      if (sorteoHasta) { whereLe += ' AND numero_sorteo <= ?'; paramsLe.push(sorteoHasta); }
+
+      const [escL] = await query(`
+        SELECT COALESCE(SUM(total_premios), 0) as premios
+        FROM escrutinio_loto
+        WHERE 1=1 ${whereLe}
+      `, paramsLe);
+
+      stats.total_recaudacion += parseFloat(cpL?.recaudacion || 0);
+      stats.total_tickets += parseInt(cpL?.tickets || 0);
+      stats.total_apuestas += parseInt(cpL?.apuestas || 0);
+      stats.total_sorteos += parseInt(cpL?.sorteos || 0);
+      stats.total_premios += parseFloat(escL?.premios || 0);
     }
 
     // NUEVO: Contar agencias ÚNICAS de CABA (51) con ventas desde control_previo_agencias
