@@ -1328,52 +1328,78 @@
         <!-- Extracto Loto -->
         <div class="card hidden" id="cpst-extracto-loto-card">
           <div class="card-header">
-            <h3>2. Extracto Loto (6 Números + PLUS)</h3>
+            <h3>2. Extracto Loto (4 Modalidades x 6 Números + PLUS)</h3>
           </div>
 
-          <div style="margin-top: 1rem;">
+          <!-- Tradicional -->
+          <div style="margin-top: 1rem; padding: 0.75rem; border: 1px solid var(--border-color); border-radius: 8px; border-left: 4px solid var(--warning);">
             <label style="margin-bottom: 0.5rem; display: block;">
-              <strong>6 Números del Sorteo</strong> (0-45)
+              <strong><span class="badge badge-warning">Tradicional</span></strong> 6 Números (0-45)
             </label>
             <div style="display: grid; grid-template-columns: repeat(6, 1fr); gap: 0.5rem; max-width: 450px;">
-              <div class="form-group" style="margin: 0;">
-                <label style="font-size: 0.75rem; text-align: center; display: block;">1°</label>
-                <input type="number" id="cpst-loto-num-1" min="0" max="45" class="form-control text-center" placeholder="00">
-              </div>
-              <div class="form-group" style="margin: 0;">
-                <label style="font-size: 0.75rem; text-align: center; display: block;">2°</label>
-                <input type="number" id="cpst-loto-num-2" min="0" max="45" class="form-control text-center" placeholder="00">
-              </div>
-              <div class="form-group" style="margin: 0;">
-                <label style="font-size: 0.75rem; text-align: center; display: block;">3°</label>
-                <input type="number" id="cpst-loto-num-3" min="0" max="45" class="form-control text-center" placeholder="00">
-              </div>
-              <div class="form-group" style="margin: 0;">
-                <label style="font-size: 0.75rem; text-align: center; display: block;">4°</label>
-                <input type="number" id="cpst-loto-num-4" min="0" max="45" class="form-control text-center" placeholder="00">
-              </div>
-              <div class="form-group" style="margin: 0;">
-                <label style="font-size: 0.75rem; text-align: center; display: block;">5°</label>
-                <input type="number" id="cpst-loto-num-5" min="0" max="45" class="form-control text-center" placeholder="00">
-              </div>
-              <div class="form-group" style="margin: 0;">
-                <label style="font-size: 0.75rem; text-align: center; display: block;">6°</label>
-                <input type="number" id="cpst-loto-num-6" min="0" max="45" class="form-control text-center" placeholder="00">
-              </div>
+              <div class="form-group" style="margin: 0;"><label style="font-size: 0.75rem; text-align: center; display: block;">1°</label><input type="number" id="cpst-loto-trad-1" min="0" max="45" class="form-control text-center" placeholder="00"></div>
+              <div class="form-group" style="margin: 0;"><label style="font-size: 0.75rem; text-align: center; display: block;">2°</label><input type="number" id="cpst-loto-trad-2" min="0" max="45" class="form-control text-center" placeholder="00"></div>
+              <div class="form-group" style="margin: 0;"><label style="font-size: 0.75rem; text-align: center; display: block;">3°</label><input type="number" id="cpst-loto-trad-3" min="0" max="45" class="form-control text-center" placeholder="00"></div>
+              <div class="form-group" style="margin: 0;"><label style="font-size: 0.75rem; text-align: center; display: block;">4°</label><input type="number" id="cpst-loto-trad-4" min="0" max="45" class="form-control text-center" placeholder="00"></div>
+              <div class="form-group" style="margin: 0;"><label style="font-size: 0.75rem; text-align: center; display: block;">5°</label><input type="number" id="cpst-loto-trad-5" min="0" max="45" class="form-control text-center" placeholder="00"></div>
+              <div class="form-group" style="margin: 0;"><label style="font-size: 0.75rem; text-align: center; display: block;">6°</label><input type="number" id="cpst-loto-trad-6" min="0" max="45" class="form-control text-center" placeholder="00"></div>
             </div>
-            <small class="text-muted" style="display: block; margin-top: 0.5rem;">
-              Los mismos 6 números aplican a las 4 modalidades (Tradicional, Match, Desquite, Sale o Sale)
-            </small>
           </div>
 
-          <div style="margin-top: 1.5rem;">
+          <!-- Match -->
+          <div style="margin-top: 0.75rem; padding: 0.75rem; border: 1px solid var(--border-color); border-radius: 8px; border-left: 4px solid var(--primary);">
             <label style="margin-bottom: 0.5rem; display: block;">
-              <strong>Número PLUS</strong> (0-9, opcional)
+              <strong><span class="badge badge-primary">Match</span></strong> 6 Números (0-45)
+            </label>
+            <div style="display: grid; grid-template-columns: repeat(6, 1fr); gap: 0.5rem; max-width: 450px;">
+              <div class="form-group" style="margin: 0;"><label style="font-size: 0.75rem; text-align: center; display: block;">1°</label><input type="number" id="cpst-loto-match-1" min="0" max="45" class="form-control text-center" placeholder="00"></div>
+              <div class="form-group" style="margin: 0;"><label style="font-size: 0.75rem; text-align: center; display: block;">2°</label><input type="number" id="cpst-loto-match-2" min="0" max="45" class="form-control text-center" placeholder="00"></div>
+              <div class="form-group" style="margin: 0;"><label style="font-size: 0.75rem; text-align: center; display: block;">3°</label><input type="number" id="cpst-loto-match-3" min="0" max="45" class="form-control text-center" placeholder="00"></div>
+              <div class="form-group" style="margin: 0;"><label style="font-size: 0.75rem; text-align: center; display: block;">4°</label><input type="number" id="cpst-loto-match-4" min="0" max="45" class="form-control text-center" placeholder="00"></div>
+              <div class="form-group" style="margin: 0;"><label style="font-size: 0.75rem; text-align: center; display: block;">5°</label><input type="number" id="cpst-loto-match-5" min="0" max="45" class="form-control text-center" placeholder="00"></div>
+              <div class="form-group" style="margin: 0;"><label style="font-size: 0.75rem; text-align: center; display: block;">6°</label><input type="number" id="cpst-loto-match-6" min="0" max="45" class="form-control text-center" placeholder="00"></div>
+            </div>
+          </div>
+
+          <!-- Desquite -->
+          <div style="margin-top: 0.75rem; padding: 0.75rem; border: 1px solid var(--border-color); border-radius: 8px; border-left: 4px solid var(--info);">
+            <label style="margin-bottom: 0.5rem; display: block;">
+              <strong><span class="badge badge-info">Desquite</span></strong> 6 Números (0-45)
+            </label>
+            <div style="display: grid; grid-template-columns: repeat(6, 1fr); gap: 0.5rem; max-width: 450px;">
+              <div class="form-group" style="margin: 0;"><label style="font-size: 0.75rem; text-align: center; display: block;">1°</label><input type="number" id="cpst-loto-desq-1" min="0" max="45" class="form-control text-center" placeholder="00"></div>
+              <div class="form-group" style="margin: 0;"><label style="font-size: 0.75rem; text-align: center; display: block;">2°</label><input type="number" id="cpst-loto-desq-2" min="0" max="45" class="form-control text-center" placeholder="00"></div>
+              <div class="form-group" style="margin: 0;"><label style="font-size: 0.75rem; text-align: center; display: block;">3°</label><input type="number" id="cpst-loto-desq-3" min="0" max="45" class="form-control text-center" placeholder="00"></div>
+              <div class="form-group" style="margin: 0;"><label style="font-size: 0.75rem; text-align: center; display: block;">4°</label><input type="number" id="cpst-loto-desq-4" min="0" max="45" class="form-control text-center" placeholder="00"></div>
+              <div class="form-group" style="margin: 0;"><label style="font-size: 0.75rem; text-align: center; display: block;">5°</label><input type="number" id="cpst-loto-desq-5" min="0" max="45" class="form-control text-center" placeholder="00"></div>
+              <div class="form-group" style="margin: 0;"><label style="font-size: 0.75rem; text-align: center; display: block;">6°</label><input type="number" id="cpst-loto-desq-6" min="0" max="45" class="form-control text-center" placeholder="00"></div>
+            </div>
+          </div>
+
+          <!-- Sale o Sale -->
+          <div style="margin-top: 0.75rem; padding: 0.75rem; border: 1px solid var(--border-color); border-radius: 8px; border-left: 4px solid var(--success);">
+            <label style="margin-bottom: 0.5rem; display: block;">
+              <strong><span class="badge badge-success">Sale o Sale</span></strong> 6 Números (0-45)
+            </label>
+            <div style="display: grid; grid-template-columns: repeat(6, 1fr); gap: 0.5rem; max-width: 450px;">
+              <div class="form-group" style="margin: 0;"><label style="font-size: 0.75rem; text-align: center; display: block;">1°</label><input type="number" id="cpst-loto-sos-1" min="0" max="45" class="form-control text-center" placeholder="00"></div>
+              <div class="form-group" style="margin: 0;"><label style="font-size: 0.75rem; text-align: center; display: block;">2°</label><input type="number" id="cpst-loto-sos-2" min="0" max="45" class="form-control text-center" placeholder="00"></div>
+              <div class="form-group" style="margin: 0;"><label style="font-size: 0.75rem; text-align: center; display: block;">3°</label><input type="number" id="cpst-loto-sos-3" min="0" max="45" class="form-control text-center" placeholder="00"></div>
+              <div class="form-group" style="margin: 0;"><label style="font-size: 0.75rem; text-align: center; display: block;">4°</label><input type="number" id="cpst-loto-sos-4" min="0" max="45" class="form-control text-center" placeholder="00"></div>
+              <div class="form-group" style="margin: 0;"><label style="font-size: 0.75rem; text-align: center; display: block;">5°</label><input type="number" id="cpst-loto-sos-5" min="0" max="45" class="form-control text-center" placeholder="00"></div>
+              <div class="form-group" style="margin: 0;"><label style="font-size: 0.75rem; text-align: center; display: block;">6°</label><input type="number" id="cpst-loto-sos-6" min="0" max="45" class="form-control text-center" placeholder="00"></div>
+            </div>
+          </div>
+
+          <!-- PLUS -->
+          <div style="margin-top: 1rem; padding: 0.75rem; border: 1px solid var(--border-color); border-radius: 8px; border-left: 4px solid var(--danger);">
+            <label style="margin-bottom: 0.5rem; display: block;">
+              <strong><span class="badge badge-danger">Multiplicador</span></strong> Número PLUS (0-9, opcional)
             </label>
             <div style="max-width: 100px;">
               <input type="number" id="cpst-loto-plus" min="0" max="9" class="form-control text-center" placeholder="-">
             </div>
-            <small class="text-muted">Si coincide con el PLUS del apostador, el premio se multiplica</small>
+            <small class="text-muted">Si coincide con el PLUS del apostador, el premio se multiplica (x2 extra)</small>
           </div>
 
           <!-- Premios del XML (read-only, se cargan automáticamente del Control Previo) -->
@@ -2820,9 +2846,9 @@
   <!-- Toast Container -->
   <div id="toast-container"></div>
 
-  <script src="js/api.js?v=20260203b"></script>
-  <script src="js/ocr-extractos.js?v=20260203b"></script>
-  <script src="js/app.js?v=20260203b"></script>
+  <script src="js/api.js?v=20260203c"></script>
+  <script src="js/ocr-extractos.js?v=20260203c"></script>
+  <script src="js/app.js?v=20260203c"></script>
 </body>
 
 </html>

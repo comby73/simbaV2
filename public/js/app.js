@@ -1772,11 +1772,9 @@ function renderDistribucionPremiosPoceada(data) {
 
 function renderTablasLoto(data) {
   const tbodyRecProv = document.querySelector('#cp-tabla-recaudacion-prov tbody');
-  const tbodyProv = document.querySelector('#cp-tabla-provincias tbody');
 
   if (tbodyRecProv && data.provincias) {
     tbodyRecProv.innerHTML = '';
-    tbodyProv.innerHTML = '';
     const totalRec = data.resumen?.recaudacion || 1;
     const totalApuestas = data.resumen?.apuestasTotal || 1;
 
@@ -1791,27 +1789,19 @@ function renderTablasLoto(data) {
         const pAp = totalApuestas > 0 ? ((apuestas / totalApuestas) * 100).toFixed(2) : '0.00';
         const webIndicator = ventaWeb > 0 ? ` <span class="badge badge-info" title="${ventaWeb} ventas web">🌐 ${ventaWeb}</span>` : '';
 
-        if (recaudacion > 0) {
-          tbodyRecProv.innerHTML += `
-            <tr>
-              <td><strong>${nombre}</strong>${webIndicator}</td>
-              <td>$${formatNumber(Math.round(recaudacion))}</td>
-              <td>${pRec}%</td>
-            </tr>`;
-        }
-        if (apuestas > 0) {
-          tbodyProv.innerHTML += `
-            <tr>
-              <td><strong>${nombre}</strong></td>
-              <td>${formatNumber(apuestas)}</td>
-              <td>${pAp}%</td>
-            </tr>`;
-        }
+        tbodyRecProv.innerHTML += `
+          <tr>
+            <td><strong>${nombre}</strong>${webIndicator}</td>
+            <td>$${formatNumber(Math.round(recaudacion))}</td>
+            <td>${pRec}%</td>
+            <td>${formatNumber(apuestas)}</td>
+            <td>${pAp}%</td>
+          </tr>`;
       }
     }
   }
 
-  // Mostrar resumen por modalidad de Loto
+  // Mostrar resumen por modalidad de Loto + premios XML
   const modalidadesContainer = document.getElementById('cp-loto-modalidades');
   if (modalidadesContainer && data.modalidades) {
     modalidadesContainer.classList.remove('hidden');
@@ -1819,6 +1809,9 @@ function renderTablasLoto(data) {
     if (tbody) {
       tbody.innerHTML = '';
       for (const [mod, datos] of Object.entries(data.modalidades)) {
+        const premios = data.datosOficiales?.modalidades?.[mod]?.premios || {};
+        const fondo = premios.fondoReserva?.monto || premios.fondoCompensador?.monto || 0;
+        const pozoAseg = premios.primerPremio?.pozoAsegurar || premios.primerPremio?.pozoAsegurado || 0;
         if (datos.registros > 0) {
           tbody.innerHTML += `
             <tr>
@@ -1826,10 +1819,48 @@ function renderTablasLoto(data) {
               <td>${formatNumber(datos.registros)}</td>
               <td>${formatNumber(datos.apuestas)}</td>
               <td>$${formatNumber(Math.round(datos.recaudacion))}</td>
+              <td>$${formatNumber(premios.primerPremio?.totales || 0)}</td>
+              <td>$${formatNumber(premios.segundoPremio?.totales || 0)}</td>
+              <td>$${formatNumber(premios.tercerPremio?.totales || 0)}</td>
+              <td>$${formatNumber(premios.agenciero?.totales || 0)}</td>
+              <td>$${formatNumber(fondo)}</td>
+              <td>${pozoAseg ? '$' + formatNumber(pozoAseg) : '-'}</td>
             </tr>`;
         }
       }
     }
+  }
+
+  // Tabla de distribución por modalidad (config)
+  const distCard = document.getElementById('cp-loto-distribucion');
+  const distBody = document.getElementById('cp-loto-distribucion-body');
+  const distCfg = data.distribucionConfig?.modalidades;
+  if (distCard && distBody && distCfg) {
+    distCard.classList.remove('hidden');
+    distBody.innerHTML = '';
+    for (const [mod, cfg] of Object.entries(distCfg)) {
+      const niveles = cfg.niveles || {};
+      const nivelesTxt = Object.entries(niveles)
+        .map(([nivel, info]) => `${nivel} ac: ${info.porcentaje || 0}%${info.cascada ? ' (cascada)' : ''}`)
+        .join(' | ');
+      const agTxt = cfg.agenciero?.fijo
+        ? `$${formatNumber(cfg.agenciero.fijo)} fijo`
+        : `${cfg.agenciero?.porcentaje || 0}%${cfg.agenciero?.soloConSeisAciertos ? ' (solo con 6)' : ''}`;
+      const fondoTxt = cfg.fondo
+        ? `${cfg.fondo.tipo} ${cfg.fondo.porcentaje || 0}%`
+        : '-';
+      const pozoAseg = cfg.pozoAsegurado ? `$${formatNumber(cfg.pozoAsegurado)}` : '-';
+      distBody.innerHTML += `
+        <tr>
+          <td><strong>${mod}</strong></td>
+          <td>${nivelesTxt || '-'}</td>
+          <td>${agTxt || '-'}</td>
+          <td>${fondoTxt}</td>
+          <td>${pozoAseg}</td>
+        </tr>`;
+    }
+  } else if (distCard) {
+    distCard.classList.add('hidden');
   }
 
   // Ocultar cards específicas de Poceada
@@ -1837,8 +1868,8 @@ function renderTablasLoto(data) {
   if (pcdEspecifico) pcdEspecifico.classList.add('hidden');
   const premiosCard = document.getElementById('cp-comparacion-premios-card');
   if (premiosCard) { premiosCard.classList.add('hidden'); premiosCard.style.display = 'none'; }
-  const distCard = document.getElementById('cp-distribucion-premios-card');
-  if (distCard) distCard.classList.add('hidden');
+  const distCardPoceada = document.getElementById('cp-distribucion-premios-card');
+  if (distCardPoceada) distCardPoceada.classList.add('hidden');
 }
 
 function renderTablasQuiniela(data) {
@@ -2525,7 +2556,7 @@ let cpstNumeroSorteo = '';
 let cpstModalidadSorteo = ''; // R=Previa, P=Primera, M=Matutina, V=Vespertina, N=Nocturna
 let cpstJuegoSeleccionado = 'Quiniela'; // 'Quiniela', 'Poceada' o 'Loto'
 let cpstExtractoPoceada = null; // {numeros: [20 nums], letras: [4 letras]}
-let cpstExtractoLoto = null; // {numeros: [6 nums], plus: number|null}
+let cpstExtractoLoto = null; // {tradicional: [6], match: [6], desquite: [6], saleOSale: [6], plus: number|null}
 
 // Mapeo de códigos de modalidad a nombres
 const MODALIDADES_NOMBRE = {
@@ -2653,7 +2684,7 @@ function seleccionarJuegoPosterior(juego) {
   const hintModalidad = document.getElementById('cpst-hint-modalidad');
   if (hintModalidad) {
     if (juego === 'Poceada') hintModalidad.textContent = '💡 Para Poceada solo se procesarán registros de tipo POC';
-    else if (juego === 'Loto') hintModalidad.textContent = '💡 Loto: ingrese 6 números (0-45) y opcionalmente el número PLUS (0-9)';
+    else if (juego === 'Loto') hintModalidad.textContent = '💡 Loto: ingrese 4 extractos de 6 números (0-45) y opcionalmente el número PLUS (0-9)';
     else hintModalidad.textContent = '💡 Al cargar XMLs, solo se procesarán los de la modalidad detectada';
   }
 
@@ -3037,6 +3068,7 @@ function cargarDatosControlPrevio() {
   const tipoJuegoDetectado = cpResultadosActuales.tipoJuego || 'Quiniela';
   seleccionarJuegoPosterior(tipoJuegoDetectado);
 
+
   // Usar los datos del control previo - INCLUIR datosOficiales para los premios
   cpstDatosControlPrevio = {
     ...(cpResultadosActuales.datosCalculados || cpResultadosActuales.resumen || {}),
@@ -3122,7 +3154,31 @@ function cargarDatosControlPrevio() {
 
   // Mostrar premios XML de Loto si hay datos oficiales con modalidades
   if (tipoJuegoDetectado === 'Loto' && cpResultadosActuales.datosOficiales?.modalidades) {
-    mostrarPremiosXmlLoto(cpResultadosActuales.datosOficiales.modalidades);
+    const container = document.getElementById('cpst-loto-premios-xml');
+    const content = document.getElementById('cpst-loto-premios-xml-content');
+    if (container && content) {
+      const mods = cpResultadosActuales.datosOficiales.modalidades;
+      const modNames = ['Tradicional', 'Match', 'Desquite', 'Sale o Sale', 'Multiplicador'];
+      const badgesMap = { 'Tradicional': 'warning', 'Match': 'primary', 'Desquite': 'info', 'Sale o Sale': 'success', 'Multiplicador': 'danger' };
+      let html = '<div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 0.75rem;">';
+      for (const mod of modNames) {
+        const data = mods[mod];
+        if (!data) continue;
+        const p = data.premios || {};
+        html += `<div style="padding: 0.5rem; background: var(--surface); border-radius: 6px; border: 1px solid var(--border-color);">
+          <strong><span class="badge badge-${badgesMap[mod] || 'secondary'}">${mod}</span></strong>`;
+        if (p.primerPremio) html += `<div style="margin-top: 0.3rem;"><small>1er:</small> <strong>$${formatNumber(p.primerPremio.totales || 0)}</strong></div>`;
+        if (p.segundoPremio) html += `<div><small>2do:</small> $${formatNumber(p.segundoPremio.totales || 0)}</div>`;
+        if (p.tercerPremio) html += `<div><small>3er:</small> $${formatNumber(p.tercerPremio.totales || 0)}</div>`;
+        if (p.agenciero) html += `<div><small>Agenc:</small> $${formatNumber(p.agenciero.totales || 0)}</div>`;
+        if (p.fondoReserva) html += `<div><small>F.Res:</small> $${formatNumber(p.fondoReserva.monto || 0)}</div>`;
+        if (p.fondoCompensador) html += `<div><small>F.Comp:</small> $${formatNumber(p.fondoCompensador.monto || 0)}</div>`;
+        html += '</div>';
+      }
+      html += '</div>';
+      content.innerHTML = html;
+      container.classList.remove('hidden');
+    }
   }
 
   const cantRegistros = cpstRegistrosNTF.length;
@@ -5042,8 +5098,13 @@ async function ejecutarEscrutinio() {
       return;
     }
   } else if (cpstJuegoSeleccionado === 'Loto') {
-    if (!cpstExtractoLoto || cpstExtractoLoto.numeros.length < 6) {
-      showToast('Cargue el extracto de Loto (6 números del sorteo)', 'warning');
+    const ext = cpstExtractoLoto;
+    const ok = ext && Array.isArray(ext.tradicional) && ext.tradicional.length === 6
+      && Array.isArray(ext.match) && ext.match.length === 6
+      && Array.isArray(ext.desquite) && ext.desquite.length === 6
+      && Array.isArray(ext.saleOSale) && ext.saleOSale.length === 6;
+    if (!ok) {
+      showToast('Cargue los 4 extractos de Loto (6 números por modalidad)', 'warning');
       return;
     }
   }
@@ -5075,12 +5136,12 @@ async function ejecutarEscrutinio() {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${token}`
         },
-        body: JSON.stringify({
-          registrosNTF: cpstRegistrosNTF,
-          extracto: cpstExtractoLoto,
-          datosControlPrevio: cpstDatosControlPrevio
-        })
-      });
+          body: JSON.stringify({
+            registrosNTF: cpstRegistrosNTF,
+            extracto: cpstExtractoLoto,
+            datosControlPrevio: cpstDatosControlPrevio
+          })
+        });
 
       const data = await response.json();
       if (!response.ok) throw new Error(data.message);
@@ -5480,20 +5541,37 @@ function mostrarResultadosEscrutinioPoceada(resultado) {
 // ============= LOTO ESCRUTINIO FUNCIONES =============
 
 function cargarExtractoLoto() {
-  const numeros = [];
-  for (let i = 1; i <= 6; i++) {
-    const input = document.getElementById(`cpst-loto-num-${i}`);
-    if (!input || input.value === '') {
-      showToast(`Ingrese el número ${i} del extracto`, 'warning');
-      return;
+  const leerModalidad = (prefijo, label) => {
+    const nums = [];
+    for (let i = 1; i <= 6; i++) {
+      const input = document.getElementById(`${prefijo}-${i}`);
+      if (!input || input.value === '') {
+        showToast(`Ingrese el número ${i} del extracto ${label}`, 'warning');
+        return null;
+      }
+      const num = parseInt(input.value);
+      if (isNaN(num) || num < 0 || num > 45) {
+        showToast(`Número ${i} de ${label} debe estar entre 0 y 45`, 'warning');
+        return null;
+      }
+      nums.push(num);
     }
-    const num = parseInt(input.value);
-    if (isNaN(num) || num < 0 || num > 45) {
-      showToast(`Número ${i} debe estar entre 0 y 45`, 'warning');
-      return;
+    const unique = new Set(nums);
+    if (unique.size !== 6) {
+      showToast(`Extracto ${label}: no se permiten números repetidos`, 'warning');
+      return null;
     }
-    numeros.push(num);
-  }
+    return nums;
+  };
+
+  const tradicional = leerModalidad('cpst-loto-trad', 'Tradicional');
+  if (!tradicional) return;
+  const match = leerModalidad('cpst-loto-match', 'Match');
+  if (!match) return;
+  const desquite = leerModalidad('cpst-loto-desq', 'Desquite');
+  if (!desquite) return;
+  const saleOSale = leerModalidad('cpst-loto-sos', 'Sale o Sale');
+  if (!saleOSale) return;
 
   // Número PLUS (opcional)
   const plusInput = document.getElementById('cpst-loto-plus');
@@ -5506,7 +5584,7 @@ function cargarExtractoLoto() {
     }
   }
 
-  cpstExtractoLoto = { numeros, plus };
+  cpstExtractoLoto = { tradicional, match, desquite, saleOSale, plus };
 
   // Preview
   const preview = document.getElementById('cpst-loto-preview');
@@ -5514,50 +5592,38 @@ function cargarExtractoLoto() {
     preview.innerHTML = `
       <div style="padding: 0.5rem; background: var(--bg-input); border-radius: 6px; margin-top: 0.5rem;">
         <strong>Extracto cargado:</strong>
-        <span style="font-family: monospace; color: var(--warning);">
-          ${numeros.map(n => n.toString().padStart(2, '0')).join(' - ')}
-        </span>
-        ${plus != null ? `<br><strong>PLUS:</strong> <span class="badge badge-warning">${plus}</span>` : ''}
+        <div style="margin-top: 0.4rem;">
+          <strong>Tradicional:</strong>
+          <span style="font-family: monospace; color: var(--warning);">
+            ${tradicional.map(n => n.toString().padStart(2, '0')).join(' - ')}
+          </span>
+        </div>
+        <div style="margin-top: 0.2rem;">
+          <strong>Match:</strong>
+          <span style="font-family: monospace; color: var(--warning);">
+            ${match.map(n => n.toString().padStart(2, '0')).join(' - ')}
+          </span>
+        </div>
+        <div style="margin-top: 0.2rem;">
+          <strong>Desquite:</strong>
+          <span style="font-family: monospace; color: var(--warning);">
+            ${desquite.map(n => n.toString().padStart(2, '0')).join(' - ')}
+          </span>
+        </div>
+        <div style="margin-top: 0.2rem;">
+          <strong>Sale o Sale:</strong>
+          <span style="font-family: monospace; color: var(--warning);">
+            ${saleOSale.map(n => n.toString().padStart(2, '0')).join(' - ')}
+          </span>
+        </div>
+        ${plus != null ? `<div style="margin-top: 0.3rem;"><strong>PLUS:</strong> <span class="badge badge-warning">${plus}</span></div>` : ''}
       </div>`;
   }
 
   showToast('Extracto Loto cargado correctamente', 'success');
 }
 
-/**
- * Muestra los premios del XML (Control Previo) como información read-only
- */
-function mostrarPremiosXmlLoto(modalidades) {
-  const container = document.getElementById('cpst-loto-premios-xml');
-  const content = document.getElementById('cpst-loto-premios-xml-content');
-  if (!container || !content) return;
-
-  const modNames = ['Tradicional', 'Match', 'Desquite', 'Sale o Sale', 'Multiplicador'];
-  const badges = { 'Tradicional': 'warning', 'Match': 'primary', 'Desquite': 'info', 'Sale o Sale': 'success', 'Multiplicador': 'danger' };
-  let html = '<div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1rem;">';
-
-  for (const mod of modNames) {
-    const data = modalidades[mod];
-    if (!data) continue;
-    const premios = data.premios || {};
-    html += `<div style="padding: 0.75rem; background: var(--surface); border-radius: 6px; border: 1px solid var(--border-color);">
-      <strong><span class="badge badge-${badges[mod] || 'secondary'}">${mod}</span></strong>`;
-    if (premios.primerPremio) {
-      html += `<div style="margin-top: 0.5rem;"><small class="text-muted">1er Premio TOTALES:</small><br><strong>$${formatNumber(premios.primerPremio.totales || 0)}</strong></div>`;
-      if (premios.primerPremio.pozoVacante > 0) html += `<div><small class="text-muted">Pozo Vacante:</small> $${formatNumber(premios.primerPremio.pozoVacante)}</div>`;
-    }
-    if (premios.segundoPremio) html += `<div><small class="text-muted">2do Premio:</small> $${formatNumber(premios.segundoPremio.totales || 0)}</div>`;
-    if (premios.tercerPremio) html += `<div><small class="text-muted">3er Premio:</small> $${formatNumber(premios.tercerPremio.totales || 0)}</div>`;
-    if (premios.agenciero) html += `<div><small class="text-muted">Agenciero:</small> $${formatNumber(premios.agenciero.totales || 0)}</div>`;
-    if (premios.fondoReserva) html += `<div><small class="text-muted">Fondo Reserva:</small> $${formatNumber(premios.fondoReserva.monto || 0)}</div>`;
-    if (premios.fondoCompensador) html += `<div><small class="text-muted">Fondo Compensador:</small> $${formatNumber(premios.fondoCompensador.monto || 0)}</div>`;
-    html += '</div>';
-  }
-  html += '</div>';
-
-  content.innerHTML = html;
-  container.classList.remove('hidden');
-}
+// Premios Loto se cargan desde el XML del Control Previo (no manual)
 
 function mostrarResultadosEscrutinioLoto(resultado) {
   document.getElementById('cpst-resultados').classList.remove('hidden');
@@ -5607,19 +5673,21 @@ function mostrarResultadosEscrutinioLoto(resultado) {
       const modData = resultado.porModalidad?.[mod];
       if (!modData) continue;
 
-      // Desquite solo tiene 1er premio (6 aciertos), Sale o Sale es cascada
-      const nivelesAMostrar = mod === 'Desquite' ? [6] : [6, 5, 4];
-
-      for (const nivel of nivelesAMostrar) {
-        const nivelData = modData.porNivel?.[nivel] || { ganadores: 0, premioUnitario: 0, totalPremios: 0, pozoVacante: 0, pozoXml: 0 };
-        const nombreNivel = nivel === 6 ? '1er Premio (6 aciertos)' : (nivel === 5 ? '2do Premio (5 aciertos)' : '3er Premio (4 aciertos)');
-        const pozoXml = nivelData.pozoXml || 0;
+      const niveles = mod === 'Sale o Sale' ? [6, 5, 4, 3, 2, 1] : (mod === 'Desquite' ? [6] : [6, 5, 4]);
+      for (const nivel of niveles) {
+        const nivelData = modData.porNivel?.[nivel] || { ganadores: 0, premioUnitario: 0, totalPremios: 0, pozoVacante: 0 };
+        const nombreNivel = nivel === 6 ? '1er Premio (6)'
+          : (nivel === 5 ? '2do Premio (5)'
+            : (nivel === 4 ? '3er Premio (4)' : `Nivel ${nivel} (${nivel})`));
+        const pozoXml = modData.xmlPremios?.[
+          nivel === 6 ? 'primerPremio' : (nivel === 5 ? 'segundoPremio' : (nivel === 4 ? 'tercerPremio' : null))
+        ]?.totales || 0;
         tbodyLoto.innerHTML += `
           <tr>
             <td><span class="badge badge-${badges[mod]}">${mod}</span></td>
-            <td>${nombreNivel}${nivelData._esSaleOSale ? ' <small class="text-warning">(cascada)</small>' : ''}</td>
+            <td>${nombreNivel}</td>
             <td>${formatNumber(nivelData.ganadores)}<br><small class="text-muted">${nivelData.ganadoresTexto || ''}</small></td>
-            <td style="color: var(--text-secondary);">$${formatNumber(pozoXml)}</td>
+            <td>${pozoXml ? '$' + formatNumber(pozoXml) : '-'}</td>
             <td>$${formatNumber(nivelData.premioUnitario)}</td>
             <td>$${formatNumber(nivelData.totalPremios)}</td>
             <td>${nivelData.pozoVacante > 0 ? '$' + formatNumber(nivelData.pozoVacante) : '-'}</td>
@@ -5627,47 +5695,31 @@ function mostrarResultadosEscrutinioLoto(resultado) {
       }
 
       // Agenciero para esta modalidad
-      if (modData.agenciero && modData.agenciero.ganadores > 0) {
+      if (modData.agenciero) {
+        const agPozo = modData.xmlPremios?.agenciero?.totales || 0;
         tbodyLoto.innerHTML += `
           <tr style="background: var(--surface-hover);">
             <td><span class="badge badge-${badges[mod]}">${mod}</span></td>
             <td><span class="badge badge-info">AGENCIERO</span></td>
             <td>${formatNumber(modData.agenciero.ganadores)}</td>
-            <td>-</td>
+            <td>${agPozo ? '$' + formatNumber(agPozo) : '-'}</td>
             <td>$${formatNumber(modData.agenciero.premioUnitario)}</td>
             <td>$${formatNumber(modData.agenciero.totalPremios)}</td>
             <td>-</td>
           </tr>`;
       }
-
-      // Fondos informativos
-      if (modData.fondoReserva > 0 || modData.fondoCompensador > 0) {
-        const fondo = modData.fondoReserva > 0 ? modData.fondoReserva : modData.fondoCompensador;
-        const tipoFondo = modData.fondoReserva > 0 ? 'Fondo Reserva' : 'Fondo Compensador';
-        tbodyLoto.innerHTML += `
-          <tr style="background: var(--surface-hover); opacity: 0.8;">
-            <td><span class="badge badge-${badges[mod]}">${mod}</span></td>
-            <td><small>${tipoFondo}</small></td>
-            <td>-</td>
-            <td>-</td>
-            <td>-</td>
-            <td>$${formatNumber(fondo)}</td>
-            <td>-</td>
-          </tr>`;
-      }
     }
 
-    // Multiplicador / PLUS
-    if (resultado.plus) {
-      const plusInfo = resultado.plus;
+    // Multiplicador
+    if (resultado.multiplicador && resultado.multiplicador.ganadores > 0) {
       tbodyLoto.innerHTML += `
         <tr style="background: rgba(234, 179, 8, 0.1);">
           <td><span class="badge badge-danger">Multiplicador</span></td>
-          <td>PLUS N° ${plusInfo.numero != null ? plusInfo.numero : 'N/A'}</td>
-          <td>${plusInfo.ganadores > 0 ? formatNumber(plusInfo.ganadores) : 'Sin ganadores'}</td>
+          <td>PLUS N° ${resultado.multiplicador.numero != null ? resultado.multiplicador.numero : 'N/A'}</td>
+          <td>${formatNumber(resultado.multiplicador.ganadores)}</td>
           <td>-</td>
           <td>-</td>
-          <td>${plusInfo.premioExtra > 0 ? '$' + formatNumber(plusInfo.premioExtra) : '-'}</td>
+          <td>$${formatNumber(resultado.multiplicador.premioExtra || 0)}</td>
           <td>-</td>
         </tr>`;
     }
@@ -5683,22 +5735,96 @@ function mostrarResultadosEscrutinioLoto(resultado) {
       </tr>`;
   }
 
+  // Premios XML en el extracto Loto
+  const premiosXmlContainer = document.getElementById('cpst-loto-premios-xml');
+  if (premiosXmlContainer) {
+    const mods = resultado.porModalidad || {};
+    const filas = Object.keys(mods).map(mod => {
+      const p = mods[mod].xmlPremios || {};
+      const fondo = p.fondoReserva?.monto || p.fondoCompensador?.monto || 0;
+      return `
+        <tr>
+          <td><strong>${mod}</strong></td>
+          <td>$${formatNumber(p.primerPremio?.totales || 0)}</td>
+          <td>$${formatNumber(p.segundoPremio?.totales || 0)}</td>
+          <td>$${formatNumber(p.tercerPremio?.totales || 0)}</td>
+          <td>$${formatNumber(p.agenciero?.totales || 0)}</td>
+          <td>$${formatNumber(fondo)}</td>
+        </tr>`;
+    }).join('');
+
+    if (filas) {
+      premiosXmlContainer.innerHTML = `
+        <div class="table-container">
+          <table class="table">
+            <thead>
+              <tr>
+                <th>Modalidad</th>
+                <th>1er Premio</th>
+                <th>2do Premio</th>
+                <th>3er Premio</th>
+                <th>Agenciero</th>
+                <th>Fondo</th>
+              </tr>
+            </thead>
+            <tbody>${filas}</tbody>
+          </table>
+        </div>`;
+    } else {
+      premiosXmlContainer.innerHTML = '<small class="text-muted">No hay datos oficiales para mostrar.</small>';
+    }
+  }
+
   // Extracto utilizado
   const detTipos = document.getElementById('cpst-detalle-tipos');
   if (detTipos && cpstExtractoLoto) {
     detTipos.innerHTML = `
       <div class="alert" style="background: var(--bg-input); padding: 1rem; border-radius: 8px; margin-bottom: 1rem;">
         <h4 style="margin-bottom: 0.5rem;"><i class="fas fa-info-circle"></i> Extracto Utilizado</h4>
-        <div style="display: flex; gap: 2rem; flex-wrap: wrap; margin-top: 0.5rem;">
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.75rem; margin-top: 0.5rem;">
           <div>
-            <strong>Números (6):</strong>
-            <span style="font-family: monospace; font-size: 1.1rem; color: var(--warning);">
-              ${cpstExtractoLoto.numeros.map(n => n.toString().padStart(2, '0')).join(' - ')}
+            <strong>Tradicional:</strong>
+            <span style="font-family: monospace; font-size: 1.05rem; color: var(--warning);">
+              ${cpstExtractoLoto.tradicional.map(n => n.toString().padStart(2, '0')).join(' - ')}
             </span>
           </div>
-          ${cpstExtractoLoto.plus != null ? `<div><strong>PLUS:</strong> <span class="badge badge-warning" style="font-size: 1.1rem;">${cpstExtractoLoto.plus}</span></div>` : ''}
+          <div>
+            <strong>Match:</strong>
+            <span style="font-family: monospace; font-size: 1.05rem; color: var(--warning);">
+              ${cpstExtractoLoto.match.map(n => n.toString().padStart(2, '0')).join(' - ')}
+            </span>
+          </div>
+          <div>
+            <strong>Desquite:</strong>
+            <span style="font-family: monospace; font-size: 1.05rem; color: var(--warning);">
+              ${cpstExtractoLoto.desquite.map(n => n.toString().padStart(2, '0')).join(' - ')}
+            </span>
+          </div>
+          <div>
+            <strong>Sale o Sale:</strong>
+            <span style="font-family: monospace; font-size: 1.05rem; color: var(--warning);">
+              ${cpstExtractoLoto.saleOSale.map(n => n.toString().padStart(2, '0')).join(' - ')}
+            </span>
+          </div>
+          ${cpstExtractoLoto.plus != null ? `<div><strong>PLUS:</strong> <span class="badge badge-warning" style="font-size: 1.05rem;">${cpstExtractoLoto.plus}</span></div>` : ''}
         </div>
       </div>`;
+  }
+
+  // Multiplicador
+  const multCard = document.getElementById('cpst-loto-multiplicador');
+  const multBody = document.getElementById('cpst-loto-multiplicador-body');
+  if (multCard && multBody && resultado.multiplicador) {
+    multCard.classList.remove('hidden');
+    const m = resultado.multiplicador;
+    multBody.innerHTML = `
+      <tr>
+        <td>${formatNumber(m.ganadores)}</td>
+        <td>$${formatNumber(m.premioExtra)}</td>
+        <td>$${formatNumber(m.agenciero?.totalPremios || 0)}</td>
+      </tr>`;
+  } else if (multCard) {
+    multCard.classList.add('hidden');
   }
 }
 

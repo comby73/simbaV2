@@ -9,7 +9,7 @@
  * - 08: Loto Match
  * - 09: Loto Desquite
  * - 10: Loto Sale o Sale
- * - 11: Loto Plus (número adicional)
+ * - 11: Loto Multiplicador
  *
  * Rango de números: 0-45 (46 números posibles)
  * Apuesta base: 6 números
@@ -23,13 +23,15 @@ const crypto = require('crypto');
 const { query } = require('../../config/database');
 const { successResponse, errorResponse, PROVINCIAS } = require('../../shared/helpers');
 
+const CONFIG_DISTRIBUCION_PATH = path.join(__dirname, '../../../config/loto-distribucion.json');
+
 // Códigos de juego Loto en el NTF
 const LOTO_GAME_CODES = {
   '07': 'Tradicional',
   '08': 'Match',
   '09': 'Desquite',
   '10': 'Sale o Sale',
-  '11': 'Plus'
+  '11': 'Multiplicador'
 };
 
 // Posiciones NTF genéricas (idénticas a Poceada/Quiniela)
@@ -150,6 +152,11 @@ function decodificarNumeroPlus(charPlus) {
   return valor <= 9 ? valor : null;
 }
 
+function normalizarSorteo(valor) {
+  const limpio = String(valor || '').trim().replace(/^0+/, '');
+  return limpio === '' ? '0' : limpio;
+}
+
 /**
  * Procesa el ZIP de Loto (TXT + XML + Hash)
  */
@@ -209,14 +216,43 @@ const procesarZip = async (req, res) => {
     // Procesar TXT
     const txtContent = fs.readFileSync(txtFileInfo.path, 'latin1');
     const logsTxt = procesarArchivoNTF(txtContent);
+    if (!logsTxt || !logsTxt.numeroSorteo) {
+      limpiarDirectorio(extractPath);
+      if (fs.existsSync(zipPath)) fs.unlinkSync(zipPath);
+      return errorResponse(res, 'TXT Loto inválido: no se pudo detectar número de sorteo', 400);
+    }
+    if (!Array.isArray(logsTxt.registrosParseados) || logsTxt.registrosParseados.length === 0) {
+      limpiarDirectorio(extractPath);
+      if (fs.existsSync(zipPath)) fs.unlinkSync(zipPath);
+      return errorResponse(res, 'TXT Loto inválido: no hay registros válidos', 400);
+    }
 
     // Procesar XML si existe
     let datosXml = null;
     if (xmlFileInfo) {
-      const xmlContent = fs.readFileSync(xmlFileInfo.path, 'utf8');
-      datosXml = await parsearXmlControlPrevio(xmlContent);
+      try {
+        const xmlContent = fs.readFileSync(xmlFileInfo.path, 'utf8');
+        datosXml = await parsearXmlControlPrevio(xmlContent);
+      } catch (errXml) {
+        limpiarDirectorio(extractPath);
+        if (fs.existsSync(zipPath)) fs.unlinkSync(zipPath);
+        return errorResponse(res, errXml.message || 'XML Loto inválido', 400);
+      }
     } else {
       console.warn('⚠️ No se encontró archivo XML de control previo (CP.XML)');
+    }
+    if (datosXml && logsTxt.numeroSorteo) {
+      const sorteoTxtNorm = String(logsTxt.numeroSorteo).replace(/^0+/, '') || '0';
+      const sorteoXmlNorm = String(datosXml.sorteo).replace(/^0+/, '') || '0';
+      if (sorteoTxtNorm !== sorteoXmlNorm) {
+      limpiarDirectorio(extractPath);
+      if (fs.existsSync(zipPath)) fs.unlinkSync(zipPath);
+      return errorResponse(
+        res,
+        `Inconsistencia TXT/XML: sorteo TXT ${logsTxt.numeroSorteo} != XML ${datosXml.sorteo}`,
+        400
+      );
+    }
     }
 
     // Calcular hashes
@@ -259,26 +295,27 @@ const procesarZip = async (req, res) => {
       provincias: logsTxt.provincias,
       modalidades: logsTxt.modalidades,
       datosOficiales: datosXml,
+      distribucionConfig: cargarDistribucionLoto(),
       comparacion: datosXml ? {
         registros: {
           calculado: logsTxt.resumen.registros,
-          oficial: datosXml.registrosValidos || 0,
-          diferencia: logsTxt.resumen.registros - (datosXml.registrosValidos || 0)
+          oficial: datosXml.totales?.registrosValidos || 0,
+          diferencia: logsTxt.resumen.registros - (datosXml.totales?.registrosValidos || 0)
         },
         anulados: {
           calculado: logsTxt.resumen.anulados,
-          oficial: datosXml.registrosAnulados || 0,
-          diferencia: logsTxt.resumen.anulados - (datosXml.registrosAnulados || 0)
+          oficial: datosXml.totales?.registrosAnulados || 0,
+          diferencia: logsTxt.resumen.anulados - (datosXml.totales?.registrosAnulados || 0)
         },
         apuestas: {
           calculado: logsTxt.resumen.apuestasTotal,
-          oficial: datosXml.apuestas || 0,
-          diferencia: logsTxt.resumen.apuestasTotal - (datosXml.apuestas || 0)
+          oficial: datosXml.totales?.apuestas || 0,
+          diferencia: logsTxt.resumen.apuestasTotal - (datosXml.totales?.apuestas || 0)
         },
         recaudacion: {
           calculado: logsTxt.resumen.recaudacion,
-          oficial: datosXml.recaudacion || 0,
-          diferencia: logsTxt.resumen.recaudacion - (datosXml.recaudacion || 0)
+          oficial: datosXml.totales?.recaudacion || 0,
+          diferencia: logsTxt.resumen.recaudacion - (datosXml.totales?.recaudacion || 0)
         }
       } : null,
       seguridad: {
@@ -329,7 +366,7 @@ function procesarArchivoNTF(content) {
     'Match': { registros: 0, apuestas: 0, recaudacion: 0 },
     'Desquite': { registros: 0, apuestas: 0, recaudacion: 0 },
     'Sale o Sale': { registros: 0, apuestas: 0, recaudacion: 0 },
-    'Plus': { registros: 0, apuestas: 0, recaudacion: 0 }
+    'Multiplicador': { registros: 0, apuestas: 0, recaudacion: 0 }
   };
   const registrosParseados = [];
 
@@ -341,7 +378,9 @@ function procesarArchivoNTF(content) {
     if (!modalidadNombre) continue;
 
     if (!numeroSorteo) {
-      numeroSorteo = line.substr(NTF_GENERIC.NUMERO_SORTEO.start, NTF_GENERIC.NUMERO_SORTEO.length).trim();
+      numeroSorteo = normalizarSorteo(
+        line.substr(NTF_GENERIC.NUMERO_SORTEO.start, NTF_GENERIC.NUMERO_SORTEO.length)
+      );
     }
 
     // Fecha de cancelación
@@ -439,69 +478,182 @@ function procesarArchivoNTF(content) {
   };
 }
 
+// Mapeo nodos XML → nombre amigable de modalidad
+const XML_NODO_MAP = {
+  'LOTO_TRADICIONAL': 'Tradicional',
+  'LOTO_MATCH': 'Match',
+  'LOTO_DESQUITE': 'Desquite',
+  'LOTO_SOS': 'Sale o Sale',
+  'LOTO_MULTIPLICADOR': 'Multiplicador'
+};
+
+/**
+ * Parsea un nodo de premio del XML (PRIMER_PREMIO, SEGUNDO_PREMIO, etc.)
+ * Extrae MONTO, POZO_VACANTE, POZO_A_ASEGURAR, TOTALES
+ */
+function parsearNodoPremio(node) {
+  if (!node) return null;
+  return {
+    monto: parseFloat(String(node.MONTO || 0).trim()),
+    pozoVacante: parseFloat(String(node.POZO_VACANTE || 0).trim()),
+    pozoAsegurar: parseFloat(String(node.POZO_A_ASEGURAR || 0).trim()),
+    totales: parseFloat(String(node.TOTALES || 0).trim())
+  };
+}
+
+/**
+ * Parsea todos los premios de un nodo de modalidad del XML
+ */
+function parsearPremiosModalidad(modXml) {
+  const premios = {};
+  if (modXml.PRIMER_PREMIO) premios.primerPremio = parsearNodoPremio(modXml.PRIMER_PREMIO);
+  if (modXml.SEGUNDO_PREMIO) premios.segundoPremio = parsearNodoPremio(modXml.SEGUNDO_PREMIO);
+  if (modXml.TERCER_PREMIO) premios.tercerPremio = parsearNodoPremio(modXml.TERCER_PREMIO);
+  if (modXml.PREMIO_AGENCIERO) premios.agenciero = parsearNodoPremio(modXml.PREMIO_AGENCIERO);
+  if (modXml.FONDO_RESERVA) {
+    premios.fondoReserva = { monto: parseFloat(String(modXml.FONDO_RESERVA.MONTO || 0).trim()) };
+  }
+  if (modXml.FONDO_COMPENSADOR) {
+    premios.fondoCompensador = { monto: parseFloat(String(modXml.FONDO_COMPENSADOR.MONTO || 0).trim()) };
+  }
+  return premios;
+}
+
+function esNumeroNoNegativo(value) {
+  const num = Number(value);
+  return Number.isFinite(num) && num >= 0;
+}
+
+function validarPremiosXmlModalidad(nombreMod, premios) {
+  const requeridos = {
+    'Tradicional': ['primerPremio', 'segundoPremio', 'tercerPremio', 'agenciero'],
+    'Match': ['primerPremio', 'segundoPremio', 'tercerPremio', 'agenciero'],
+    'Desquite': ['primerPremio', 'agenciero'],
+    'Sale o Sale': ['primerPremio']
+  };
+
+  const campos = requeridos[nombreMod];
+  if (!campos) return null;
+
+  for (const campo of campos) {
+    const premio = premios[campo];
+    if (!premio) return `Falta premio ${campo} en XML (${nombreMod})`;
+    if (!esNumeroNoNegativo(premio.totales)) {
+      return `Premio inválido ${campo}.totales en XML (${nombreMod})`;
+    }
+  }
+  return null;
+}
+
+function failXml(message) {
+  throw new Error(message);
+}
+
 /**
  * Parsea el XML de control previo de Loto
- * Puede tener estructura CONTROL_PREVIO > LOTO_DE_LA_CIUDAD o DatosSorteo
+ * Estructura real: CONTROL_PREVIO > LOTO_PLUS > {LOTO_TRADICIONAL, LOTO_MATCH, LOTO_DESQUITE, LOTO_SOS, LOTO_MULTIPLICADOR}
  */
 async function parsearXmlControlPrevio(xmlContent) {
-  const parser = new xml2js.Parser({ explicitArray: false });
+  const parser = new xml2js.Parser({ explicitArray: false, trim: true });
   const result = await parser.parseStringPromise(xmlContent);
 
-  // Intentar varias estructuras XML posibles
+  // Buscar el nodo raíz LOTO_PLUS
   let root = null;
-
   if (result.CONTROL_PREVIO) {
-    root = result.CONTROL_PREVIO.LOTO_DE_LA_CIUDAD ||
-           result.CONTROL_PREVIO.LOTO_PLUS ||
+    root = result.CONTROL_PREVIO.LOTO_PLUS ||
+           result.CONTROL_PREVIO.LOTO_DE_LA_CIUDAD ||
            result.CONTROL_PREVIO;
+  } else if (result.LOTO_PLUS) {
+    root = result.LOTO_PLUS;
   } else if (result.LOTO_DE_LA_CIUDAD) {
     root = result.LOTO_DE_LA_CIUDAD;
-  } else if (result.DatosSorteo) {
-    // Formato alternativo DatosSorteo
-    const ds = result.DatosSorteo;
-    return {
-      sorteo: ds.NumeroSorteo || ds.Sorteo,
-      fecha: ds.FechaSorteo,
-      registrosValidos: parseInt(ds.RegistrosValidos || 0),
-      registrosAnulados: parseInt(ds.RegistrosAnulados || 0),
-      apuestas: parseInt(ds.ApuestasEnSorteo || ds.Apuestas || 0),
-      recaudacion: parseFloat(ds.RecaudacionBruta || ds.Recaudacion || 0),
-      premios: parsearPremiosXml(ds),
-      formato: 'DatosSorteo'
-    };
   }
 
   if (!root) {
-    console.warn('⚠️ No se encontró estructura XML conocida de Loto');
-    return null;
+    failXml('XML Loto inválido: no se encontró estructura CONTROL_PREVIO/LOTO_PLUS');
   }
 
+  const sorteo = root.SORTEO || root.NumeroSorteo || '';
+  const fecha = root.FECHA_SORTEO || root.FechaSorteo || '';
+  if (!sorteo || !fecha) {
+    failXml('XML Loto inválido: falta SORTEO o FECHA_SORTEO');
+  }
+
+  // Iterar sobre los 5 nodos de modalidad
+  const modalidades = {};
+  let totalRegValidos = 0, totalRegAnulados = 0, totalApuestas = 0;
+  let totalRecaudacion = 0, totalPremios = 0;
+
+  for (const [nodoXml, nombreMod] of Object.entries(XML_NODO_MAP)) {
+    const modXml = root[nodoXml];
+    if (!modXml) continue;
+
+    const regVal = parseInt(modXml.REGISTROS_VALIDOS || 0);
+    const regAn = parseInt(modXml.REGISTROS_ANULADOS || 0);
+    const apuestas = parseInt(modXml.APUESTAS_EN_SORTEO || 0);
+    const recBruta = parseFloat(String(modXml.RECAUDACION_BRUTA || 0).trim());
+    const recDistribuir = parseFloat(String(modXml.RECAUDACION_A_DISTRIBUIR || 0).trim());
+    const impPremios = parseFloat(String(modXml.IMPORTE_TOTAL_PREMIOS_A_DISTRIBUIR || 0).trim());
+    const arancel = parseFloat(String(modXml.ARANCEL || 0).trim());
+
+    totalRegValidos += regVal;
+    totalRegAnulados += regAn;
+    totalApuestas += apuestas;
+    totalRecaudacion += recBruta;
+    totalPremios += impPremios;
+
+    modalidades[nombreMod] = {
+      codigoJuego: parseInt(modXml.CODIGO_JUEGO || 0),
+      nodoXml,
+      registrosValidos: regVal,
+      registrosAnulados: regAn,
+      apuestas,
+      recaudacionBruta: recBruta,
+      recaudacionADistribuir: recDistribuir,
+      importeTotalPremios: impPremios,
+      arancel,
+      premios: parsearPremiosModalidad(modXml)
+    };
+
+    const errPremios = validarPremiosXmlModalidad(nombreMod, modalidades[nombreMod].premios || {});
+    if (errPremios) {
+      failXml(`XML Loto inválido: ${errPremios}`);
+    }
+  }
+
+  const modalidadesEsperadas = ['Tradicional', 'Match', 'Desquite', 'Sale o Sale', 'Multiplicador'];
+  for (const mod of modalidadesEsperadas) {
+    if (!modalidades[mod]) {
+      failXml(`XML Loto inválido: falta modalidad ${mod}`);
+    }
+  }
+
+  console.log(`✅ XML Loto parseado: Sorteo ${sorteo}, ${Object.keys(modalidades).length} modalidades`);
+
   return {
-    sorteo: root.SORTEO || root.NumeroSorteo,
-    fecha: root.FECHA_SORTEO || root.FechaSorteo,
-    registrosValidos: parseInt(root.REGISTROS_VALIDOS || 0),
-    registrosAnulados: parseInt(root.REGISTROS_ANULADOS || 0),
-    apuestas: parseInt(root.APUESTAS_EN_SORTEO || 0),
-    recaudacion: parseFloat(root.RECAUDACION_BRUTA || 0),
-    premios: {
-      tradicional: parseFloat(root.PREMIO_TRADICIONAL?.MONTO || root.PremioTradicional || 0),
-      match: parseFloat(root.PREMIO_MATCH?.MONTO || root.PremioMatch || 0),
-      desquite: parseFloat(root.PREMIO_DESQUITE?.MONTO || root.PremioDesquite || 0),
-      saleOSale: parseFloat(root.PREMIO_SALE_O_SALE?.MONTO || root.PremioSaleOSale || 0),
-      agenciero: parseFloat(root.PREMIO_AGENCIERO?.MONTO || root.PremioAgenciero || 0)
+    sorteo,
+    fecha,
+    totales: {
+      registrosValidos: totalRegValidos,
+      registrosAnulados: totalRegAnulados,
+      apuestas: totalApuestas,
+      recaudacion: totalRecaudacion,
+      importeTotalPremios: totalPremios
     },
+    modalidades,
     formato: 'CONTROL_PREVIO'
   };
 }
 
-function parsearPremiosXml(ds) {
-  return {
-    tradicional: parseFloat(ds.PremioTradicional || 0),
-    match: parseFloat(ds.PremioMatch || 0),
-    desquite: parseFloat(ds.PremioDesquite || 0),
-    saleOSale: parseFloat(ds.PremioSaleOSale || 0),
-    agenciero: parseFloat(ds.PremioAgenciero || 0)
-  };
+function cargarDistribucionLoto() {
+  try {
+    if (!fs.existsSync(CONFIG_DISTRIBUCION_PATH)) return null;
+    const raw = fs.readFileSync(CONFIG_DISTRIBUCION_PATH, 'utf8');
+    return JSON.parse(raw);
+  } catch (err) {
+    console.warn('⚠️ No se pudo cargar config de distribución Loto:', err.message);
+    return null;
+  }
 }
 
 /**
