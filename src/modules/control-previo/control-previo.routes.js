@@ -4,6 +4,7 @@ const multer = require('multer');
 const path = require('path');
 const quinielaController = require('./quiniela.controller');
 const poceadaController = require('./poceada.controller');
+const lotoController = require('./loto.controller');
 const { authenticate, requirePermission } = require('../../shared/middleware');
 
 // Configurar multer para subida de archivos
@@ -79,6 +80,18 @@ router.post('/poceada/guardar-resultado',
 router.post('/poceada/guardar-arrastres',
   requirePermission('control_previo.ejecutar'),
   poceadaController.guardarArrastres
+);
+
+// Loto
+router.post('/loto/procesar',
+  requirePermission('control_previo.ejecutar'),
+  upload.single('archivo'),
+  lotoController.procesarZip
+);
+
+router.post('/loto/procesar-zip',
+  upload.single('archivo'),
+  lotoController.procesarZip
 );
 
 // Configuración de juegos

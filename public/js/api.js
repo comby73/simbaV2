@@ -150,6 +150,20 @@ const controlPrevioAPI = {
     body: JSON.stringify({ data: datos })
   }),
 
+  procesarLoto: async (file) => {
+    const formData = new FormData();
+    formData.append('archivo', file);
+    const token = getToken();
+    const response = await fetch(`${API_BASE}/control-previo/loto/procesar-zip`, {
+      method: 'POST',
+      headers: { 'Authorization': `Bearer ${token}` },
+      body: formData
+    });
+    const data = await response.json();
+    if (!response.ok) throw new Error(data.message || 'Error procesando Loto');
+    return data;
+  },
+
   buscarPozoPoceada: (sorteo) => apiRequest(`/control-previo/poceada/buscar-pozo/${sorteo}`),
 
   getHistorial: (params = {}) => {
@@ -171,6 +185,11 @@ const controlPosteriorAPI = {
   }),
 
   escrutinioTombolina: (datos) => apiRequest('/control-posterior/tombolina-escrutinio', {
+    method: 'POST',
+    body: JSON.stringify(datos)
+  }),
+
+  escrutinioLoto: (datos) => apiRequest('/control-posterior/loto/escrutinio', {
     method: 'POST',
     body: JSON.stringify(datos)
   }),

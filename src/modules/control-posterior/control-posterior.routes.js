@@ -4,6 +4,7 @@ const multer = require('multer');
 const quinielaController = require('./quiniela-escrutinio.controller');
 const poceadaController = require('./poceada-escrutinio.controller');
 const tombolinaController = require('./tombolina-escrutinio.controller');
+const lotoController = require('./loto-escrutinio.controller');
 const extractoController = require('./extracto.controller');
 const { authenticate } = require('../../shared/middleware');
 
@@ -20,6 +21,7 @@ router.use(authenticate);
 router.post('/quiniela/escrutinio', quinielaController.ejecutarControlPosterior);
 router.post('/poceada/escrutinio', poceadaController.ejecutar);
 router.post('/tombolina-escrutinio', tombolinaController.ejecutarEscrutinioTombolina);
+router.post('/loto/escrutinio', lotoController.ejecutar);
 
 // Generar Excel
 router.post('/quiniela/excel', quinielaController.generarExcel);

@@ -570,7 +570,7 @@
           <div class="upload-area" id="cp-upload-area">
             <i class="fas fa-file-archive"></i>
             <p>Arrastre el archivo ZIP aquí o haga clic para seleccionar</p>
-            <span id="cp-upload-hint">Ej: QNLxxxxxx.zip o PCDxxxxxx.zip</span>
+            <span id="cp-upload-hint">Ej: QNLxxxxxx.zip, PCDxxxxxx.zip o LTOxxxxxx.zip</span>
             <input type="file" id="cp-archivo-input" accept=".zip" hidden>
           </div>
 
@@ -633,6 +633,26 @@
             <div id="cp-pozos-arrastre-fuente" style="margin-top: 0.5rem; text-align: right;">
               <small class="text-muted" id="cp-pozos-fuente-texto"></small>
             </div>
+          </div>
+        </div>
+
+        <!-- Loto: Modalidades -->
+        <div id="cp-loto-modalidades" class="card hidden" style="border-left: 5px solid var(--warning);">
+          <div class="card-header">
+            <h3><i class="fas fa-layer-group"></i> Desglose por Modalidad</h3>
+          </div>
+          <div class="table-container">
+            <table class="table">
+              <thead>
+                <tr>
+                  <th>Modalidad</th>
+                  <th>Registros</th>
+                  <th>Apuestas</th>
+                  <th>Recaudación</th>
+                </tr>
+              </thead>
+              <tbody></tbody>
+            </table>
           </div>
         </div>
 
@@ -1022,6 +1042,15 @@
                   </div>
                 </label>
               </div>
+              <div class="form-group" style="flex: 1;">
+                <label class="radio-card" style="display: flex; align-items: center; gap: 1rem; padding: 1rem; border: 2px solid var(--border-color); border-radius: 8px; cursor: pointer; transition: all 0.2s;" onclick="seleccionarJuegoPosterior('Loto')">
+                  <input type="radio" name="cpst-juego" value="Loto" style="width: 20px; height: 20px;">
+                  <div>
+                    <strong style="font-size: 1.1rem;">🍀 Loto</strong>
+                    <p class="text-muted" style="margin: 0; font-size: 0.85rem;">6 números (0-45) + PLUS | 4 modalidades</p>
+                  </div>
+                </label>
+              </div>
             </div>
 
 
@@ -1292,6 +1321,87 @@
             </button>
             <button class="btn btn-secondary" onclick="limpiarExtractoPoceada()">
               <i class="fas fa-eraser"></i> Limpiar
+            </button>
+          </div>
+        </div>
+
+        <!-- Extracto Loto -->
+        <div class="card hidden" id="cpst-extracto-loto-card">
+          <div class="card-header">
+            <h3>2. Extracto Loto (6 Números + PLUS)</h3>
+          </div>
+
+          <div style="margin-top: 1rem;">
+            <label style="margin-bottom: 0.5rem; display: block;">
+              <strong>6 Números del Sorteo</strong> (0-45)
+            </label>
+            <div style="display: grid; grid-template-columns: repeat(6, 1fr); gap: 0.5rem; max-width: 450px;">
+              <div class="form-group" style="margin: 0;">
+                <label style="font-size: 0.75rem; text-align: center; display: block;">1°</label>
+                <input type="number" id="cpst-loto-num-1" min="0" max="45" class="form-control text-center" placeholder="00">
+              </div>
+              <div class="form-group" style="margin: 0;">
+                <label style="font-size: 0.75rem; text-align: center; display: block;">2°</label>
+                <input type="number" id="cpst-loto-num-2" min="0" max="45" class="form-control text-center" placeholder="00">
+              </div>
+              <div class="form-group" style="margin: 0;">
+                <label style="font-size: 0.75rem; text-align: center; display: block;">3°</label>
+                <input type="number" id="cpst-loto-num-3" min="0" max="45" class="form-control text-center" placeholder="00">
+              </div>
+              <div class="form-group" style="margin: 0;">
+                <label style="font-size: 0.75rem; text-align: center; display: block;">4°</label>
+                <input type="number" id="cpst-loto-num-4" min="0" max="45" class="form-control text-center" placeholder="00">
+              </div>
+              <div class="form-group" style="margin: 0;">
+                <label style="font-size: 0.75rem; text-align: center; display: block;">5°</label>
+                <input type="number" id="cpst-loto-num-5" min="0" max="45" class="form-control text-center" placeholder="00">
+              </div>
+              <div class="form-group" style="margin: 0;">
+                <label style="font-size: 0.75rem; text-align: center; display: block;">6°</label>
+                <input type="number" id="cpst-loto-num-6" min="0" max="45" class="form-control text-center" placeholder="00">
+              </div>
+            </div>
+          </div>
+
+          <div style="margin-top: 1.5rem;">
+            <label style="margin-bottom: 0.5rem; display: block;">
+              <strong>Número PLUS</strong> (0-9, opcional)
+            </label>
+            <div style="max-width: 100px;">
+              <input type="number" id="cpst-loto-plus" min="0" max="9" class="form-control text-center" placeholder="-">
+            </div>
+            <small class="text-muted">Si coincide con el PLUS del apostador, el premio se duplica</small>
+          </div>
+
+          <div style="margin-top: 1.5rem;">
+            <label style="margin-bottom: 0.5rem; display: block;">
+              <strong>Premios por Modalidad</strong> (importes del XML o manuales)
+            </label>
+            <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 0.5rem; max-width: 600px;">
+              <div class="form-group" style="margin: 0;">
+                <label style="font-size: 0.75rem;">Tradicional</label>
+                <input type="number" id="cpst-loto-premio-trad" class="form-control" placeholder="0" step="0.01">
+              </div>
+              <div class="form-group" style="margin: 0;">
+                <label style="font-size: 0.75rem;">Match</label>
+                <input type="number" id="cpst-loto-premio-match" class="form-control" placeholder="0" step="0.01">
+              </div>
+              <div class="form-group" style="margin: 0;">
+                <label style="font-size: 0.75rem;">Desquite</label>
+                <input type="number" id="cpst-loto-premio-desq" class="form-control" placeholder="0" step="0.01">
+              </div>
+              <div class="form-group" style="margin: 0;">
+                <label style="font-size: 0.75rem;">Sale o Sale</label>
+                <input type="number" id="cpst-loto-premio-sos" class="form-control" placeholder="0" step="0.01">
+              </div>
+            </div>
+          </div>
+
+          <div id="cpst-loto-preview"></div>
+
+          <div style="margin-top: 1.5rem; display: flex; gap: 1rem;">
+            <button class="btn btn-primary" onclick="cargarPremiosLoto(); cargarExtractoLoto();">
+              <i class="fas fa-check"></i> Confirmar Extracto y Premios
             </button>
           </div>
         </div>
@@ -1678,6 +1788,28 @@
                   </tr>
                 </thead>
                 <tbody id="cpst-tabla-poceada-multiples-body"></tbody>
+              </table>
+            </div>
+          </div>
+
+          <!-- Detalle Loto -->
+          <div class="card hidden" id="cpst-detalle-loto">
+            <div class="card-header" style="display: flex; justify-content: space-between; align-items: center;">
+              <h3>Detalle por Modalidad - Loto</h3>
+            </div>
+            <div class="table-container">
+              <table class="table" id="cpst-tabla-loto">
+                <thead>
+                  <tr>
+                    <th>Modalidad</th>
+                    <th>Nivel</th>
+                    <th>Ganadores</th>
+                    <th>Premio Unitario</th>
+                    <th>Total Premios</th>
+                    <th>Pozo Vacante</th>
+                  </tr>
+                </thead>
+                <tbody id="cpst-tabla-loto-body"></tbody>
               </table>
             </div>
           </div>
@@ -2101,6 +2233,10 @@
                   <label class="game-checkbox">
                     <input type="checkbox" id="dash-game-hipicas" onchange="toggleDashboardGame('hipicas')">
                     <span class="checkmark game-hipicas">🐴 HIPICAS</span>
+                  </label>
+                  <label class="game-checkbox">
+                    <input type="checkbox" id="dash-game-loto" onchange="toggleDashboardGame('loto')">
+                    <span class="checkmark game-loto">🍀 LOTO</span>
                   </label>
                 </div>
               </div>
@@ -2698,9 +2834,9 @@
   <!-- Toast Container -->
   <div id="toast-container"></div>
 
-  <script src="js/api.js?v=20260202d"></script>
-  <script src="js/ocr-extractos.js?v=20260202d"></script>
-  <script src="js/app.js?v=20260202d"></script>
+  <script src="js/api.js?v=20260203a"></script>
+  <script src="js/ocr-extractos.js?v=20260203a"></script>
+  <script src="js/app.js?v=20260203a"></script>
 </body>
 
 </html>
