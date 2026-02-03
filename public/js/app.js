@@ -1967,7 +1967,6 @@ let cpstModalidadSorteo = ''; // R=Previa, P=Primera, M=Matutina, V=Vespertina, 
 let cpstJuegoSeleccionado = 'Quiniela'; // 'Quiniela', 'Poceada' o 'Loto'
 let cpstExtractoPoceada = null; // {numeros: [20 nums], letras: [4 letras]}
 let cpstExtractoLoto = null; // {numeros: [6 nums], plus: number|null}
-let cpstPremiosLoto = null; // {tradicional, match, desquite, saleOSale}
 
 // Mapeo de códigos de modalidad a nombres
 const MODALIDADES_NOMBRE = {
@@ -2349,6 +2348,8 @@ function cargarDatosControlPrevio() {
   const tipoJuegoDetectado = cpResultadosActuales.tipoJuego || 'Quiniela';
   if (tipoJuegoDetectado === 'Poceada') {
     seleccionarJuegoPosterior('Poceada');
+  } else if (tipoJuegoDetectado === 'Loto') {
+    seleccionarJuegoPosterior('Loto');
   } else {
     seleccionarJuegoPosterior('Quiniela');
   }
@@ -2405,7 +2406,12 @@ function cargarDatosControlPrevio() {
     const premios = cpResultadosActuales.datosOficiales.premios;
     console.log('Premios del Control Previo:', premios);
   }
-  
+
+  // Mostrar premios XML de Loto si hay datos oficiales con modalidades
+  if (tipoJuegoDetectado === 'Loto' && cpResultadosActuales.datosOficiales?.modalidades) {
+    mostrarPremiosXmlLoto(cpResultadosActuales.datosOficiales.modalidades);
+  }
+
   // Mostrar cuántos registros reales hay
   const cantRegistros = cpstRegistrosNTF.length;
   showToast(`Datos cargados: ${formatNumber(cantRegistros)} registros. Juego: ${cpstJuegoSeleccionado}. Al ejecutar escrutinio se procesarán solo registros de este juego.`, 'success');
@@ -3606,8 +3612,7 @@ async function ejecutarEscrutinio() {
         body: JSON.stringify({
           registrosNTF: cpstRegistrosNTF,
           extracto: cpstExtractoLoto,
-          datosControlPrevio: cpstDatosControlPrevio,
-          premios: cpstPremiosLoto || {}
+          datosControlPrevio: cpstDatosControlPrevio
         })
       });
 
@@ -3997,14 +4002,39 @@ function cargarExtractoLoto() {
   showToast('Extracto Loto cargado correctamente', 'success');
 }
 
-function cargarPremiosLoto() {
-  const tradicional = parseFloat(document.getElementById('cpst-loto-premio-trad')?.value || 0);
-  const match = parseFloat(document.getElementById('cpst-loto-premio-match')?.value || 0);
-  const desquite = parseFloat(document.getElementById('cpst-loto-premio-desq')?.value || 0);
-  const saleOSale = parseFloat(document.getElementById('cpst-loto-premio-sos')?.value || 0);
+/**
+ * Muestra los premios del XML (Control Previo) como información read-only
+ */
+function mostrarPremiosXmlLoto(modalidades) {
+  const container = document.getElementById('cpst-loto-premios-xml');
+  const content = document.getElementById('cpst-loto-premios-xml-content');
+  if (!container || !content) return;
 
-  cpstPremiosLoto = { tradicional, match, desquite, saleOSale };
-  showToast('Premios Loto cargados', 'success');
+  const modNames = ['Tradicional', 'Match', 'Desquite', 'Sale o Sale', 'Multiplicador'];
+  const badges = { 'Tradicional': 'warning', 'Match': 'primary', 'Desquite': 'info', 'Sale o Sale': 'success', 'Multiplicador': 'danger' };
+  let html = '<div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1rem;">';
+
+  for (const mod of modNames) {
+    const data = modalidades[mod];
+    if (!data) continue;
+    const premios = data.premios || {};
+    html += `<div style="padding: 0.75rem; background: var(--surface); border-radius: 6px; border: 1px solid var(--border-color);">
+      <strong><span class="badge badge-${badges[mod] || 'secondary'}">${mod}</span></strong>`;
+    if (premios.primerPremio) {
+      html += `<div style="margin-top: 0.5rem;"><small class="text-muted">1er Premio TOTALES:</small><br><strong>$${formatNumber(premios.primerPremio.totales || 0)}</strong></div>`;
+      if (premios.primerPremio.pozoVacante > 0) html += `<div><small class="text-muted">Pozo Vacante:</small> $${formatNumber(premios.primerPremio.pozoVacante)}</div>`;
+    }
+    if (premios.segundoPremio) html += `<div><small class="text-muted">2do Premio:</small> $${formatNumber(premios.segundoPremio.totales || 0)}</div>`;
+    if (premios.tercerPremio) html += `<div><small class="text-muted">3er Premio:</small> $${formatNumber(premios.tercerPremio.totales || 0)}</div>`;
+    if (premios.agenciero) html += `<div><small class="text-muted">Agenciero:</small> $${formatNumber(premios.agenciero.totales || 0)}</div>`;
+    if (premios.fondoReserva) html += `<div><small class="text-muted">Fondo Reserva:</small> $${formatNumber(premios.fondoReserva.monto || 0)}</div>`;
+    if (premios.fondoCompensador) html += `<div><small class="text-muted">Fondo Compensador:</small> $${formatNumber(premios.fondoCompensador.monto || 0)}</div>`;
+    html += '</div>';
+  }
+  html += '</div>';
+
+  content.innerHTML = html;
+  container.classList.remove('hidden');
 }
 
 function mostrarResultadosEscrutinioLoto(resultado) {
@@ -4055,14 +4085,19 @@ function mostrarResultadosEscrutinioLoto(resultado) {
       const modData = resultado.porModalidad?.[mod];
       if (!modData) continue;
 
-      for (const nivel of [6, 5, 4]) {
-        const nivelData = modData.porNivel?.[nivel] || { ganadores: 0, premioUnitario: 0, totalPremios: 0, pozoVacante: 0 };
-        const nombreNivel = nivel === 6 ? '1er Premio (6)' : (nivel === 5 ? '2do Premio (5)' : '3er Premio (4)');
+      // Desquite solo tiene 1er premio (6 aciertos), Sale o Sale es cascada
+      const nivelesAMostrar = mod === 'Desquite' ? [6] : [6, 5, 4];
+
+      for (const nivel of nivelesAMostrar) {
+        const nivelData = modData.porNivel?.[nivel] || { ganadores: 0, premioUnitario: 0, totalPremios: 0, pozoVacante: 0, pozoXml: 0 };
+        const nombreNivel = nivel === 6 ? '1er Premio (6 aciertos)' : (nivel === 5 ? '2do Premio (5 aciertos)' : '3er Premio (4 aciertos)');
+        const pozoXml = nivelData.pozoXml || 0;
         tbodyLoto.innerHTML += `
           <tr>
             <td><span class="badge badge-${badges[mod]}">${mod}</span></td>
-            <td>${nombreNivel}</td>
+            <td>${nombreNivel}${nivelData._esSaleOSale ? ' <small class="text-warning">(cascada)</small>' : ''}</td>
             <td>${formatNumber(nivelData.ganadores)}<br><small class="text-muted">${nivelData.ganadoresTexto || ''}</small></td>
+            <td style="color: var(--text-secondary);">$${formatNumber(pozoXml)}</td>
             <td>$${formatNumber(nivelData.premioUnitario)}</td>
             <td>$${formatNumber(nivelData.totalPremios)}</td>
             <td>${nivelData.pozoVacante > 0 ? '$' + formatNumber(nivelData.pozoVacante) : '-'}</td>
@@ -4076,21 +4111,41 @@ function mostrarResultadosEscrutinioLoto(resultado) {
             <td><span class="badge badge-${badges[mod]}">${mod}</span></td>
             <td><span class="badge badge-info">AGENCIERO</span></td>
             <td>${formatNumber(modData.agenciero.ganadores)}</td>
+            <td>-</td>
             <td>$${formatNumber(modData.agenciero.premioUnitario)}</td>
             <td>$${formatNumber(modData.agenciero.totalPremios)}</td>
             <td>-</td>
           </tr>`;
       }
+
+      // Fondos informativos
+      if (modData.fondoReserva > 0 || modData.fondoCompensador > 0) {
+        const fondo = modData.fondoReserva > 0 ? modData.fondoReserva : modData.fondoCompensador;
+        const tipoFondo = modData.fondoReserva > 0 ? 'Fondo Reserva' : 'Fondo Compensador';
+        tbodyLoto.innerHTML += `
+          <tr style="background: var(--surface-hover); opacity: 0.8;">
+            <td><span class="badge badge-${badges[mod]}">${mod}</span></td>
+            <td><small>${tipoFondo}</small></td>
+            <td>-</td>
+            <td>-</td>
+            <td>-</td>
+            <td>$${formatNumber(fondo)}</td>
+            <td>-</td>
+          </tr>`;
+      }
     }
 
-    // PLUS
-    if (resultado.plus && resultado.plus.ganadores > 0) {
+    // Multiplicador / PLUS
+    if (resultado.plus) {
+      const plusInfo = resultado.plus;
       tbodyLoto.innerHTML += `
         <tr style="background: rgba(234, 179, 8, 0.1);">
-          <td colspan="2"><span class="badge badge-warning">PLUS</span> Número ${resultado.plus.numero}</td>
-          <td>${formatNumber(resultado.plus.ganadores)}</td>
+          <td><span class="badge badge-danger">Multiplicador</span></td>
+          <td>PLUS N° ${plusInfo.numero != null ? plusInfo.numero : 'N/A'}</td>
+          <td>${plusInfo.ganadores > 0 ? formatNumber(plusInfo.ganadores) : 'Sin ganadores'}</td>
           <td>-</td>
-          <td>$${formatNumber(resultado.plus.premioExtra)}</td>
+          <td>-</td>
+          <td>${plusInfo.premioExtra > 0 ? '$' + formatNumber(plusInfo.premioExtra) : '-'}</td>
           <td>-</td>
         </tr>`;
     }
@@ -4098,8 +4153,8 @@ function mostrarResultadosEscrutinioLoto(resultado) {
     // Total
     tbodyLoto.innerHTML += `
       <tr style="font-weight: bold; border-top: 2px solid var(--border-color);">
-        <td colspan="2">TOTAL</td>
-        <td>${formatNumber(resultado.totalGanadores)}</td>
+        <td colspan="3">TOTAL</td>
+        <td>-</td>
         <td>-</td>
         <td>$${formatNumber(resultado.totalPremios)}</td>
         <td>-</td>
