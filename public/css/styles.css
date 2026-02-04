@@ -538,6 +538,23 @@ body {
   content: ' - ¡Suelte aquí!';
 }
 
+/* File Drop Zone genérica */
+.file-drop-zone {
+  transition: all 0.2s ease;
+}
+
+.file-drop-zone:hover {
+  border-color: var(--primary);
+  background: rgba(59, 130, 246, 0.05);
+}
+
+.file-drop-zone.drag-over {
+  border-color: var(--success) !important;
+  border-style: solid !important;
+  background: rgba(34, 197, 94, 0.15) !important;
+  transform: scale(1.02);
+}
+
 /* OCR Tabs */
 .ocr-tabs {
   display: flex;

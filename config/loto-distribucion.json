@@ -1,0 +1,51 @@
+{
+  "modalidades": {
+    "Tradicional": {
+      "niveles": {
+        "6": { "porcentaje": 65 },
+        "5": { "porcentaje": 15 },
+        "4": { "porcentaje": 3 }
+      },
+      "agenciero": { "porcentaje": 2 },
+      "fondo": { "tipo": "reserva", "porcentaje": 15 },
+      "pozoAsegurado": null
+    },
+    "Match": {
+      "niveles": {
+        "6": { "porcentaje": 65 },
+        "5": { "porcentaje": 15 },
+        "4": { "porcentaje": 3 }
+      },
+      "agenciero": { "porcentaje": 2 },
+      "fondo": { "tipo": "reserva", "porcentaje": 15 },
+      "pozoAsegurado": null
+    },
+    "Desquite": {
+      "niveles": {
+        "6": { "porcentaje": 80 }
+      },
+      "agenciero": { "porcentaje": 2 },
+      "fondo": { "tipo": "reserva", "porcentaje": 18 },
+      "pozoAsegurado": null
+    },
+    "Sale o Sale": {
+      "niveles": {
+        "6": { "porcentaje": 85, "cascada": true },
+        "5": { "porcentaje": 0, "cascada": true },
+        "4": { "porcentaje": 0, "cascada": true },
+        "3": { "porcentaje": 0, "cascada": true },
+        "2": { "porcentaje": 0, "cascada": true },
+        "1": { "porcentaje": 0, "cascada": true }
+      },
+      "agenciero": { "porcentaje": 2, "soloConSeisAciertos": true },
+      "fondo": { "tipo": "reserva", "porcentaje": 15 },
+      "pozoAsegurado": null
+    },
+    "Multiplicador": {
+      "premioExtra": { "multiplicador": 2 },
+      "agenciero": { "fijo": 500000 },
+      "fondo": { "tipo": "compensador", "porcentaje": 100 },
+      "pozoAsegurado": null
+    }
+  }
+}

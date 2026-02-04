@@ -636,22 +636,52 @@
           </div>
         </div>
 
-        <!-- Loto: Modalidades -->
+        <!-- Loto: Modalidades con premios completos -->
         <div id="cp-loto-modalidades" class="card hidden" style="border-left: 5px solid var(--warning);">
           <div class="card-header">
-            <h3><i class="fas fa-layer-group"></i> Desglose por Modalidad</h3>
+            <h3><i class="fas fa-layer-group"></i> Desglose por Modalidad - LOTO</h3>
+            <span class="badge badge-warning">Memorando</span>
           </div>
-          <div class="table-container">
-            <table class="table">
+          <div class="table-container" style="overflow-x: auto;">
+            <table class="table" style="min-width: 1000px;">
               <thead>
                 <tr>
                   <th>Modalidad</th>
                   <th>Registros</th>
                   <th>Apuestas</th>
                   <th>Recaudación</th>
+                  <th>Premio 6 Ac</th>
+                  <th>Premio 5 Ac</th>
+                  <th>Premio 4 Ac</th>
+                  <th>Agenciero</th>
+                  <th>Fondo</th>
+                  <th>Pozo Vacante</th>
                 </tr>
               </thead>
               <tbody></tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- Loto: Comparación Pozos Vacantes y Arrastres -->
+        <div id="cp-loto-pozos" class="card hidden" style="border-left: 5px solid var(--danger);">
+          <div class="card-header">
+            <h3><i class="fas fa-coins"></i> Pozos Vacantes y Arrastres - LOTO</h3>
+            <span class="badge badge-danger">Comparación XML</span>
+          </div>
+          <div class="table-container" style="overflow-x: auto;">
+            <table class="table" style="min-width: 800px;">
+              <thead>
+                <tr>
+                  <th>Modalidad</th>
+                  <th>Premio</th>
+                  <th>Monto Calculado</th>
+                  <th>Pozo Vacante</th>
+                  <th>Pozo a Asegurar</th>
+                  <th>Total</th>
+                </tr>
+              </thead>
+              <tbody id="cp-loto-pozos-body"></tbody>
             </table>
           </div>
         </div>
@@ -696,41 +726,29 @@
             </div>
           </div>
 
-          <!-- Desglose por tipo de sorteo y provincia -->
-          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem;">
-            <div class="card">
-              <div class="card-header">
-                <h3>Recaudación por Provincia</h3>
-                <span class="badge badge-info" id="cp-sorteo-badge">Sorteo: -</span>
-              </div>
+          <!-- Desglose por Provincia (Unificado) -->
+          <div class="card">
+            <div class="card-header">
+              <h3><i class="fas fa-map-marker-alt"></i> Desglose por Provincia</h3>
+              <span class="badge badge-info" id="cp-sorteo-badge">Sorteo: -</span>
+            </div>
+            <div class="table-container">
               <table class="table" id="cp-tabla-recaudacion-prov">
                 <thead>
                   <tr>
                     <th>Provincia</th>
                     <th>Recaudación</th>
-                    <th>% del Total</th>
-                  </tr>
-                </thead>
-                <tbody></tbody>
-              </table>
-            </div>
-
-            <div class="card">
-              <div class="card-header">
-                <h3>Por Provincia (Loterías)</h3>
-              </div>
-              <table class="table" id="cp-tabla-provincias">
-                <thead>
-                  <tr>
-                    <th>Provincia</th>
+                    <th>% Rec.</th>
                     <th>Apuestas</th>
-                    <th>% del Total</th>
+                    <th>% Ap.</th>
                   </tr>
                 </thead>
                 <tbody></tbody>
               </table>
             </div>
           </div>
+          <!-- Tabla oculta para compatibilidad -->
+          <table class="table hidden" id="cp-tabla-provincias" style="display:none;"><tbody></tbody></table>
 
           <!-- Comparación con XML -->
           <div class="card">
@@ -1023,17 +1041,6 @@
               <div class="form-group" style="flex: 0 0 auto; min-width: 180px;">
                 <label class="radio-card"
                   style="display: flex; align-items: center; gap: 0.75rem; padding: 0.75rem; border: 2px solid var(--border-color); border-radius: 8px; cursor: pointer; transition: all 0.2s;"
-                  onclick="seleccionarJuegoPosterior('Loto')">
-                  <input type="radio" name="cpst-juego" value="Loto" style="width: 18px; height: 18px;">
-                  <div>
-                    <strong style="font-size: 0.95rem;">💰 Loto</strong>
-                    <p class="text-muted" style="margin: 0; font-size: 0.7rem;">Trad/Desquite</p>
-                  </div>
-                </label>
-              </div>
-              <div class="form-group" style="flex: 0 0 auto; min-width: 180px;">
-                <label class="radio-card"
-                  style="display: flex; align-items: center; gap: 0.75rem; padding: 0.75rem; border: 2px solid var(--border-color); border-radius: 8px; cursor: pointer; transition: all 0.2s;"
                   onclick="seleccionarJuegoPosterior('Loto 5')">
                   <input type="radio" name="cpst-juego" value="Loto 5" style="width: 18px; height: 18px;">
                   <div>
@@ -1042,12 +1049,12 @@
                   </div>
                 </label>
               </div>
-              <div class="form-group" style="flex: 1;">
-                <label class="radio-card" style="display: flex; align-items: center; gap: 1rem; padding: 1rem; border: 2px solid var(--border-color); border-radius: 8px; cursor: pointer; transition: all 0.2s;" onclick="seleccionarJuegoPosterior('Loto')">
-                  <input type="radio" name="cpst-juego" value="Loto" style="width: 20px; height: 20px;">
+              <div class="form-group" style="flex: 0 0 auto; min-width: 180px;">
+                <label class="radio-card" style="display: flex; align-items: center; gap: 0.75rem; padding: 0.75rem; border: 2px solid var(--border-color); border-radius: 8px; cursor: pointer; transition: all 0.2s;" onclick="seleccionarJuegoPosterior('Loto')">
+                  <input type="radio" name="cpst-juego" value="Loto" style="width: 18px; height: 18px;">
                   <div>
-                    <strong style="font-size: 1.1rem;">🍀 Loto</strong>
-                    <p class="text-muted" style="margin: 0; font-size: 0.85rem;">6 números (0-45) + PLUS | 4 modalidades</p>
+                    <strong style="font-size: 0.95rem;">🍀 Loto</strong>
+                    <p class="text-muted" style="margin: 0; font-size: 0.7rem;">6/45 | 4 modalidades</p>
                   </div>
                 </label>
               </div>
@@ -1329,6 +1336,28 @@
         <div class="card hidden" id="cpst-extracto-loto-card">
           <div class="card-header">
             <h3>2. Extracto Loto (4 Modalidades x 6 Números + PLUS)</h3>
+          </div>
+
+          <!-- Zona de Drop para XML -->
+          <div id="cpst-loto-xml-dropzone" class="file-drop-zone" 
+               style="margin-bottom: 1rem; padding: 1.5rem; border: 2px dashed var(--warning); border-radius: 8px; text-align: center; cursor: pointer; background: rgba(245, 158, 11, 0.05);"
+               ondragover="event.preventDefault(); this.classList.add('drag-over');"
+               ondragleave="this.classList.remove('drag-over');"
+               ondrop="event.preventDefault(); this.classList.remove('drag-over'); cargarXMLExtractoLoto(event.dataTransfer.files[0]);">
+            <i class="fas fa-file-code fa-2x text-warning mb-2"></i>
+            <p style="margin: 0.5rem 0;"><strong>Arrastrá el XML del extracto aquí</strong></p>
+            <p class="text-muted" style="font-size: 0.85rem; margin: 0;">o hacé click para seleccionar</p>
+            <input type="file" id="cpst-loto-xml-input" accept=".xml" style="display: none;" onchange="cargarXMLExtractoLoto(this.files[0]);">
+          </div>
+          <div id="cpst-loto-xml-info" class="hidden" style="margin-bottom: 1rem; padding: 0.75rem; background: var(--success-bg); border-radius: 8px; border-left: 4px solid var(--success);">
+            <div style="display: flex; justify-content: space-between; align-items: center;">
+              <span><i class="fas fa-check-circle text-success"></i> <strong id="cpst-loto-xml-filename">archivo.xml</strong> cargado</span>
+              <button class="btn btn-sm btn-outline" onclick="limpiarXMLExtractoLoto()"><i class="fas fa-times"></i></button>
+            </div>
+          </div>
+
+          <div style="text-align: center; margin: 0.5rem 0; color: var(--text-muted);">
+            <small>─── o ingresá los números manualmente ───</small>
           </div>
 
           <!-- Tradicional -->
@@ -2391,6 +2420,8 @@
                     <option value="">Todos</option>
                     <option value="quiniela">Quiniela</option>
                     <option value="poceada">Poceada</option>
+                    <option value="tombolina">Tombolina</option>
+                    <option value="loto">Loto</option>
                   </select>
                 </div>
                 <div class="col-md-2">
@@ -2460,6 +2491,8 @@
                     <option value="">Todos</option>
                     <option value="quiniela">Quiniela</option>
                     <option value="poceada">Poceada</option>
+                    <option value="tombolina">Tombolina</option>
+                    <option value="loto">Loto</option>
                   </select>
                 </div>
                 <div class="col-md-2">

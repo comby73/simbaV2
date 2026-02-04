@@ -397,7 +397,7 @@ const buscarSorteo = async (req, res) => {
 
 /**
  * GET /api/historial/control-previo
- * Lista el historial de control previo de ambos juegos combinado
+ * Lista el historial de control previo de todos los juegos combinado
  */
 const listarControlPrevioGeneral = async (req, res) => {
   try {
@@ -444,6 +444,54 @@ const listarControlPrevioGeneral = async (req, res) => {
       resultados = resultados.concat(poceadaData);
     }
 
+    // Obtener Tombolina si no se especifica juego o es tombolina
+    if (!juego || juego === 'tombolina') {
+      try {
+        let sqlT = `
+          SELECT cp.*, u.nombre as usuario_nombre, 'tombolina' as juego
+          FROM control_previo_tombolina cp
+          LEFT JOIN usuarios u ON cp.usuario_id = u.id
+          WHERE 1=1
+        `;
+        const paramsT = [];
+
+        if (fechaDesde) { sqlT += ' AND cp.fecha >= ?'; paramsT.push(fechaDesde); }
+        if (fechaHasta) { sqlT += ' AND cp.fecha <= ?'; paramsT.push(fechaHasta); }
+
+        sqlT += ` ORDER BY cp.fecha DESC, cp.created_at DESC LIMIT ${maxLimit}`;
+
+        const tombolinaData = await query(sqlT, paramsT);
+        resultados = resultados.concat(tombolinaData);
+      } catch (e) {
+        // Tabla puede no existir todavía
+        console.log('Tabla control_previo_tombolina no disponible');
+      }
+    }
+
+    // Obtener Loto si no se especifica juego o es loto
+    if (!juego || juego === 'loto') {
+      try {
+        let sqlL = `
+          SELECT cp.*, u.nombre as usuario_nombre, 'loto' as juego
+          FROM control_previo_loto cp
+          LEFT JOIN usuarios u ON cp.usuario_id = u.id
+          WHERE 1=1
+        `;
+        const paramsL = [];
+
+        if (fechaDesde) { sqlL += ' AND cp.fecha >= ?'; paramsL.push(fechaDesde); }
+        if (fechaHasta) { sqlL += ' AND cp.fecha <= ?'; paramsL.push(fechaHasta); }
+
+        sqlL += ` ORDER BY cp.fecha DESC, cp.created_at DESC LIMIT ${maxLimit}`;
+
+        const lotoData = await query(sqlL, paramsL);
+        resultados = resultados.concat(lotoData);
+      } catch (e) {
+        // Tabla puede no existir todavía
+        console.log('Tabla control_previo_loto no disponible');
+      }
+    }
+
     // Ordenar por fecha y limitar
     resultados.sort((a, b) => new Date(b.fecha) - new Date(a.fecha));
     resultados = resultados.slice(0, maxLimit);
@@ -465,11 +513,18 @@ const obtenerDetalleControlPrevio = async (req, res) => {
     const { id } = req.params;
     const { juego } = req.query;
 
-    if (!juego || !['quiniela', 'poceada'].includes(juego)) {
-      return errorResponse(res, 'Debe especificar juego (quiniela o poceada)', 400);
+    const juegosValidos = ['quiniela', 'poceada', 'tombolina', 'loto'];
+    if (!juego || !juegosValidos.includes(juego)) {
+      return errorResponse(res, `Debe especificar juego válido: ${juegosValidos.join(', ')}`, 400);
     }
 
-    const tabla = juego === 'quiniela' ? 'control_previo_quiniela' : 'control_previo_poceada';
+    const tablaMap = {
+      'quiniela': 'control_previo_quiniela',
+      'poceada': 'control_previo_poceada',
+      'tombolina': 'control_previo_tombolina',
+      'loto': 'control_previo_loto'
+    };
+    const tabla = tablaMap[juego];
 
     const [registro] = await query(`
       SELECT cp.*, u.nombre as usuario_nombre
@@ -492,7 +547,7 @@ const obtenerDetalleControlPrevio = async (req, res) => {
 
 /**
  * GET /api/historial/escrutinios
- * Lista el historial de escrutinios de ambos juegos combinado
+ * Lista el historial de escrutinios de todos los juegos combinado
  */
 const listarEscrutiniosGeneral = async (req, res) => {
   try {
@@ -539,6 +594,52 @@ const listarEscrutiniosGeneral = async (req, res) => {
       resultados = resultados.concat(poceadaData);
     }
 
+    // Obtener Tombolina
+    if (!juego || juego === 'tombolina') {
+      try {
+        let sqlT = `
+          SELECT e.*, u.nombre as usuario_nombre, 'tombolina' as juego
+          FROM escrutinio_tombolina e
+          LEFT JOIN usuarios u ON e.usuario_id = u.id
+          WHERE 1=1
+        `;
+        const paramsT = [];
+
+        if (fechaDesde) { sqlT += ' AND e.fecha >= ?'; paramsT.push(fechaDesde); }
+        if (fechaHasta) { sqlT += ' AND e.fecha <= ?'; paramsT.push(fechaHasta); }
+
+        sqlT += ` ORDER BY e.fecha DESC, e.created_at DESC LIMIT ${maxLimit}`;
+
+        const tombolinaData = await query(sqlT, paramsT);
+        resultados = resultados.concat(tombolinaData);
+      } catch (e) {
+        console.log('Tabla escrutinio_tombolina no disponible');
+      }
+    }
+
+    // Obtener Loto
+    if (!juego || juego === 'loto') {
+      try {
+        let sqlL = `
+          SELECT e.*, u.nombre as usuario_nombre, 'loto' as juego
+          FROM escrutinio_loto e
+          LEFT JOIN usuarios u ON e.usuario_id = u.id
+          WHERE 1=1
+        `;
+        const paramsL = [];
+
+        if (fechaDesde) { sqlL += ' AND e.fecha >= ?'; paramsL.push(fechaDesde); }
+        if (fechaHasta) { sqlL += ' AND e.fecha <= ?'; paramsL.push(fechaHasta); }
+
+        sqlL += ` ORDER BY e.fecha DESC, e.created_at DESC LIMIT ${maxLimit}`;
+
+        const lotoData = await query(sqlL, paramsL);
+        resultados = resultados.concat(lotoData);
+      } catch (e) {
+        console.log('Tabla escrutinio_loto no disponible');
+      }
+    }
+
     // Ordenar por fecha y limitar
     resultados.sort((a, b) => new Date(b.fecha) - new Date(a.fecha));
     resultados = resultados.slice(0, maxLimit);
@@ -560,11 +661,18 @@ const obtenerDetalleEscrutinio = async (req, res) => {
     const { id } = req.params;
     const { juego } = req.query;
 
-    if (!juego || !['quiniela', 'poceada'].includes(juego)) {
-      return errorResponse(res, 'Debe especificar juego (quiniela o poceada)', 400);
+    const juegosValidos = ['quiniela', 'poceada', 'tombolina', 'loto'];
+    if (!juego || !juegosValidos.includes(juego)) {
+      return errorResponse(res, `Debe especificar juego válido: ${juegosValidos.join(', ')}`, 400);
     }
 
-    const tabla = juego === 'quiniela' ? 'escrutinio_quiniela' : 'escrutinio_poceada';
+    const tablaMap = {
+      'quiniela': 'escrutinio_quiniela',
+      'poceada': 'escrutinio_poceada',
+      'tombolina': 'escrutinio_tombolina',
+      'loto': 'escrutinio_loto'
+    };
+    const tabla = tablaMap[juego];
 
     const [registro] = await query(`
       SELECT e.*, u.nombre as usuario_nombre

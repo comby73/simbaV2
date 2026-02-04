@@ -26,12 +26,15 @@ const { successResponse, errorResponse, PROVINCIAS } = require('../../shared/hel
 const CONFIG_DISTRIBUCION_PATH = path.join(__dirname, '../../../config/loto-distribucion.json');
 
 // Códigos de juego Loto en el NTF
+// IMPORTANTE: En LOTO, el código '09' es genérico para TODAS las apuestas.
+// Cada apuesta participa simultáneamente en TODAS las modalidades (Tradicional, Match, Desquite, Sale o Sale)
+// con los MISMOS 6 números. El código NO indica la modalidad.
 const LOTO_GAME_CODES = {
-  '07': 'Tradicional',
-  '08': 'Match',
-  '09': 'Desquite',
-  '10': 'Sale o Sale',
-  '11': 'Multiplicador'
+  '07': 'Loto',  // Loto genérico
+  '08': 'Loto',  // Loto genérico
+  '09': 'Loto',  // Loto genérico - TODAS las apuestas usan este código
+  '10': 'Loto',  // Loto genérico
+  '11': 'Multiplicador'  // Solo Multiplicador tiene código específico
 };
 
 // Posiciones NTF genéricas (idénticas a Poceada/Quiniela)
@@ -361,17 +364,28 @@ function procesarArchivoNTF(content) {
   let apuestasTotal = 0;
   let recaudacion = 0;
   const provincias = {};
+  // En LOTO, NO separamos por modalidad porque TODAS las apuestas participan en TODAS las modalidades
+  // Solo mantenemos esta estructura para compatibilidad con la UI
   const modalidades = {
-    'Tradicional': { registros: 0, apuestas: 0, recaudacion: 0 },
-    'Match': { registros: 0, apuestas: 0, recaudacion: 0 },
-    'Desquite': { registros: 0, apuestas: 0, recaudacion: 0 },
-    'Sale o Sale': { registros: 0, apuestas: 0, recaudacion: 0 },
-    'Multiplicador': { registros: 0, apuestas: 0, recaudacion: 0 }
+    'Loto': { registros: 0, apuestas: 0, recaudacion: 0 },  // Todas las apuestas regulares
+    'Multiplicador': { registros: 0, apuestas: 0, recaudacion: 0 }  // Solo apuestas con PLUS
   };
   const registrosParseados = [];
 
+  // Debug: mostrar primeras líneas para entender el formato
+  console.log(`📋 Total líneas válidas: ${lines.length}`);
+  if (lines.length > 0) {
+    console.log(`📋 Primeros 50 chars línea 1: "${lines[0].substring(0, 50)}"`);
+    console.log(`📋 gameCode pos 2-4: "${lines[0].substr(2, 2)}"`);
+    console.log(`📋 MODALIDAD pos 202-204: "${lines[0].substr(202, 2)}"`);
+  }
+
+  // Contar códigos de juego encontrados
+  const gameCodesCount = {};
+
   for (const line of lines) {
     const gameCode = line.substr(NTF_GENERIC.JUEGO.start, NTF_GENERIC.JUEGO.length);
+    gameCodesCount[gameCode] = (gameCodesCount[gameCode] || 0) + 1;
 
     // Solo procesar códigos de Loto (07-11)
     const modalidadNombre = LOTO_GAME_CODES[gameCode];
@@ -422,7 +436,8 @@ function procesarArchivoNTF(content) {
       apuestasTotal += nroApuestas;
       recaudacion += valor;
 
-      // Acumular por modalidad
+      // Acumular por tipo de juego (Loto genérico o Multiplicador)
+      // TODAS las apuestas regulares van a "Loto" y participan en todas las modalidades
       if (modalidades[modalidadNombre]) {
         modalidades[modalidadNombre].registros++;
         modalidades[modalidadNombre].apuestas += nroApuestas;
@@ -462,6 +477,10 @@ function procesarArchivoNTF(content) {
   for (const key in provincias) {
     totalVentaWeb += provincias[key].ventaWeb || 0;
   }
+
+  // Log de códigos de juego encontrados
+  console.log('📊 Códigos de juego en archivo NTF:', gameCodesCount);
+  console.log('📊 Modalidades procesadas:', modalidades);
 
   return {
     numeroSorteo,
