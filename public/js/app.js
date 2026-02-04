@@ -2674,6 +2674,7 @@ let cpstModalidadSorteo = ''; // R=Previa, P=Primera, M=Matutina, V=Vespertina, 
 let cpstJuegoSeleccionado = 'Quiniela'; // 'Quiniela', 'Poceada' o 'Loto'
 let cpstExtractoPoceada = null; // {numeros: [20 nums], letras: [4 letras]}
 let cpstExtractoLoto = null; // {tradicional: [6], match: [6], desquite: [6], saleOSale: [6], plus: number|null}
+let cpstExtractoLoto5 = null; // {numeros: [5 nums 0-36]}
 
 // Mapeo de códigos de modalidad a nombres
 const MODALIDADES_NOMBRE = {
@@ -2720,6 +2721,8 @@ function seleccionarJuegoPosterior(juego) {
       subtitulo.textContent = 'Control de aciertos sobre extracto de Quiniela';
     } else if (juego === 'Loto') {
       subtitulo.textContent = 'Escrutinio Loto: 4 modalidades (Tradicional, Match, Desquite, Sale o Sale)';
+    } else if (juego === 'Loto 5') {
+      subtitulo.textContent = 'Escrutinio Loto 5: 5 números (0-36), niveles 5/4/3 aciertos';
     } else if (['Quini 6', 'Brinco'].includes(juego)) {
       subtitulo.textContent = `Escrutinio de ganadores para ${juego}`;
     } else {
@@ -2750,17 +2753,21 @@ function seleccionarJuegoPosterior(juego) {
   const extractoQuiniela = document.getElementById('cpst-extracto-quiniela-card');
   const extractoPoceada = document.getElementById('cpst-extracto-poceada-card');
   const extractoLoto = document.getElementById('cpst-extracto-loto-card');
+  const extractoLoto5 = document.getElementById('cpst-extracto-loto5-card');
   const detalleQuiniela = document.getElementById('cpst-detalle-quiniela');
   const detallePoceada = document.getElementById('cpst-detalle-poceada');
   const detalleLoto = document.getElementById('cpst-detalle-loto');
+  const detalleLoto5 = document.getElementById('cpst-detalle-loto5');
 
   // Ocultar todos primero
   extractoQuiniela?.classList.add('hidden');
   extractoPoceada?.classList.add('hidden');
   extractoLoto?.classList.add('hidden');
+  extractoLoto5?.classList.add('hidden');
   detalleQuiniela?.classList.add('hidden');
   detallePoceada?.classList.add('hidden');
   detalleLoto?.classList.add('hidden');
+  detalleLoto5?.classList.add('hidden');
 
   if (juego === 'Quiniela') {
     extractoQuiniela?.classList.remove('hidden');
@@ -2768,6 +2775,9 @@ function seleccionarJuegoPosterior(juego) {
   } else if (juego === 'Loto') {
     extractoLoto?.classList.remove('hidden');
     detalleLoto?.classList.remove('hidden');
+  } else if (juego === 'Loto 5') {
+    extractoLoto5?.classList.remove('hidden');
+    detalleLoto5?.classList.remove('hidden');
   } else {
     // For Poceada, Tombolina, Quini 6, Brinco, etc.
     extractoPoceada?.classList.remove('hidden');
@@ -2803,6 +2813,7 @@ function seleccionarJuegoPosterior(juego) {
   if (hintModalidad) {
     if (juego === 'Poceada') hintModalidad.textContent = '💡 Para Poceada solo se procesarán registros de tipo POC';
     else if (juego === 'Loto') hintModalidad.textContent = '💡 Loto: ingrese 4 extractos de 6 números (0-45) y opcionalmente el número PLUS (0-9)';
+    else if (juego === 'Loto 5') hintModalidad.textContent = '💡 Loto 5: ingrese 5 números (0-36)';
     else hintModalidad.textContent = '💡 Al cargar XMLs, solo se procesarán los de la modalidad detectada';
   }
 
@@ -3299,6 +3310,11 @@ function cargarDatosControlPrevio() {
     }
   }
 
+  // Mostrar premios XML de Loto 5 si hay datos oficiales
+  if (tipoJuegoDetectado === 'Loto 5' && cpResultadosActuales.datosOficiales?.premios) {
+    mostrarPremiosXmlLoto5(cpResultadosActuales.datosOficiales.premios);
+  }
+
   const cantRegistros = cpstRegistrosNTF.length;
   if (cantRegistros > 0) {
     showToast(`Datos cargados correctamente: ${formatNumber(cantRegistros)} registros operativos de ${cpstJuegoSeleccionado}.`, 'success');
@@ -3629,6 +3645,7 @@ async function cargarZipPosterior(input) {
     if (juegoConfig.nombre === 'Poceada') endpoint = `${API_BASE}/control-previo/poceada/procesar`;
     if (juegoConfig.nombre === 'Tombolina') endpoint = `${API_BASE}/control-previo/tombolina/procesar`;
     if (juegoConfig.nombre === 'Loto') endpoint = `${API_BASE}/control-previo/loto/procesar`;
+    if (juegoConfig.nombre === 'Loto 5') endpoint = `${API_BASE}/control-previo/loto5/procesar-zip`;
 
     const response = await fetch(endpoint, {
       method: 'POST',
@@ -5225,6 +5242,11 @@ async function ejecutarEscrutinio() {
       showToast('Cargue los 4 extractos de Loto (6 números por modalidad)', 'warning');
       return;
     }
+  } else if (cpstJuegoSeleccionado === 'Loto 5') {
+    if (!cpstExtractoLoto5 || cpstExtractoLoto5.numeros.length < 5) {
+      showToast('Cargue el extracto de Loto 5 (5 números del sorteo)', 'warning');
+      return;
+    }
   }
 
   if (!cpstDatosControlPrevio) {
@@ -5304,6 +5326,28 @@ async function ejecutarEscrutinio() {
       cpstResultados.xmlData = cpstLotoXmlData;
       mostrarResultadosEscrutinioLoto(cpstResultados);
       showToast('Escrutinio Loto completado', 'success');
+
+    } else if (cpstJuegoSeleccionado === 'Loto 5') {
+      // Ejecutar escrutinio de Loto 5
+      const response = await fetch(`${API_BASE}/control-posterior/loto5/escrutinio`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({
+          registrosNTF: cpstRegistrosNTF,
+          extracto: cpstExtractoLoto5,
+          datosControlPrevio: cpstDatosControlPrevio
+        })
+      });
+
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.message);
+
+      cpstResultados = data.data;
+      mostrarResultadosEscrutinioLoto5(cpstResultados);
+      showToast('Escrutinio Loto 5 completado', 'success');
 
     } else if (cpstJuegoSeleccionado === 'Poceada') {
       // Ejecutar escrutinio de Poceada
@@ -6233,6 +6277,220 @@ function mostrarResultadosEscrutinioLoto(resultado) {
 }
 
 // ============= FIN LOTO ESCRUTINIO =============
+
+// ============= LOTO 5 ESCRUTINIO =============
+
+function cargarExtractoLoto5() {
+  const numeros = [];
+  for (let i = 1; i <= 5; i++) {
+    const input = document.getElementById(`cpst-loto5-num-${i}`);
+    if (!input || input.value === '') {
+      showToast(`Ingrese el número ${i} del extracto`, 'warning');
+      return;
+    }
+    const num = parseInt(input.value);
+    if (isNaN(num) || num < 0 || num > 36) {
+      showToast(`Número ${i} debe estar entre 0 y 36`, 'warning');
+      return;
+    }
+    numeros.push(num);
+  }
+
+  cpstExtractoLoto5 = { numeros };
+
+  const preview = document.getElementById('cpst-loto5-preview');
+  if (preview) {
+    preview.innerHTML = `
+      <div style="padding: 0.5rem; background: var(--bg-input); border-radius: 6px; margin-top: 0.5rem;">
+        <strong>Extracto cargado:</strong>
+        <span style="font-family: monospace; color: var(--warning);">
+          ${numeros.map(n => n.toString().padStart(2, '0')).join(' - ')}
+        </span>
+      </div>`;
+  }
+
+  showToast('Extracto Loto 5 cargado correctamente', 'success');
+}
+
+function mostrarPremiosXmlLoto5(premios) {
+  const container = document.getElementById('cpst-loto5-premios-xml');
+  const content = document.getElementById('cpst-loto5-premios-xml-content');
+  if (!container || !content) return;
+
+  let html = '<div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 1rem;">';
+
+  if (premios.primerPremio) {
+    html += `<div style="padding: 0.75rem; background: var(--surface); border-radius: 6px; border: 1px solid var(--border-color);">
+      <strong><span class="badge badge-warning">1er Premio</span></strong>
+      <div style="margin-top: 0.5rem;"><small class="text-muted">TOTALES:</small><br><strong>$${formatNumber(premios.primerPremio.totales || 0)}</strong></div>
+      ${premios.primerPremio.pozoVacante > 0 ? `<div><small class="text-muted">Pozo Vacante:</small> $${formatNumber(premios.primerPremio.pozoVacante)}</div>` : ''}
+    </div>`;
+  }
+  if (premios.segundoPremio) {
+    html += `<div style="padding: 0.75rem; background: var(--surface); border-radius: 6px; border: 1px solid var(--border-color);">
+      <strong><span class="badge badge-primary">2do Premio</span></strong>
+      <div style="margin-top: 0.5rem;"><small class="text-muted">TOTALES:</small><br><strong>$${formatNumber(premios.segundoPremio.totales || 0)}</strong></div>
+    </div>`;
+  }
+  if (premios.tercerPremio) {
+    html += `<div style="padding: 0.75rem; background: var(--surface); border-radius: 6px; border: 1px solid var(--border-color);">
+      <strong><span class="badge badge-info">3er Premio</span></strong>
+      <div style="margin-top: 0.5rem;"><small class="text-muted">TOTALES:</small><br><strong>$${formatNumber(premios.tercerPremio.totales || 0)}</strong></div>
+    </div>`;
+  }
+  if (premios.agenciero) {
+    html += `<div style="padding: 0.75rem; background: var(--surface); border-radius: 6px; border: 1px solid var(--border-color);">
+      <strong><span class="badge badge-success">Agenciero</span></strong>
+      <div style="margin-top: 0.5rem;"><small class="text-muted">TOTALES:</small><br><strong>$${formatNumber(premios.agenciero.totales || 0)}</strong></div>
+    </div>`;
+  }
+  if (premios.fondoReserva && premios.fondoReserva.monto > 0) {
+    html += `<div style="padding: 0.75rem; background: var(--surface); border-radius: 6px; border: 1px solid var(--border-color);">
+      <strong><span class="badge badge-secondary">Fondo Reserva</span></strong>
+      <div style="margin-top: 0.5rem;"><strong>$${formatNumber(premios.fondoReserva.monto)}</strong></div>
+    </div>`;
+  }
+
+  html += '</div>';
+  content.innerHTML = html;
+  container.classList.remove('hidden');
+}
+
+function mostrarResultadosEscrutinioLoto5(resultado) {
+  document.getElementById('cpst-resultados').classList.remove('hidden');
+
+  // Ocultar otras tablas
+  document.getElementById('cpst-detalle-quiniela')?.classList.add('hidden');
+  document.getElementById('cpst-detalle-poceada')?.classList.add('hidden');
+  document.getElementById('cpst-detalle-loto')?.classList.add('hidden');
+  document.getElementById('cpst-detalle-tombolina')?.classList.add('hidden');
+  const detalleLoto5 = document.getElementById('cpst-detalle-loto5');
+  if (detalleLoto5) detalleLoto5.classList.remove('hidden');
+
+  // Resumen general
+  document.getElementById('cpst-total-ganadores').textContent = formatNumber(resultado.totalGanadores);
+  document.getElementById('cpst-total-premios').textContent = '$' + formatNumber(resultado.totalPremios);
+
+  // Tasa de devolución
+  if (resultado.comparacion && resultado.comparacion.recaudacion.controlPrevio > 0) {
+    const tasa = (resultado.totalPremios / resultado.comparacion.recaudacion.controlPrevio * 100).toFixed(2);
+    document.getElementById('cpst-tasa-devolucion').textContent = tasa + '%';
+  }
+
+  // Tabla comparación
+  if (resultado.comparacion) {
+    const tbody = document.querySelector('#cpst-tabla-comparacion tbody');
+    if (tbody) {
+      tbody.innerHTML = '';
+      const reg = resultado.comparacion.registros;
+      const apu = resultado.comparacion.apuestas;
+      const rec = resultado.comparacion.recaudacion;
+      tbody.innerHTML += `
+        <tr><td>Registros</td><td>${formatNumber(reg.controlPrevio)}</td><td>${formatNumber(reg.controlPosterior)}</td>
+        <td class="${reg.coincide ? 'text-success' : 'text-danger'}">${reg.coincide ? '✓ OK' : '✗ DIF'}</td></tr>
+        <tr><td>Apuestas</td><td>${formatNumber(apu.controlPrevio)}</td><td>${formatNumber(apu.controlPosterior)}</td>
+        <td class="${apu.coincide ? 'text-success' : 'text-danger'}">${apu.coincide ? '✓ OK' : '✗ DIF'}</td></tr>
+        <tr><td>Recaudación</td><td>$${formatNumber(rec.controlPrevio)}</td><td>$${formatNumber(rec.controlPosterior)}</td>
+        <td class="${rec.coincide ? 'text-success' : 'text-danger'}">${rec.coincide ? '✓ OK' : '✗ DIF'}</td></tr>`;
+    }
+  }
+
+  // Tabla de resultados Loto 5
+  const tbodyLoto5 = document.getElementById('cpst-tabla-loto5-body');
+  if (tbodyLoto5) {
+    tbodyLoto5.innerHTML = '';
+
+    // 5 aciertos - 1er premio
+    const nivel5 = resultado.porNivel?.[5] || { ganadores: 0, premioUnitario: 0, totalPremios: 0, pozoVacante: 0, pozoXml: 0 };
+    tbodyLoto5.innerHTML += `
+      <tr>
+        <td>1er Premio (5 aciertos)</td>
+        <td>${formatNumber(nivel5.ganadores)}<br><small class="text-muted">${nivel5.ganadoresTexto || ''}</small></td>
+        <td style="color: var(--text-secondary);">$${formatNumber(nivel5.pozoXml || 0)}</td>
+        <td>$${formatNumber(nivel5.premioUnitario)}</td>
+        <td>$${formatNumber(nivel5.totalPremios)}</td>
+        <td>${nivel5.pozoVacante > 0 ? '$' + formatNumber(nivel5.pozoVacante) : '-'}</td>
+      </tr>`;
+
+    // 4 aciertos - 2do premio
+    const nivel4 = resultado.porNivel?.[4] || { ganadores: 0, premioUnitario: 0, totalPremios: 0, pozoVacante: 0, pozoXml: 0 };
+    tbodyLoto5.innerHTML += `
+      <tr>
+        <td>2do Premio (4 aciertos)</td>
+        <td>${formatNumber(nivel4.ganadores)}<br><small class="text-muted">${nivel4.ganadoresTexto || ''}</small></td>
+        <td style="color: var(--text-secondary);">$${formatNumber(nivel4.pozoXml || 0)}</td>
+        <td>$${formatNumber(nivel4.premioUnitario)}</td>
+        <td>$${formatNumber(nivel4.totalPremios)}</td>
+        <td>${nivel4.pozoVacante > 0 ? '$' + formatNumber(nivel4.pozoVacante) : '-'}</td>
+      </tr>`;
+
+    // 3 aciertos - devolución
+    const nivel3 = resultado.porNivel?.[3] || { ganadores: 0, premioUnitario: 0, totalPremios: 0, pozoXml: 0 };
+    tbodyLoto5.innerHTML += `
+      <tr>
+        <td>3er Premio (3 aciertos) <small class="text-muted">- Devolución</small></td>
+        <td>${formatNumber(nivel3.ganadores)}<br><small class="text-muted">${nivel3.ganadoresTexto || ''}</small></td>
+        <td style="color: var(--text-secondary);">$${formatNumber(nivel3.pozoXml || 0)}</td>
+        <td>$${formatNumber(nivel3.premioUnitario)}</td>
+        <td>$${formatNumber(nivel3.totalPremios)}</td>
+        <td>-</td>
+      </tr>`;
+
+    // Agenciero
+    const agenciero = resultado.agenciero || { ganadores: 0, premioUnitario: 0, totalPremios: 0 };
+    if (agenciero.ganadores > 0 || agenciero.pozoXml > 0) {
+      tbodyLoto5.innerHTML += `
+        <tr style="background: var(--surface-hover);">
+          <td><span class="badge badge-info">AGENCIERO</span></td>
+          <td>${formatNumber(agenciero.ganadores)}</td>
+          <td style="color: var(--text-secondary);">$${formatNumber(agenciero.pozoXml || 0)}</td>
+          <td>$${formatNumber(agenciero.premioUnitario)}</td>
+          <td>$${formatNumber(agenciero.totalPremios)}</td>
+          <td>-</td>
+        </tr>`;
+    }
+
+    // Fondo de reserva (informativo)
+    if (resultado.fondoReserva > 0) {
+      tbodyLoto5.innerHTML += `
+        <tr style="background: var(--surface-hover); opacity: 0.8;">
+          <td><small>Fondo Reserva</small></td>
+          <td>-</td>
+          <td>-</td>
+          <td>-</td>
+          <td>$${formatNumber(resultado.fondoReserva)}</td>
+          <td>-</td>
+        </tr>`;
+    }
+
+    // Total
+    tbodyLoto5.innerHTML += `
+      <tr style="font-weight: bold; border-top: 2px solid var(--border-color);">
+        <td colspan="2">TOTAL</td>
+        <td>-</td>
+        <td>-</td>
+        <td>$${formatNumber(resultado.totalPremios)}</td>
+        <td>-</td>
+      </tr>`;
+  }
+
+  // Extracto utilizado
+  const detTipos = document.getElementById('cpst-detalle-tipos');
+  if (detTipos && cpstExtractoLoto5) {
+    detTipos.innerHTML = `
+      <div class="alert" style="background: var(--bg-input); padding: 1rem; border-radius: 8px; margin-bottom: 1rem;">
+        <h4 style="margin-bottom: 0.5rem;"><i class="fas fa-info-circle"></i> Extracto Utilizado</h4>
+        <div style="margin-top: 0.5rem;">
+          <strong>Números (5):</strong>
+          <span style="font-family: monospace; font-size: 1.1rem; color: var(--warning);">
+            ${cpstExtractoLoto5.numeros.map(n => n.toString().padStart(2, '0')).join(' - ')}
+          </span>
+        </div>
+      </div>`;
+  }
+}
+
+// ============= FIN LOTO 5 ESCRUTINIO =============
 
 function mostrarResultadosEscrutinioTombolina(resultado) {
   document.getElementById('cpst-resultados').classList.remove('hidden');
