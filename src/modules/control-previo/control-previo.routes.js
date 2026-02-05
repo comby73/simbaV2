@@ -128,6 +128,7 @@ router.post('/brinco/guardar-resultado',
 
 // QUINI 6
 router.post('/quini6/procesar',
+  (req, res, next) => { console.log('🎯 Ruta /quini6/procesar alcanzada'); next(); },
   requirePermission('control_previo.ejecutar'),
   upload.single('archivo'),
   quini6Controller.procesarZip

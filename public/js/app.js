@@ -1040,8 +1040,10 @@ function mostrarResultadosCP(data) {
     renderTablasTombolina(data);
     // Tombolina NO tiene provincias - ocultar esas cards
     ocultarCardsProvincias();
-  } else if (isBrinco || isQuini6 || isLoto5) {
-    // BRINCO, QUINI 6 y Loto 5 usan renderizado genérico
+  } else if (isLoto5) {
+    renderTablasLoto5(data);
+  } else if (isBrinco || isQuini6) {
+    // BRINCO y QUINI 6 usan renderizado genérico
     renderTablasGenerico(data);
   } else {
     renderTablasQuiniela(data);
@@ -2208,6 +2210,155 @@ function mostrarCardsProvincias() {
   const tablaProv = document.getElementById('cp-tabla-provincias');
   if (tablaRecProv && tablaRecProv.closest('.card')) tablaRecProv.closest('.card').style.display = '';
   if (tablaProv && tablaProv.closest('.card')) tablaProv.closest('.card').style.display = '';
+}
+
+// =============================================
+// LOTO 5 - Renderizado de tablas (Memorando)
+// =============================================
+function renderTablasLoto5(data) {
+  console.log('📊 Renderizando tablas Loto 5:', data);
+
+  // Ocultar cards específicas de otros juegos
+  ocultarCardTombolina();
+
+  // Mostrar provincias
+  const tbodyRecProv = document.querySelector('#cp-tabla-recaudacion-prov tbody');
+  if (tbodyRecProv && data.provincias) {
+    mostrarCardsProvincias();
+    tbodyRecProv.innerHTML = '';
+
+    const totalRec = data.resumen?.recaudacion || 1;
+    const totalApuestas = data.resumen?.apuestasTotal || 1;
+
+    // Convertir a array y ordenar por recaudación
+    const provinciasArray = Object.entries(data.provincias)
+      .map(([nombre, prov]) => ({ nombre, ...prov }))
+      .sort((a, b) => (b.recaudacion || 0) - (a.recaudacion || 0));
+
+    for (const prov of provinciasArray) {
+      const recaudacion = prov.recaudacion || 0;
+      const apuestas = prov.apuestas || 0;
+      const ventaWeb = prov.ventaWeb || 0;
+
+      if (recaudacion > 0 || apuestas > 0) {
+        const pRec = totalRec > 0 ? ((recaudacion / totalRec) * 100).toFixed(2) : '0.00';
+        const pAp = totalApuestas > 0 ? ((apuestas / totalApuestas) * 100).toFixed(2) : '0.00';
+        const webIndicator = ventaWeb > 0 ? ` <span class="badge badge-info" title="${ventaWeb} ventas web">🌐 ${ventaWeb}</span>` : '';
+
+        tbodyRecProv.innerHTML += `
+          <tr>
+            <td><strong>${prov.nombre}</strong>${webIndicator}</td>
+            <td>$${formatNumber(Math.round(recaudacion))}</td>
+            <td>${pRec}%</td>
+            <td>${formatNumber(apuestas)}</td>
+            <td>${pAp}%</td>
+          </tr>`;
+      }
+    }
+  }
+
+  // === DISTRIBUCIÓN DE PREMIOS (Memorando) ===
+  const premiosXml = data.datosOficiales?.premios || {};
+
+  // Crear o actualizar la sección de distribución de premios
+  let loto5PremiosCard = document.getElementById('cp-loto5-premios-card');
+  if (!loto5PremiosCard) {
+    // Crear la card dinámicamente si no existe
+    loto5PremiosCard = document.createElement('div');
+    loto5PremiosCard.id = 'cp-loto5-premios-card';
+    loto5PremiosCard.className = 'card';
+
+    // Insertar después de la tabla de comparación
+    const comparacionCard = document.querySelector('#cp-tabla-comparacion')?.closest('.card');
+    if (comparacionCard && comparacionCard.parentNode) {
+      comparacionCard.parentNode.insertBefore(loto5PremiosCard, comparacionCard.nextSibling);
+    } else {
+      document.getElementById('cp-resultados')?.appendChild(loto5PremiosCard);
+    }
+  }
+
+  // Datos del XML
+  const p1 = premiosXml.primerPremio || {};
+  const p2 = premiosXml.segundoPremio || {};
+  const p3 = premiosXml.tercerPremio || {};
+  const ag = premiosXml.agenciero || {};
+  const fondo = premiosXml.fondoReserva || {};
+
+  // Calcular totales
+  const totalDistribuir = data.datosOficiales?.recaudacionDistribuir || data.datosOficiales?.recaudacion || 0;
+  const totalPremios = (p1.totales || 0) + (p2.totales || 0) + (p3.totales || 0) + (ag.totales || 0);
+  const totalPozoVacante = (p1.pozoVacante || 0) + (p2.pozoVacante || 0);
+
+  loto5PremiosCard.innerHTML = `
+    <div class="card-header" style="background: linear-gradient(135deg, var(--warning) 0%, var(--primary) 100%); color: white;">
+      <h3><i class="fas fa-coins"></i> Distribución de Premios - Loto 5 Plus (Memorando)</h3>
+    </div>
+    <div class="card-body" style="padding: 0;">
+      <table class="table" style="margin: 0;">
+        <thead>
+          <tr style="background: var(--bg-card);">
+            <th>Premio</th>
+            <th style="text-align: right;">Monto Sorteo</th>
+            <th style="text-align: right;">Pozo Vacante</th>
+            <th style="text-align: right;">Pozo a Asegurar</th>
+            <th style="text-align: right; color: var(--warning);"><strong>TOTALES</strong></th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><span class="badge badge-warning">1er Premio</span> (5 aciertos)</td>
+            <td style="text-align: right;">$${formatNumber(p1.monto || 0)}</td>
+            <td style="text-align: right; color: ${p1.pozoVacante > 0 ? 'var(--danger)' : 'var(--text-muted)'};">${p1.pozoVacante > 0 ? '$' + formatNumber(p1.pozoVacante) : '-'}</td>
+            <td style="text-align: right;">${p1.pozoAsegurar > 0 ? '$' + formatNumber(p1.pozoAsegurar) : '-'}</td>
+            <td style="text-align: right; font-weight: bold; color: var(--warning);">$${formatNumber(p1.totales || 0)}</td>
+          </tr>
+          <tr>
+            <td><span class="badge badge-primary">2do Premio</span> (4 aciertos)</td>
+            <td style="text-align: right;">$${formatNumber(p2.monto || 0)}</td>
+            <td style="text-align: right; color: ${p2.pozoVacante > 0 ? 'var(--danger)' : 'var(--text-muted)'};">${p2.pozoVacante > 0 ? '$' + formatNumber(p2.pozoVacante) : '-'}</td>
+            <td style="text-align: right;">${p2.pozoAsegurar > 0 ? '$' + formatNumber(p2.pozoAsegurar) : '-'}</td>
+            <td style="text-align: right; font-weight: bold;">$${formatNumber(p2.totales || 0)}</td>
+          </tr>
+          <tr>
+            <td><span class="badge badge-info">3er Premio</span> (3 aciertos - Devolución)</td>
+            <td style="text-align: right;">$${formatNumber(p3.monto || 0)}</td>
+            <td style="text-align: right;">-</td>
+            <td style="text-align: right;">-</td>
+            <td style="text-align: right; font-weight: bold;">$${formatNumber(p3.totales || 0)}</td>
+          </tr>
+          <tr style="background: var(--surface-hover);">
+            <td><span class="badge badge-success">Agenciero</span></td>
+            <td style="text-align: right;">$${formatNumber(ag.monto || 0)}</td>
+            <td style="text-align: right;">-</td>
+            <td style="text-align: right;">-</td>
+            <td style="text-align: right; font-weight: bold;">$${formatNumber(ag.totales || 0)}</td>
+          </tr>
+          ${fondo.monto > 0 ? `
+          <tr style="background: var(--surface-hover); opacity: 0.8;">
+            <td><span class="badge badge-secondary">Fondo de Reserva</span></td>
+            <td style="text-align: right;">$${formatNumber(fondo.monto || 0)}</td>
+            <td style="text-align: right;">-</td>
+            <td style="text-align: right;">-</td>
+            <td style="text-align: right; font-weight: bold;">$${formatNumber(fondo.monto || 0)}</td>
+          </tr>` : ''}
+          <tr style="background: linear-gradient(90deg, var(--bg-card) 0%, var(--warning-light, rgba(234,179,8,0.1)) 100%); font-weight: bold; border-top: 2px solid var(--warning);">
+            <td><strong>TOTAL</strong></td>
+            <td style="text-align: right;">-</td>
+            <td style="text-align: right; color: var(--danger);">${totalPozoVacante > 0 ? '$' + formatNumber(totalPozoVacante) : '-'}</td>
+            <td style="text-align: right;">-</td>
+            <td style="text-align: right; color: var(--warning); font-size: 1.1em;">$${formatNumber(totalPremios + (fondo.monto || 0))}</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+    <div class="card-footer" style="background: var(--bg-card); padding: 0.75rem 1rem; font-size: 0.9em;">
+      <div style="display: flex; justify-content: space-between; flex-wrap: wrap; gap: 1rem;">
+        <div><strong>Recaudación a Distribuir:</strong> <span style="color: var(--primary);">$${formatNumber(totalDistribuir)}</span></div>
+        <div><strong>Importe Total Premios:</strong> <span style="color: var(--warning);">$${formatNumber(data.datosOficiales?.importeTotalPremios || totalPremios)}</span></div>
+        ${totalPozoVacante > 0 ? `<div><strong>Pozo Vacante Total:</strong> <span style="color: var(--danger);">$${formatNumber(totalPozoVacante)}</span> (arrastra al próximo sorteo)</div>` : ''}
+      </div>
+    </div>
+  `;
 }
 
 // =============================================
@@ -7234,17 +7385,17 @@ function mostrarResultadosEscrutinioQuini6(resultado) {
             const esGanador = data.cantidad > 0;
             const difClass = (comp.diferencia || 0) === 0 ? 'text-success' : 'text-danger';
             const difIcon = (comp.diferencia || 0) === 0 ? '✓' : '✗';
-            return \`
-              <tr style="\${esGanador ? 'background: rgba(16, 185, 129, 0.1);' : ''}">
-                <td>\${nivel === '6' ? '1° Premio' : nivel === '5' ? '2° Premio' : '3° Premio'}</td>
-                <td>\${nivel} aciertos</td>
-                <td style="font-weight: bold; color: \${esGanador ? 'var(--success)' : 'inherit'};">\${formatNumber(data.cantidad)}</td>
-                <td>\${formatNumber(data.ganadoresExtracto || comp.extracto || 0)}</td>
-                <td class="\${difClass}">\${difIcon} \${comp.diferencia || 0}</td>
-                <td>$\${formatNumber(data.premioUnitario || 0)}</td>
-                <td style="font-weight: bold;">$\${formatNumber(data.premioTotal || 0)}</td>
+            return `
+              <tr style="${esGanador ? 'background: rgba(16, 185, 129, 0.1);' : ''}">
+                <td>${nivel === '6' ? '1° Premio' : nivel === '5' ? '2° Premio' : '3° Premio'}</td>
+                <td>${nivel} aciertos</td>
+                <td style="font-weight: bold; color: ${esGanador ? 'var(--success)' : 'inherit'};">${formatNumber(data.cantidad)}</td>
+                <td>${formatNumber(data.ganadoresExtracto || comp.extracto || 0)}</td>
+                <td class="${difClass}">${difIcon} ${comp.diferencia || 0}</td>
+                <td>$${formatNumber(data.premioUnitario || 0)}</td>
+                <td style="font-weight: bold;">$${formatNumber(data.premioTotal || 0)}</td>
               </tr>
-            \`;
+            `;
           }).join('')}
         </tbody>
       </table>
@@ -7270,17 +7421,17 @@ function mostrarResultadosEscrutinioQuini6(resultado) {
             const esGanador = data.cantidad > 0;
             const difClass = (comp.diferencia || 0) === 0 ? 'text-success' : 'text-danger';
             const difIcon = (comp.diferencia || 0) === 0 ? '✓' : '✗';
-            return \`
-              <tr style="\${esGanador ? 'background: rgba(16, 185, 129, 0.1);' : ''}">
-                <td>\${nivel === '6' ? '1° Premio' : nivel === '5' ? '2° Premio' : '3° Premio'}</td>
-                <td>\${nivel} aciertos</td>
-                <td style="font-weight: bold; color: \${esGanador ? 'var(--success)' : 'inherit'};">\${formatNumber(data.cantidad)}</td>
-                <td>\${formatNumber(data.ganadoresExtracto || comp.extracto || 0)}</td>
-                <td class="\${difClass}">\${difIcon} \${comp.diferencia || 0}</td>
-                <td>$\${formatNumber(data.premioUnitario || 0)}</td>
-                <td style="font-weight: bold;">$\${formatNumber(data.premioTotal || 0)}</td>
+            return `
+              <tr style="${esGanador ? 'background: rgba(16, 185, 129, 0.1);' : ''}">
+                <td>${nivel === '6' ? '1° Premio' : nivel === '5' ? '2° Premio' : '3° Premio'}</td>
+                <td>${nivel} aciertos</td>
+                <td style="font-weight: bold; color: ${esGanador ? 'var(--success)' : 'inherit'};">${formatNumber(data.cantidad)}</td>
+                <td>${formatNumber(data.ganadoresExtracto || comp.extracto || 0)}</td>
+                <td class="${difClass}">${difIcon} ${comp.diferencia || 0}</td>
+                <td>$${formatNumber(data.premioUnitario || 0)}</td>
+                <td style="font-weight: bold;">$${formatNumber(data.premioTotal || 0)}</td>
               </tr>
-            \`;
+            `;
           }).join('')}
         </tbody>
       </table>
