@@ -59,12 +59,18 @@ function getDbConfig() {
   
   if (isProd) {
     // PRODUCCIÓN: Credenciales de Hostinger
+    // Validar que las variables críticas existan
+    if (!process.env.DB_USER || !process.env.DB_PASSWORD || !process.env.DB_NAME) {
+      console.error('❌ ERROR CRÍTICO: Variables de entorno de BD no configuradas en producción!');
+      console.error('   Faltan: DB_USER, DB_PASSWORD y/o DB_NAME');
+      console.error('   Configúralas en el panel de Hostinger → Variables de entorno');
+    }
     return {
       host: process.env.DB_HOST || 'localhost',
       port: parseInt(process.env.DB_PORT) || 3306,
-      user: process.env.DB_USER,
-      password: process.env.DB_PASSWORD,
-      database: process.env.DB_NAME,
+      user: process.env.DB_USER || '',
+      password: process.env.DB_PASSWORD || '',
+      database: process.env.DB_NAME || '',
       connectTimeout: 10000,
     };
   } else {
