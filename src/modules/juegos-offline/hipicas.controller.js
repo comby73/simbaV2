@@ -508,7 +508,8 @@ const calcularFacturacionUTE = async (req, res) => {
       params.push(fechaHasta);
     }
 
-    sql += ' GROUP BY hipodromo_nombre, hipodromo_codigo ORDER BY hipodromo_nombre';
+    sql += ` GROUP BY hipodromo_nombre, hipodromo_codigo 
+             ORDER BY CASE hipodromo_nombre WHEN 'Palermo' THEN 1 WHEN 'San Isidro' THEN 2 WHEN 'La Plata' THEN 3 ELSE 4 END`;
 
     const hipodromos = await query(sql, params);
 
@@ -590,19 +591,21 @@ const calcularFacturacionUTE = async (req, res) => {
       'La Plata': 'LCBAJTA010'
     };
 
-    // Constantes para líneas SAP
-    const DESCUENTO_SAP = 0.16;  // 16% descuento
-    const IVA_SAP = 0.21;        // 21% IVA
-
     // Generar líneas para SAP (formato completo/reducido)
+    // Cálculo: Base × 0.84 (desc 16%) × 0.95 (desc 5%) × 1.21 (IVA 21%)
+    const DESCUENTO_16 = 0.16;
+    const DESCUENTO_5 = 0.05;
+    const IVA_21 = 0.21;
+    
     const lineasSAP = [];
     facturacionHipodromos.forEach(h => {
       const codigoSAP = CODIGOS_SAP[h.hipodromo] || 'LCBAJTA000';
       
       // Línea completo (2% sobre parte proporcional del tope)
       const baseCompleto = h.importeDentroTope;
-      const netoCompleto = baseCompleto * (1 - DESCUENTO_SAP);
-      const totalCompleto = netoCompleto * (1 + IVA_SAP);
+      const saldoCompleto = baseCompleto * (1 - DESCUENTO_16);
+      const netoCompleto = saldoCompleto * (1 - DESCUENTO_5);
+      const totalCompleto = netoCompleto * (1 + IVA_21);
       
       lineasSAP.push({
         descripcion: `APUESTAS HIPICAS ${h.hipodromo.toUpperCase()} completo`,
@@ -614,8 +617,9 @@ const calcularFacturacionUTE = async (req, res) => {
       
       // Línea reducido (1.5% sobre excedente)
       const baseReducido = h.importeSobreTope;
-      const netoReducido = baseReducido * (1 - DESCUENTO_SAP);
-      const totalReducido = netoReducido * (1 + IVA_SAP);
+      const saldoReducido = baseReducido * (1 - DESCUENTO_16);
+      const netoReducido = saldoReducido * (1 - DESCUENTO_5);
+      const totalReducido = netoReducido * (1 + IVA_21);
       
       lineasSAP.push({
         descripcion: `APUESTAS HIPICAS ${h.hipodromo.toUpperCase()} reducido`,
