@@ -458,13 +458,15 @@ const procesarZip = async (req, res) => {
     
     // Verificar archivos de seguridad
     const archivosSeguridad = {
-      txt: !!txtFileInfo,
-      xml: !!xmlFileInfo,
-      hash: !!hashFileInfo,
-      hashCP: !!hashCPFileInfo,
-      pdf: !!pdfFileInfo,
-      hashCoincide: hashTxtOficial ? hashTxtCalculado === hashTxtOficial : null,
-      hashXmlCoincide: hashXmlOficial && hashXmlCalculado ? hashXmlCalculado === hashXmlOficial : null
+      archivos: {
+        txt: !!txtFileInfo,
+        xml: !!xmlFileInfo,
+        hash: !!hashFileInfo,
+        hashCP: !!hashCPFileInfo,
+        pdf: !!pdfFileInfo
+      },
+      verificado: hashTxtOficial ? hashTxtCalculado === hashTxtOficial : null,
+      verificadoXml: hashXmlOficial && hashXmlCalculado ? hashXmlCalculado === hashXmlOficial : null
     };
     
     // Limpiar temporales

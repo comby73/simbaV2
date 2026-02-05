@@ -17,6 +17,9 @@ const generarActaControlPrevio = async (req, res) => {
     if (tipoJuego === 'Loto') {
       return generarActaControlPrevioLoto(req, res, datos);
     }
+    if (tipoJuego === 'Loto 5' || tipoJuego === 'Loto5') {
+      return generarActaControlPrevioLoto5(req, res, datos);
+    }
     // GENERAR ACTA CONTROL PREVIO - TOMBOLINA
     async function generarActaControlPrevioTombolina(req, res, datos) {
       try {
@@ -837,6 +840,243 @@ async function generarActaControlPrevioLoto(req, res, datos) {
     res.status(500).json({
       success: false,
       message: 'Error generando acta PDF Loto: ' + error.message
+    });
+  }
+}
+
+// ========================================
+// GENERAR ACTA CONTROL PREVIO - LOTO 5
+// ========================================
+async function generarActaControlPrevioLoto5(req, res, datos) {
+  try {
+    const resumen = datos.resumen || {};
+    const datosOficiales = datos.datosOficiales || {};
+    const premiosXml = datosOficiales.premios || {};
+    const comparacion = datos.comparacion || {};
+    const seguridad = datos.seguridad || {};
+    const provincias = datos.provincias || {};
+
+    // Crear documento PDF
+    const doc = new PDFDocument({
+      size: 'A4',
+      margins: { top: 30, bottom: 30, left: 35, right: 35 },
+      autoFirstPage: true
+    });
+
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `inline; filename=Acta_ControlPrevio_Loto5_${datos.sorteo || 'sorteo'}.pdf`);
+    doc.pipe(res);
+
+    const fechaHoy = new Date().toLocaleDateString('es-AR', {
+      weekday: 'long', year: 'numeric', month: 'long', day: 'numeric'
+    });
+    const horaHoy = new Date().toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit' });
+
+    // ========== ENCABEZADO ==========
+    doc.fontSize(8).fillColor('#666')
+       .text('LOTERÍA DE LA CIUDAD DE BUENOS AIRES S.E.', 35, 20)
+       .text('CONTROL PREVIO', 480, 20, { align: 'right' });
+    doc.moveTo(35, 35).lineTo(560, 35).stroke('#ddd');
+
+    // ========== TÍTULO ==========
+    doc.fontSize(14).fillColor('#10b981')
+       .text('LOTO 5 DE LA CIUDAD', 35, 42, { align: 'center' });
+    doc.fontSize(9).fillColor('#1e293b')
+       .text('Memorando - Control Previo', 35, 58, { align: 'center' });
+
+    // ========== INFO SORTEO ==========
+    doc.roundedRect(35, 72, 525, 35, 3).fillAndStroke('#f0fdf4', '#10b981');
+    doc.fontSize(7).fillColor('#666').text('SORTEO N°', 45, 78);
+    doc.fontSize(12).fillColor('#10b981').text(datos.sorteo || '-', 45, 88);
+    doc.fontSize(7).fillColor('#666').text('ARCHIVO', 150, 78);
+    doc.fontSize(7).fillColor('#333').text(datos.archivo || '-', 150, 88);
+    doc.fontSize(7).fillColor('#666').text('FECHA', 380, 78);
+    doc.fontSize(7).fillColor('#333').text(new Date(datos.fechaProcesamiento || Date.now()).toLocaleString('es-AR'), 380, 88);
+
+    // ========== RESUMEN GENERAL ==========
+    let y = 115;
+    doc.fontSize(9).fillColor('#1e293b').text('RESUMEN GENERAL', 35, y, { underline: true });
+    y += 12;
+
+    // Cajas resumen
+    const ticketsTotal = (resumen.registros || 0) + (resumen.anulados || 0);
+    const boxW = 103, boxH = 32;
+    const resumenBoxes = [
+      { label: 'Tickets Total', value: formatearNumero(ticketsTotal), color: '#2563eb' },
+      { label: 'Válidos', value: formatearNumero(resumen.registros), color: '#10b981' },
+      { label: 'Anulados', value: formatearNumero(resumen.anulados), color: '#ef4444' },
+      { label: 'Apuestas', value: formatearNumero(resumen.apuestasTotal), color: '#7c3aed' },
+      { label: 'Recaudación', value: formatearMoneda(resumen.recaudacion), color: '#10b981' }
+    ];
+    resumenBoxes.forEach((box, i) => {
+      const x = 35 + (i * (boxW + 2));
+      doc.roundedRect(x, y, boxW, boxH, 2).fillAndStroke('#f8fafc', '#e2e8f0');
+      doc.fontSize(6).fillColor('#666').text(box.label, x + 3, y + 4, { width: boxW - 6 });
+      doc.fontSize(9).fillColor(box.color).text(box.value, x + 3, y + 14, { width: boxW - 6 });
+    });
+    y += boxH + 10;
+
+    // ========== COMPARACIÓN CON XML ==========
+    if (comparacion && Object.keys(comparacion).length > 0) {
+      doc.fontSize(9).fillColor('#1e293b').text('COMPARACIÓN TXT vs XML', 35, y, { underline: true });
+      y += 12;
+
+      // Encabezado tabla
+      doc.rect(35, y, 525, 12).fill('#f1f5f9');
+      doc.fontSize(6).fillColor('#666');
+      doc.text('CONCEPTO', 42, y + 3, { width: 150 });
+      doc.text('CALCULADO (TXT)', 200, y + 3, { width: 100, align: 'right' });
+      doc.text('OFICIAL (XML)', 310, y + 3, { width: 100, align: 'right' });
+      doc.text('DIFERENCIA', 420, y + 3, { width: 100, align: 'right' });
+      y += 12;
+
+      const filas = [
+        { label: 'Tickets Válidos', calc: comparacion.registros?.calculado, ofic: comparacion.registros?.oficial, diff: comparacion.registros?.diferencia },
+        { label: 'Anulados', calc: comparacion.anulados?.calculado, ofic: comparacion.anulados?.oficial, diff: comparacion.anulados?.diferencia },
+        { label: 'Apuestas', calc: comparacion.apuestas?.calculado, ofic: comparacion.apuestas?.oficial, diff: comparacion.apuestas?.diferencia },
+        { label: 'Recaudación', calc: comparacion.recaudacion?.calculado, ofic: comparacion.recaudacion?.oficial, diff: comparacion.recaudacion?.diferencia, esMonto: true }
+      ];
+
+      filas.forEach(f => {
+        doc.rect(35, y, 525, 10).fill('#fff');
+        doc.fontSize(6).fillColor('#333');
+        doc.text(f.label, 42, y + 2);
+        doc.text(f.esMonto ? formatearMoneda(f.calc || 0) : formatearNumero(f.calc || 0), 200, y + 2, { width: 100, align: 'right' });
+        doc.text(f.esMonto ? formatearMoneda(f.ofic || 0) : formatearNumero(f.ofic || 0), 310, y + 2, { width: 100, align: 'right' });
+        const colorDiff = (f.diff || 0) === 0 ? '#10b981' : '#ef4444';
+        doc.fillColor(colorDiff).text((f.diff || 0) === 0 ? '✓ OK' : (f.diff || 0), 420, y + 2, { width: 100, align: 'right' });
+        y += 10;
+      });
+      y += 10;
+    }
+
+    // ========== DISTRIBUCIÓN DE PREMIOS ==========
+    doc.fontSize(9).fillColor('#1e293b').text('DISTRIBUCIÓN DE PREMIOS', 35, y, { underline: true });
+    y += 12;
+
+    // Encabezado
+    doc.rect(35, y, 525, 14).fill('#059669');
+    doc.fontSize(6).fillColor('#fff');
+    doc.text('PREMIO', 42, y + 4);
+    doc.text('MONTO SORTEO', 180, y + 4, { width: 90, align: 'right' });
+    doc.text('POZO VACANTE', 280, y + 4, { width: 90, align: 'right' });
+    doc.text('POZO A ASEGURAR', 380, y + 4, { width: 90, align: 'right' });
+    doc.text('TOTALES', 480, y + 4, { width: 70, align: 'right' });
+    y += 14;
+
+    // Filas de premios
+    const premios = [
+      { label: '1er Premio (5 aciertos)', data: premiosXml.primerPremio },
+      { label: '2do Premio (4 aciertos)', data: premiosXml.segundoPremio },
+      { label: '3er Premio (3 ac - Devol.)', data: premiosXml.tercerPremio },
+      { label: 'Agenciero', data: premiosXml.agenciero }
+    ];
+
+    let totalPremios = 0;
+    let totalVacante = 0;
+
+    premios.forEach((p, i) => {
+      const bgColor = i % 2 === 0 ? '#f8fafc' : '#fff';
+      doc.rect(35, y, 525, 12).fill(bgColor);
+      doc.fontSize(6).fillColor('#333');
+      doc.text(p.label, 42, y + 3);
+      doc.text(formatearMoneda(p.data?.monto || 0), 180, y + 3, { width: 90, align: 'right' });
+      doc.fillColor(p.data?.pozoVacante > 0 ? '#ef4444' : '#666')
+         .text(p.data?.pozoVacante > 0 ? formatearMoneda(p.data.pozoVacante) : '-', 280, y + 3, { width: 90, align: 'right' });
+      doc.fillColor('#333').text(p.data?.pozoAsegurar > 0 ? formatearMoneda(p.data.pozoAsegurar) : '-', 380, y + 3, { width: 90, align: 'right' });
+      doc.fillColor('#059669').text(formatearMoneda(p.data?.totales || 0), 480, y + 3, { width: 70, align: 'right' });
+      totalPremios += (p.data?.totales || 0);
+      totalVacante += (p.data?.pozoVacante || 0);
+      y += 12;
+    });
+
+    // Fondo de reserva si existe
+    if (premiosXml.fondoReserva?.monto > 0) {
+      doc.rect(35, y, 525, 12).fill('#f0fdf4');
+      doc.fontSize(6).fillColor('#333');
+      doc.text('Fondo de Reserva', 42, y + 3);
+      doc.text(formatearMoneda(premiosXml.fondoReserva.monto), 480, y + 3, { width: 70, align: 'right' });
+      totalPremios += premiosXml.fondoReserva.monto;
+      y += 12;
+    }
+
+    // Total
+    doc.rect(35, y, 525, 14).fill('#059669');
+    doc.fontSize(7).fillColor('#fff');
+    doc.text('TOTAL', 42, y + 4);
+    doc.text(totalVacante > 0 ? formatearMoneda(totalVacante) : '-', 280, y + 4, { width: 90, align: 'right' });
+    doc.text(formatearMoneda(totalPremios), 480, y + 4, { width: 70, align: 'right' });
+    y += 20;
+
+    // ========== VERIFICACIÓN DE SEGURIDAD ==========
+    doc.fontSize(9).fillColor('#1e293b').text('VERIFICACIÓN DE SEGURIDAD', 35, y, { underline: true });
+    y += 12;
+
+    doc.rect(35, y, 525, 12).fill('#f1f5f9');
+    doc.fontSize(6).fillColor('#666');
+    doc.text('ARCHIVO', 42, y + 3);
+    doc.text('ESTADO', 480, y + 3, { width: 70, align: 'right' });
+    y += 12;
+
+    const archivos = [
+      { label: 'Hash TXT', ok: seguridad.verificado },
+      { label: 'Hash XML', ok: seguridad.verificadoXml }
+    ];
+    archivos.forEach(a => {
+      doc.rect(35, y, 525, 10).fill('#fff');
+      doc.fontSize(6).fillColor('#333').text(a.label, 42, y + 2);
+      doc.fillColor(a.ok ? '#10b981' : (a.ok === false ? '#ef4444' : '#666'))
+         .text(a.ok ? '✓ OK' : (a.ok === false ? '✗ NO COINCIDE' : 'N/A'), 480, y + 2, { width: 70, align: 'right' });
+      y += 10;
+    });
+    y += 15;
+
+    // ========== DISTRIBUCIÓN POR PROVINCIA ==========
+    if (Object.keys(provincias).length > 0) {
+      doc.fontSize(9).fillColor('#1e293b').text('DISTRIBUCIÓN POR PROVINCIA', 35, y, { underline: true });
+      y += 12;
+
+      doc.rect(35, y, 525, 12).fill('#f1f5f9');
+      doc.fontSize(6).fillColor('#666');
+      doc.text('PROVINCIA', 42, y + 3);
+      doc.text('REGISTROS', 200, y + 3, { width: 80, align: 'right' });
+      doc.text('APUESTAS', 290, y + 3, { width: 80, align: 'right' });
+      doc.text('RECAUDACIÓN', 380, y + 3, { width: 100, align: 'right' });
+      doc.text('%', 490, y + 3, { width: 50, align: 'right' });
+      y += 12;
+
+      const totalRec = resumen.recaudacion || 1;
+      const provArray = Object.entries(provincias)
+        .map(([nombre, p]) => ({ nombre, ...p }))
+        .sort((a, b) => (b.recaudacion || 0) - (a.recaudacion || 0))
+        .slice(0, 15); // Top 15
+
+      provArray.forEach((p, i) => {
+        if (y > 760) return; // Evitar overflow
+        const bgColor = i % 2 === 0 ? '#fff' : '#f8fafc';
+        doc.rect(35, y, 525, 10).fill(bgColor);
+        doc.fontSize(6).fillColor('#333');
+        doc.text(p.nombre, 42, y + 2);
+        doc.text(formatearNumero(p.registros || 0), 200, y + 2, { width: 80, align: 'right' });
+        doc.text(formatearNumero(p.apuestas || 0), 290, y + 2, { width: 80, align: 'right' });
+        doc.text(formatearMoneda(p.recaudacion || 0), 380, y + 2, { width: 100, align: 'right' });
+        const pct = ((p.recaudacion || 0) / totalRec * 100).toFixed(2);
+        doc.text(`${pct}%`, 490, y + 2, { width: 50, align: 'right' });
+        y += 10;
+      });
+    }
+
+    // ========== PIE DE PÁGINA ==========
+    doc.fontSize(6).fillColor('#999');
+    doc.text(`Generado: ${fechaHoy} - ${horaHoy} | Sistema SIMBA v2.0`, 35, 810, { align: 'center', width: 525 });
+
+    doc.end();
+
+  } catch (error) {
+    console.error('Error generando acta Loto 5:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Error generando acta PDF Loto 5: ' + error.message
     });
   }
 }

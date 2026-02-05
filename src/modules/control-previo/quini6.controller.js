@@ -491,21 +491,22 @@ async function procesarZip(req, res) {
     limpiarDirectorio(tempDir);
     
     // Preparar respuesta con estructura compatible con frontend
+    // NOTA: procesarArchivoNTF devuelve los campos en raíz, no en "resumen"
     return successResponse(res, {
       archivo: txtFileInfo.name,
       archivoXml: xmlFileInfo ? xmlFileInfo.name : null,
-      tipoJuego: 'QUINI 6',
+      tipoJuego: 'Quini 6',
       codigoJuego: '69',
-      sorteo: resultadoNTF.numeroSorteo,
+      sorteo: resultadoNTF.sorteo,
       
       // Estructura resumen compatible con frontend
       resumen: {
-        totalRegistros: resultadoNTF.resumen?.totalRegistros || 0,
-        registros: resultadoNTF.resumen?.registros || 0,
-        anulados: resultadoNTF.resumen?.anulados || 0,
-        apuestasTotal: resultadoNTF.resumen?.apuestasTotal || 0,
-        recaudacion: resultadoNTF.resumen?.recaudacion || 0,
-        recaudacionAnulada: resultadoNTF.resumen?.recaudacionAnulada || 0,
+        totalRegistros: resultadoNTF.totalRegistros || 0,
+        registros: resultadoNTF.registrosValidos || 0,
+        anulados: resultadoNTF.registrosCancelados || 0,
+        apuestasTotal: resultadoNTF.apuestasSimples || 0,
+        recaudacion: resultadoNTF.recaudacionValida || 0,
+        recaudacionAnulada: resultadoNTF.recaudacionCancelada || 0,
         online: {
           registros: 0,
           apuestas: 0,
@@ -514,40 +515,49 @@ async function procesarZip(req, res) {
         }
       },
       
-      provincias: resultadoNTF.provincias || [],
-      agencias: resultadoNTF.agencias || [],
+      // Datos por modalidad (para estadísticas detalladas)
+      porModalidad: resultadoNTF.porModalidad,
+      porInstancia: resultadoNTF.porInstancia,
+      
+      provincias: resultadoNTF.porProvincia || [],
+      agencias: resultadoNTF.porAgencia || [],
       registrosNTF: resultadoNTF.registros || [],
       
       datosOficiales: resultadoXML,
       
       comparacion: resultadoXML ? {
         registros: {
-          calculado: resultadoNTF.resumen?.registros || 0,
+          calculado: resultadoNTF.registrosValidos || 0,
           oficial: resultadoXML.registrosValidos || 0,
-          diferencia: (resultadoNTF.resumen?.registros || 0) - (resultadoXML.registrosValidos || 0)
+          diferencia: (resultadoNTF.registrosValidos || 0) - (resultadoXML.registrosValidos || 0)
         },
         anulados: {
-          calculado: resultadoNTF.resumen?.anulados || 0,
+          calculado: resultadoNTF.registrosCancelados || 0,
           oficial: resultadoXML.registrosAnulados || 0,
-          diferencia: (resultadoNTF.resumen?.anulados || 0) - (resultadoXML.registrosAnulados || 0)
+          diferencia: (resultadoNTF.registrosCancelados || 0) - (resultadoXML.registrosAnulados || 0)
         },
         apuestas: {
-          calculado: resultadoNTF.resumen?.apuestasTotal || 0,
+          calculado: resultadoNTF.apuestasSimples || 0,
           oficial: resultadoXML.apuestas || 0,
-          diferencia: (resultadoNTF.resumen?.apuestasTotal || 0) - (resultadoXML.apuestas || 0)
+          diferencia: (resultadoNTF.apuestasSimples || 0) - (resultadoXML.apuestas || 0)
         },
         recaudacion: {
-          calculado: resultadoNTF.resumen?.recaudacion || 0,
+          calculado: resultadoNTF.recaudacionValida || 0,
           oficial: resultadoXML.recaudacion || 0,
-          diferencia: (resultadoNTF.resumen?.recaudacion || 0) - (resultadoXML.recaudacion || 0)
+          diferencia: (resultadoNTF.recaudacionValida || 0) - (resultadoXML.recaudacion || 0)
         }
       } : null,
       
       seguridad: {
-        txt: !!txtFileInfo,
-        xml: !!xmlFileInfo,
-        hash: !!hashFileInfo,
-        hashCP: !!hashCPFileInfo
+        archivos: {
+          txt: !!txtFileInfo,
+          xml: !!xmlFileInfo,
+          hash: !!hashFileInfo,
+          hashCP: !!hashCPFileInfo,
+          pdf: false
+        },
+        verificado: null,
+        verificadoXml: null
       }
     }, 'Archivo QUINI 6 procesado correctamente');
     
