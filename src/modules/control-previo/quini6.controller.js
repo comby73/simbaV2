@@ -382,20 +382,104 @@ async function procesarArchivoNTF(contenido) {
 }
 
 /**
- * Parsea el archivo XML de control previo
+ * Parsea el archivo XML de control previo de QUINI 6
+ * Estructura XML:
+ * <CONTROL_PREVIO>
+ *   <QUINI6>
+ *     <QUINI6_TRADICIONAL>...</QUINI6_TRADICIONAL>
+ *     <QUINI6_REVANCHA>...</QUINI6_REVANCHA>
+ *     <QUINI6_SIEMPRE_SALE>...</QUINI6_SIEMPRE_SALE>
+ *   </QUINI6>
+ * </CONTROL_PREVIO>
  */
 async function parsearXmlControlPrevio(contenido) {
   try {
     const parser = new xml2js.Parser({ explicitArray: false, mergeAttrs: true });
     const resultado = await parser.parseStringPromise(contenido);
     
-    // Extraer datos del XML (estructura puede variar según el proveedor)
+    // Buscar la raíz QUINI6
+    let root = null;
+    if (resultado.CONTROL_PREVIO && resultado.CONTROL_PREVIO.QUINI6) {
+      root = resultado.CONTROL_PREVIO.QUINI6;
+    } else if (resultado.QUINI6) {
+      root = resultado.QUINI6;
+    }
+    
+    if (!root) {
+      console.warn('⚠️ No se encontró QUINI6 en el XML');
+      return { raw: resultado, procesado: false };
+    }
+    
+    const tradicional = root.QUINI6_TRADICIONAL || {};
+    const revancha = root.QUINI6_REVANCHA || {};
+    const siempreSale = root.QUINI6_SIEMPRE_SALE || {};
+    
+    // Calcular totales sumando las tres modalidades
+    // NOTA: Los registros del TXT solo cuentan una vez aunque participen en múltiples modalidades
+    // Usamos TRADICIONAL como base porque todos los tickets participan en tradicional
+    const registrosValidos = parseInt(tradicional.REGISTROS_VALIDOS || 0);
+    const registrosAnulados = parseInt(tradicional.REGISTROS_ANULADOS || 0);
+    const apuestas = parseInt(tradicional.APUESTAS_EN_SORTEO || 0);
+    
+    // La recaudación total es la suma de las tres modalidades
+    const recaudacionTradicional = parseFloat(tradicional.RECAUDACION_BRUTA || 0);
+    const recaudacionRevancha = parseFloat(revancha.RECAUDACION_BRUTA || 0);
+    const recaudacionSiempreSale = parseFloat(siempreSale.RECAUDACION_BRUTA || 0);
+    const recaudacionTotal = recaudacionTradicional + recaudacionRevancha + recaudacionSiempreSale;
+    
+    console.log('📊 XML QUINI 6 parseado:', {
+      sorteo: root.SORTEO,
+      tradicional: { registros: tradicional.REGISTROS_VALIDOS, recaudacion: tradicional.RECAUDACION_BRUTA },
+      revancha: { registros: revancha.REGISTROS_VALIDOS, recaudacion: revancha.RECAUDACION_BRUTA },
+      siempreSale: { registros: siempreSale.REGISTROS_VALIDOS, recaudacion: siempreSale.RECAUDACION_BRUTA }
+    });
+    
     return {
       raw: resultado,
-      procesado: true
+      procesado: true,
+      sorteo: root.SORTEO,
+      fecha: root.FECHA_SORTEO,
+      
+      // Totales para comparación principal (basado en Tradicional)
+      registrosValidos,
+      registrosAnulados,
+      apuestas,
+      recaudacion: recaudacionTotal,
+      
+      // Desglose por modalidad
+      tradicional: {
+        codigoJuego: tradicional.CODIGO_JUEGO,
+        registrosValidos: parseInt(tradicional.REGISTROS_VALIDOS || 0),
+        registrosAnulados: parseInt(tradicional.REGISTROS_ANULADOS || 0),
+        apuestas: parseInt(tradicional.APUESTAS_EN_SORTEO || 0),
+        recaudacionBruta: parseFloat(tradicional.RECAUDACION_BRUTA || 0),
+        arancel: parseFloat(tradicional.ARANCEL || 0),
+        recaudacionDistribuir: parseFloat(tradicional.RECAUDACION_A_DISTRIBUIR || 0),
+        premiosDistribuir: parseFloat(tradicional.IMPORTE_TOTAL_PREMIOS_A_DISTRIBUIR || 0)
+      },
+      revancha: {
+        codigoJuego: revancha.CODIGO_JUEGO,
+        registrosValidos: parseInt(revancha.REGISTROS_VALIDOS || 0),
+        registrosAnulados: parseInt(revancha.REGISTROS_ANULADOS || 0),
+        apuestas: parseInt(revancha.APUESTAS_EN_SORTEO || 0),
+        recaudacionBruta: parseFloat(revancha.RECAUDACION_BRUTA || 0),
+        arancel: parseFloat(revancha.ARANCEL || 0),
+        recaudacionDistribuir: parseFloat(revancha.RECAUDACION_A_DISTRIBUIR || 0),
+        premiosDistribuir: parseFloat(revancha.IMPORTE_TOTAL_PREMIOS_A_DISTRIBUIR || 0)
+      },
+      siempreSale: {
+        codigoJuego: siempreSale.CODIGO_JUEGO,
+        registrosValidos: parseInt(siempreSale.REGISTROS_VALIDOS || 0),
+        registrosAnulados: parseInt(siempreSale.REGISTROS_ANULADOS || 0),
+        apuestas: parseInt(siempreSale.APUESTAS_EN_SORTEO || 0),
+        recaudacionBruta: parseFloat(siempreSale.RECAUDACION_BRUTA || 0),
+        arancel: parseFloat(siempreSale.ARANCEL || 0),
+        recaudacionDistribuir: parseFloat(siempreSale.RECAUDACION_A_DISTRIBUIR || 0),
+        premiosDistribuir: parseFloat(siempreSale.IMPORTE_TOTAL_PREMIOS_A_DISTRIBUIR || 0)
+      }
     };
   } catch (error) {
-    console.error('Error parseando XML:', error.message);
+    console.error('Error parseando XML QUINI 6:', error.message);
     return { raw: null, procesado: false, error: error.message };
   }
 }
@@ -487,6 +571,45 @@ async function procesarZip(req, res) {
       resultadoXML = await parsearXmlControlPrevio(contenidoXML);
     }
     
+    // Verificar hash del TXT
+    let hashTxtVerificado = null;
+    if (hashFileInfo) {
+      try {
+        const hashOficial = fs.readFileSync(hashFileInfo.path, 'utf8').trim().toLowerCase();
+        const contenidoTxtRaw = fs.readFileSync(txtFileInfo.path);
+        const hashCalculado = crypto.createHash('sha512').update(contenidoTxtRaw).digest('hex').toLowerCase();
+        hashTxtVerificado = hashOficial === hashCalculado;
+        console.log(`🔐 Hash TXT: ${hashTxtVerificado ? '✅ Verificado' : '❌ NO coincide'}`);
+        if (!hashTxtVerificado) {
+          console.log(`   Oficial: ${hashOficial.substring(0, 32)}...`);
+          console.log(`   Calculado: ${hashCalculado.substring(0, 32)}...`);
+        }
+      } catch (e) {
+        console.warn('⚠️ Error verificando hash TXT:', e.message);
+      }
+    }
+    
+    // Verificar hash del XML (CP.HASH)
+    let hashXmlVerificado = null;
+    if (hashCPFileInfo && xmlFileInfo) {
+      try {
+        const hashOficial = fs.readFileSync(hashCPFileInfo.path, 'utf8').trim().toLowerCase();
+        const contenidoXmlRaw = fs.readFileSync(xmlFileInfo.path);
+        const hashCalculado = crypto.createHash('sha512').update(contenidoXmlRaw).digest('hex').toLowerCase();
+        hashXmlVerificado = hashOficial === hashCalculado;
+        console.log(`🔐 Hash XML: ${hashXmlVerificado ? '✅ Verificado' : '❌ NO coincide'}`);
+        if (!hashXmlVerificado) {
+          console.log(`   Oficial: ${hashOficial.substring(0, 32)}...`);
+          console.log(`   Calculado: ${hashCalculado.substring(0, 32)}...`);
+        }
+      } catch (e) {
+        console.warn('⚠️ Error verificando hash XML:', e.message);
+      }
+    }
+    
+    // Buscar PDF
+    const pdfFileInfo = todosLosArchivos.find(f => f.name.toUpperCase().endsWith('.PDF'));
+    
     // Limpiar directorio temporal
     limpiarDirectorio(tempDir);
     
@@ -525,6 +648,7 @@ async function procesarZip(req, res) {
       
       datosOficiales: resultadoXML,
       
+      // Comparación general (totales)
       comparacion: resultadoXML ? {
         registros: {
           calculado: resultadoNTF.registrosValidos || 0,
@@ -548,16 +672,84 @@ async function procesarZip(req, res) {
         }
       } : null,
       
+      // Comparación por modalidad
+      comparacionModalidad: resultadoXML ? {
+        tradicional: {
+          nombre: 'Tradicional',
+          registros: {
+            calculado: resultadoNTF.porModalidad?.tradicional?.registros || 0,
+            oficial: resultadoXML.tradicional?.registrosValidos || 0,
+            diferencia: (resultadoNTF.porModalidad?.tradicional?.registros || 0) - (resultadoXML.tradicional?.registrosValidos || 0)
+          },
+          apuestas: {
+            calculado: resultadoNTF.porModalidad?.tradicional?.apuestasSimples || 0,
+            oficial: resultadoXML.tradicional?.apuestas || 0,
+            diferencia: (resultadoNTF.porModalidad?.tradicional?.apuestasSimples || 0) - (resultadoXML.tradicional?.apuestas || 0)
+          },
+          recaudacion: {
+            calculado: resultadoNTF.porModalidad?.tradicional?.recaudacion || 0,
+            oficial: resultadoXML.tradicional?.recaudacionBruta || 0,
+            diferencia: (resultadoNTF.porModalidad?.tradicional?.recaudacion || 0) - (resultadoXML.tradicional?.recaudacionBruta || 0)
+          },
+          // Porcentaje de participación respecto al total
+          porcentaje: resultadoNTF.registrosValidos > 0 
+            ? ((resultadoNTF.porModalidad?.tradicional?.registros || 0) / resultadoNTF.registrosValidos * 100).toFixed(1) 
+            : '0.0'
+        },
+        revancha: {
+          nombre: 'Revancha',
+          registros: {
+            calculado: resultadoNTF.porModalidad?.revancha?.registros || 0,
+            oficial: resultadoXML.revancha?.registrosValidos || 0,
+            diferencia: (resultadoNTF.porModalidad?.revancha?.registros || 0) - (resultadoXML.revancha?.registrosValidos || 0)
+          },
+          apuestas: {
+            calculado: resultadoNTF.porModalidad?.revancha?.apuestasSimples || 0,
+            oficial: resultadoXML.revancha?.apuestas || 0,
+            diferencia: (resultadoNTF.porModalidad?.revancha?.apuestasSimples || 0) - (resultadoXML.revancha?.apuestas || 0)
+          },
+          recaudacion: {
+            calculado: resultadoNTF.porModalidad?.revancha?.recaudacion || 0,
+            oficial: resultadoXML.revancha?.recaudacionBruta || 0,
+            diferencia: (resultadoNTF.porModalidad?.revancha?.recaudacion || 0) - (resultadoXML.revancha?.recaudacionBruta || 0)
+          },
+          porcentaje: resultadoNTF.registrosValidos > 0 
+            ? ((resultadoNTF.porModalidad?.revancha?.registros || 0) / resultadoNTF.registrosValidos * 100).toFixed(1) 
+            : '0.0'
+        },
+        siempreSale: {
+          nombre: 'Siempre Sale',
+          registros: {
+            calculado: resultadoNTF.porModalidad?.siempreSale?.registros || 0,
+            oficial: resultadoXML.siempreSale?.registrosValidos || 0,
+            diferencia: (resultadoNTF.porModalidad?.siempreSale?.registros || 0) - (resultadoXML.siempreSale?.registrosValidos || 0)
+          },
+          apuestas: {
+            calculado: resultadoNTF.porModalidad?.siempreSale?.apuestasSimples || 0,
+            oficial: resultadoXML.siempreSale?.apuestas || 0,
+            diferencia: (resultadoNTF.porModalidad?.siempreSale?.apuestasSimples || 0) - (resultadoXML.siempreSale?.apuestas || 0)
+          },
+          recaudacion: {
+            calculado: resultadoNTF.porModalidad?.siempreSale?.recaudacion || 0,
+            oficial: resultadoXML.siempreSale?.recaudacionBruta || 0,
+            diferencia: (resultadoNTF.porModalidad?.siempreSale?.recaudacion || 0) - (resultadoXML.siempreSale?.recaudacionBruta || 0)
+          },
+          porcentaje: resultadoNTF.registrosValidos > 0 
+            ? ((resultadoNTF.porModalidad?.siempreSale?.registros || 0) / resultadoNTF.registrosValidos * 100).toFixed(1) 
+            : '0.0'
+        }
+      } : null,
+      
       seguridad: {
         archivos: {
           txt: !!txtFileInfo,
           xml: !!xmlFileInfo,
           hash: !!hashFileInfo,
           hashCP: !!hashCPFileInfo,
-          pdf: false
+          pdf: !!pdfFileInfo
         },
-        verificado: null,
-        verificadoXml: null
+        verificado: hashTxtVerificado,
+        verificadoXml: hashXmlVerificado
       }
     }, 'Archivo QUINI 6 procesado correctamente');
     

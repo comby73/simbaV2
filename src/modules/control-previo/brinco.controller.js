@@ -313,41 +313,58 @@ async function procesarArchivoNTF(contenido) {
 
 /**
  * Parsea el XML de control previo de BRINCO
+ * Estructura XML:
+ * <CONTROL_PREVIO>
+ *   <BRINCO>
+ *     <CODIGO_JUEGO>13</CODIGO_JUEGO>
+ *     <SORTEO>1335</SORTEO>
+ *     <REGISTROS_VALIDOS>11606</REGISTROS_VALIDOS>
+ *     ...
+ *   </BRINCO>
+ * </CONTROL_PREVIO>
  */
 async function parsearXmlControlPrevio(contenidoXml) {
-  const parser = new xml2js.Parser({ explicitArray: false });
+  const parser = new xml2js.Parser({ explicitArray: false, mergeAttrs: true });
   
   try {
     const resultado = await parser.parseStringPromise(contenidoXml);
-    const root = resultado.ControlPrevio || resultado.controlPrevio || resultado;
     
-    // Extraer datos del XML (estructura similar a Poceada pero adaptada a BRINCO)
-    const datos = {
-      sorteo: root.Sorteo || root.sorteo || root.NumeroSorteo,
-      fecha: root.Fecha || root.fecha || root.FechaSorteo,
-      registrosValidos: parseInt(root.RegistrosValidos || root.registrosValidos || 0),
-      registrosAnulados: parseInt(root.RegistrosAnulados || root.registrosAnulados || 0),
-      apuestas: parseInt(root.Apuestas || root.apuestas || root.CantidadApuestas || 0),
-      recaudacion: parseFloat(root.Recaudacion || root.recaudacion || root.ImporteTotal || 0),
-      premios: {
-        tradicional: {
-          primerPremio: parseFloat(root.PrimerPremio || 0),
-          segundoPremio: parseFloat(root.SegundoPremio || 0),
-          tercerPremio: parseFloat(root.TercerPremio || 0),
-          cuartoPremio: parseFloat(root.CuartoPremio || 0),
-          estimulo: parseFloat(root.Estimulo || 0)
-        },
-        junior: {
-          premio: parseFloat(root.PremioJunior || 0),
-          estimulo: parseFloat(root.EstimuloJunior || 0)
-        }
-      }
+    // Buscar la raíz BRINCO
+    let root = null;
+    if (resultado.CONTROL_PREVIO && resultado.CONTROL_PREVIO.BRINCO) {
+      root = resultado.CONTROL_PREVIO.BRINCO;
+    } else if (resultado.BRINCO) {
+      root = resultado.BRINCO;
+    }
+    
+    if (!root) {
+      console.warn('⚠️ No se encontró BRINCO en el XML');
+      return { raw: resultado, procesado: false };
+    }
+    
+    console.log('📊 XML BRINCO parseado:', {
+      sorteo: root.SORTEO,
+      registrosValidos: root.REGISTROS_VALIDOS,
+      recaudacion: root.RECAUDACION_BRUTA
+    });
+    
+    return {
+      raw: resultado,
+      procesado: true,
+      sorteo: root.SORTEO,
+      fecha: root.FECHA_SORTEO,
+      codigoJuego: root.CODIGO_JUEGO,
+      registrosValidos: parseInt(root.REGISTROS_VALIDOS || 0),
+      registrosAnulados: parseInt(root.REGISTROS_ANULADOS || 0),
+      apuestas: parseInt(root.APUESTAS_EN_SORTEO || 0),
+      recaudacion: parseFloat(root.RECAUDACION_BRUTA || 0),
+      fondoComun: parseFloat(root.FONDO_COMUN || 0),
+      recaudacionDistribuir: parseFloat(root.RECAUDACION_A_DISTRIBUIR || 0),
+      premiosDistribuir: parseFloat(root.IMPORTE_TOTAL_PREMIOS_A_DISTRIBUIR || 0)
     };
-    
-    return datos;
   } catch (error) {
     console.error('Error parseando XML de BRINCO:', error);
-    return null;
+    return { raw: null, procesado: false, error: error.message };
   }
 }
 

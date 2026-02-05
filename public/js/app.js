@@ -1042,14 +1042,17 @@ function mostrarResultadosCP(data) {
     ocultarCardsProvincias();
   } else if (isLoto5) {
     renderTablasLoto5(data);
-  } else if (isBrinco || isQuini6) {
-    // BRINCO y QUINI 6 usan renderizado genérico
+  } else if (isQuini6) {
+    // QUINI 6 tiene renderizado específico por modalidad
+    renderTablasQuini6(data);
+  } else if (isBrinco) {
+    // BRINCO usa renderizado genérico
     renderTablasGenerico(data);
   } else {
     renderTablasQuiniela(data);
   }
 
-  // Comparación con XML
+  // Comparación con XML - para QUINI 6 la comparación por modalidad ya está en renderTablasQuini6
   const tbodyComp = document.getElementById('cp-tabla-comparacion');
   if (tbodyComp) {
     tbodyComp.innerHTML = '';
@@ -2187,6 +2190,215 @@ function renderTablasGenerico(data) {
       `;
       tbody.appendChild(tr);
     });
+  }
+}
+
+// =============================================
+// QUINI 6 - Renderizado específico por modalidad
+// =============================================
+function renderTablasQuini6(data) {
+  console.log('📊 Renderizando tablas QUINI 6 por modalidad:', data);
+
+  // Ocultar cards específicas de otros juegos
+  ocultarCardTombolina();
+
+  const porModalidad = data.porModalidad || {};
+  const comparacionModalidad = data.comparacionModalidad || {};
+  const resumen = data.resumen || {};
+
+  // Calcular totales para porcentajes
+  const totalRegistros = resumen.registros || 1;
+  const totalRecaudacion = resumen.recaudacion || 1;
+
+  // Buscar o crear contenedor de QUINI 6
+  let quini6Container = document.getElementById('cp-quini6-modalidades-card');
+  if (!quini6Container) {
+    // Crear card si no existe - insertar después de la card de resumen
+    const cardResumen = document.querySelector('#cp-resultados .card');
+    if (cardResumen) {
+      quini6Container = document.createElement('div');
+      quini6Container.id = 'cp-quini6-modalidades-card';
+      quini6Container.className = 'card mt-4';
+      cardResumen.parentNode.insertBefore(quini6Container, cardResumen.nextSibling);
+    }
+  }
+
+  if (quini6Container) {
+    // Crear tabla de modalidades con comparación XML
+    const tradicional = porModalidad.tradicional || {};
+    const revancha = porModalidad.revancha || {};
+    const siempreSale = porModalidad.siempreSale || {};
+
+    const compTrad = comparacionModalidad.tradicional || {};
+    const compRev = comparacionModalidad.revancha || {};
+    const compSS = comparacionModalidad.siempreSale || {};
+
+    // Calcular porcentajes
+    const pctTrad = totalRegistros > 0 ? ((tradicional.registros || 0) / totalRegistros * 100).toFixed(1) : '0.0';
+    const pctRev = totalRegistros > 0 ? ((revancha.registros || 0) / totalRegistros * 100).toFixed(1) : '0.0';
+    const pctSS = totalRegistros > 0 ? ((siempreSale.registros || 0) / totalRegistros * 100).toFixed(1) : '0.0';
+
+    // Función para mostrar estado de diferencia
+    const diffBadge = (diff) => {
+      if (diff === 0) return '<span class="badge badge-success">✓ OK</span>';
+      const cls = diff > 0 ? 'badge-warning' : 'badge-danger';
+      return `<span class="badge ${cls}">${diff > 0 ? '+' : ''}${formatNumber(diff)}</span>`;
+    };
+
+    quini6Container.innerHTML = `
+      <div class="card-header" style="background: linear-gradient(135deg, #7c3aed 0%, #a855f7 100%); color: white;">
+        <h4><i class="fas fa-layer-group"></i> Desglose por Modalidad - QUINI 6</h4>
+      </div>
+      <div class="card-body">
+        <!-- Resumen Visual de Modalidades -->
+        <div class="row mb-4">
+          <div class="col-md-4">
+            <div class="stat-card" style="border-left: 4px solid #22c55e;">
+              <div class="stat-label">Tradicional</div>
+              <div class="stat-value">${formatNumber(tradicional.registros || 0)}</div>
+              <div class="stat-detail">
+                <span class="badge badge-success">${pctTrad}%</span>
+                $${formatNumber(Math.round(tradicional.recaudacion || 0))}
+              </div>
+            </div>
+          </div>
+          <div class="col-md-4">
+            <div class="stat-card" style="border-left: 4px solid #3b82f6;">
+              <div class="stat-label">Revancha</div>
+              <div class="stat-value">${formatNumber(revancha.registros || 0)}</div>
+              <div class="stat-detail">
+                <span class="badge badge-primary">${pctRev}%</span>
+                $${formatNumber(Math.round(revancha.recaudacion || 0))}
+              </div>
+            </div>
+          </div>
+          <div class="col-md-4">
+            <div class="stat-card" style="border-left: 4px solid #f59e0b;">
+              <div class="stat-label">Siempre Sale</div>
+              <div class="stat-value">${formatNumber(siempreSale.registros || 0)}</div>
+              <div class="stat-detail">
+                <span class="badge badge-warning">${pctSS}%</span>
+                $${formatNumber(Math.round(siempreSale.recaudacion || 0))}
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Tabla Comparativa por Modalidad -->
+        ${data.comparacionModalidad ? `
+        <h5 class="mb-3"><i class="fas fa-balance-scale"></i> Comparación TXT vs XML por Modalidad</h5>
+        <div class="table-responsive">
+          <table class="table table-bordered table-striped">
+            <thead class="thead-dark">
+              <tr>
+                <th>Modalidad</th>
+                <th>Concepto</th>
+                <th class="text-right">Calculado (TXT)</th>
+                <th class="text-right">Oficial (XML)</th>
+                <th class="text-center">Diferencia</th>
+              </tr>
+            </thead>
+            <tbody>
+              <!-- TRADICIONAL -->
+              <tr style="background: rgba(34, 197, 94, 0.1);">
+                <td rowspan="3"><strong style="color: #22c55e;">Tradicional</strong><br><small>${pctTrad}% tickets</small></td>
+                <td>Registros</td>
+                <td class="text-right">${formatNumber(compTrad.registros?.calculado || 0)}</td>
+                <td class="text-right">${formatNumber(compTrad.registros?.oficial || 0)}</td>
+                <td class="text-center">${diffBadge(compTrad.registros?.diferencia || 0)}</td>
+              </tr>
+              <tr style="background: rgba(34, 197, 94, 0.05);">
+                <td>Apuestas</td>
+                <td class="text-right">${formatNumber(compTrad.apuestas?.calculado || 0)}</td>
+                <td class="text-right">${formatNumber(compTrad.apuestas?.oficial || 0)}</td>
+                <td class="text-center">${diffBadge(compTrad.apuestas?.diferencia || 0)}</td>
+              </tr>
+              <tr style="background: rgba(34, 197, 94, 0.1);">
+                <td>Recaudación</td>
+                <td class="text-right">$${formatNumber(Math.round(compTrad.recaudacion?.calculado || 0))}</td>
+                <td class="text-right">$${formatNumber(Math.round(compTrad.recaudacion?.oficial || 0))}</td>
+                <td class="text-center">${diffBadge(Math.round(compTrad.recaudacion?.diferencia || 0))}</td>
+              </tr>
+              
+              <!-- REVANCHA -->
+              <tr style="background: rgba(59, 130, 246, 0.1);">
+                <td rowspan="3"><strong style="color: #3b82f6;">Revancha</strong><br><small>${pctRev}% tickets</small></td>
+                <td>Registros</td>
+                <td class="text-right">${formatNumber(compRev.registros?.calculado || 0)}</td>
+                <td class="text-right">${formatNumber(compRev.registros?.oficial || 0)}</td>
+                <td class="text-center">${diffBadge(compRev.registros?.diferencia || 0)}</td>
+              </tr>
+              <tr style="background: rgba(59, 130, 246, 0.05);">
+                <td>Apuestas</td>
+                <td class="text-right">${formatNumber(compRev.apuestas?.calculado || 0)}</td>
+                <td class="text-right">${formatNumber(compRev.apuestas?.oficial || 0)}</td>
+                <td class="text-center">${diffBadge(compRev.apuestas?.diferencia || 0)}</td>
+              </tr>
+              <tr style="background: rgba(59, 130, 246, 0.1);">
+                <td>Recaudación</td>
+                <td class="text-right">$${formatNumber(Math.round(compRev.recaudacion?.calculado || 0))}</td>
+                <td class="text-right">$${formatNumber(Math.round(compRev.recaudacion?.oficial || 0))}</td>
+                <td class="text-center">${diffBadge(Math.round(compRev.recaudacion?.diferencia || 0))}</td>
+              </tr>
+              
+              <!-- SIEMPRE SALE -->
+              <tr style="background: rgba(245, 158, 11, 0.1);">
+                <td rowspan="3"><strong style="color: #f59e0b;">Siempre Sale</strong><br><small>${pctSS}% tickets</small></td>
+                <td>Registros</td>
+                <td class="text-right">${formatNumber(compSS.registros?.calculado || 0)}</td>
+                <td class="text-right">${formatNumber(compSS.registros?.oficial || 0)}</td>
+                <td class="text-center">${diffBadge(compSS.registros?.diferencia || 0)}</td>
+              </tr>
+              <tr style="background: rgba(245, 158, 11, 0.05);">
+                <td>Apuestas</td>
+                <td class="text-right">${formatNumber(compSS.apuestas?.calculado || 0)}</td>
+                <td class="text-right">${formatNumber(compSS.apuestas?.oficial || 0)}</td>
+                <td class="text-center">${diffBadge(compSS.apuestas?.diferencia || 0)}</td>
+              </tr>
+              <tr style="background: rgba(245, 158, 11, 0.1);">
+                <td>Recaudación</td>
+                <td class="text-right">$${formatNumber(Math.round(compSS.recaudacion?.calculado || 0))}</td>
+                <td class="text-right">$${formatNumber(Math.round(compSS.recaudacion?.oficial || 0))}</td>
+                <td class="text-center">${diffBadge(Math.round(compSS.recaudacion?.diferencia || 0))}</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        ` : `
+        <div class="alert alert-warning">
+          <i class="fas fa-exclamation-triangle"></i> No hay datos XML para comparar por modalidad
+        </div>
+        `}
+      </div>
+    `;
+  }
+
+  // También mostrar provincias si hay datos
+  let provinciasArray = [];
+  if (data.provincias) {
+    provinciasArray = Array.isArray(data.provincias) ? data.provincias : Object.values(data.provincias);
+  }
+
+  const tablaProvincias = document.getElementById('cp-tabla-provincias');
+  if (tablaProvincias && provinciasArray.length > 0) {
+    mostrarCardsProvincias();
+    const tbody = tablaProvincias.querySelector('tbody') || tablaProvincias;
+    tbody.innerHTML = '';
+
+    provinciasArray.sort((a, b) => (b.recaudacion || 0) - (a.recaudacion || 0));
+
+    provinciasArray.forEach(prov => {
+      const tr = document.createElement('tr');
+      tr.innerHTML = `
+        <td>${prov.nombre || prov.provincia || '-'}</td>
+        <td class="text-right">${formatNumber(prov.registros || 0)}</td>
+        <td class="text-right">${formatNumber(prov.apuestasSimples || prov.apuestas || 0)}</td>
+        <td class="text-right">$${formatNumber(Math.round(prov.recaudacion || 0))}</td>
+      `;
+      tbody.appendChild(tr);
+    });
+  } else {
+    ocultarCardsProvincias();
   }
 }
 
@@ -11433,4 +11645,135 @@ function exportarHipicasExcel() {
 
   URL.revokeObjectURL(url);
   showToast('Archivo CSV descargado', 'success');
+}
+
+// ============================================================
+// VENTAS TURFITO - Reporte con filtros y exportación
+// ============================================================
+
+async function buscarVentasTurfito() {
+  const fechaDesde = document.getElementById('hipicas-ventas-desde')?.value || '';
+  const fechaHasta = document.getElementById('hipicas-ventas-hasta')?.value || '';
+  const tbody = document.querySelector('#hipicas-tabla-ventas tbody');
+  const totalesDiv = document.getElementById('hipicas-ventas-totales');
+
+  if (!tbody) return;
+
+  tbody.innerHTML = '<tr><td colspan="8" style="text-align: center; padding: 2rem;"><i class="fas fa-spinner fa-spin"></i> Buscando...</td></tr>';
+  if (totalesDiv) totalesDiv.style.display = 'none';
+
+  try {
+    const params = new URLSearchParams();
+    if (fechaDesde) params.append('fechaDesde', fechaDesde);
+    if (fechaHasta) params.append('fechaHasta', fechaHasta);
+
+    const response = await apiRequest(`/juegos-offline/hipicas/ventas?${params.toString()}`);
+
+    if (!response.success || !response.data?.registros?.length) {
+      tbody.innerHTML = '<tr><td colspan="8" style="text-align: center; padding: 2rem; color: var(--text-muted);"><i class="fas fa-inbox"></i> No hay registros para el rango seleccionado</td></tr>';
+      return;
+    }
+
+    const { registros, totales } = response.data;
+
+    // Mostrar totales
+    if (totalesDiv && totales) {
+      totalesDiv.style.display = 'block';
+      document.getElementById('hipicas-ventas-total-bruta').textContent = formatMoneyHipicas(totales.recaudacionBruta);
+      document.getElementById('hipicas-ventas-total-cancel').textContent = formatMoneyHipicas(totales.cancelaciones);
+      document.getElementById('hipicas-ventas-total-devol').textContent = formatMoneyHipicas(totales.devoluciones);
+      document.getElementById('hipicas-ventas-total-neto').textContent = formatMoneyHipicas(totales.totalNeto);
+    }
+
+    // Llenar tabla
+    tbody.innerHTML = '';
+    registros.forEach(reg => {
+      const fecha = reg.fecha_sorteo ? reg.fecha_sorteo.substring(0, 10) : '-';
+      const tr = document.createElement('tr');
+      tr.innerHTML = `
+        <td>${fecha}</td>
+        <td><span class="badge" style="background: ${getColorHipodromo(reg.hipodromo_codigo)}; color: white;">${reg.hipodromo_nombre || '-'}</span></td>
+        <td style="text-align: center; font-weight: 600;">${reg.reunion || '-'}</td>
+        <td style="text-align: right;">${formatMoneyHipicas(reg.recaudacion_bruta)}</td>
+        <td style="text-align: right; color: #f44336;">${formatMoneyHipicas(reg.cancelaciones)}</td>
+        <td style="text-align: right; color: #9c27b0;">${formatMoneyHipicas(reg.devoluciones)}</td>
+        <td style="text-align: right; font-weight: 600; color: #4caf50;">${formatMoneyHipicas(reg.total_neto)}</td>
+        <td style="text-align: center;">${reg.agencias || 0}</td>
+      `;
+      tbody.appendChild(tr);
+    });
+
+  } catch (error) {
+    console.error('Error buscando ventas turfito:', error);
+    tbody.innerHTML = `<tr><td colspan="8" style="text-align: center; padding: 2rem; color: var(--danger);"><i class="fas fa-exclamation-triangle"></i> Error: ${error.message}</td></tr>`;
+  }
+}
+
+function getColorHipodromo(codigo) {
+  const colores = {
+    '0099': '#4caf50', // Palermo - verde
+    '0021': '#2196f3', // La Plata - azul
+    '0020': '#ff9800'  // San Isidro - naranja
+  };
+  return colores[codigo] || '#666';
+}
+
+function exportarVentasTurfitoExcel() {
+  const tabla = document.getElementById('hipicas-tabla-ventas');
+  if (!tabla) return;
+
+  const rows = tabla.querySelectorAll('tbody tr');
+  if (rows.length === 0 || rows[0].querySelector('td[colspan]')) {
+    showToast('No hay datos para exportar. Primero realice una búsqueda.', 'warning');
+    return;
+  }
+
+  const fechaDesde = document.getElementById('hipicas-ventas-desde')?.value || 'todas';
+  const fechaHasta = document.getElementById('hipicas-ventas-hasta')?.value || 'todas';
+
+  // Headers con formato Excel
+  const headers = ['Fecha', 'Hipódromo', 'Reunión', 'Recaudación Bruta', 'Cancelaciones', 'Devoluciones', 'Total Neto', 'Agencias'];
+  const csvRows = [headers.join(';')]; // Usar ; para Excel en español
+
+  rows.forEach(row => {
+    const cells = row.querySelectorAll('td');
+    const rowData = Array.from(cells).map((cell, idx) => {
+      let val = cell.textContent.trim();
+      // Limpiar montos
+      if (idx >= 3 && idx <= 6) {
+        val = val.replace(/\$/g, '').replace(/\./g, '').replace(/,/g, '.');
+      }
+      // Escapar comillas
+      if (val.includes(';') || val.includes('"')) val = `"${val.replace(/"/g, '""')}"`;
+      return val;
+    });
+    csvRows.push(rowData.join(';'));
+  });
+
+  // Agregar fila de totales
+  const totalBruta = document.getElementById('hipicas-ventas-total-bruta')?.textContent || '$0';
+  const totalCancel = document.getElementById('hipicas-ventas-total-cancel')?.textContent || '$0';
+  const totalDevol = document.getElementById('hipicas-ventas-total-devol')?.textContent || '$0';
+  const totalNeto = document.getElementById('hipicas-ventas-total-neto')?.textContent || '$0';
+  
+  csvRows.push('');
+  csvRows.push(['TOTALES', '', '', 
+    totalBruta.replace(/\$/g, '').replace(/\./g, '').replace(/,/g, '.'),
+    totalCancel.replace(/\$/g, '').replace(/\./g, '').replace(/,/g, '.'),
+    totalDevol.replace(/\$/g, '').replace(/\./g, '').replace(/,/g, '.'),
+    totalNeto.replace(/\$/g, '').replace(/\./g, '').replace(/,/g, '.'),
+    ''
+  ].join(';'));
+
+  const csvContent = csvRows.join('\n');
+  const blob = new Blob(['\ufeff' + csvContent], { type: 'text/csv;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `ventas_turfito_${fechaDesde}_a_${fechaHasta}.csv`;
+  a.click();
+
+  URL.revokeObjectURL(url);
+  showToast('Archivo Excel (CSV) descargado', 'success');
 }

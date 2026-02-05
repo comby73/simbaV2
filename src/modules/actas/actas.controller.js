@@ -20,6 +20,12 @@ const generarActaControlPrevio = async (req, res) => {
     if (tipoJuego === 'Loto 5' || tipoJuego === 'Loto5') {
       return generarActaControlPrevioLoto5(req, res, datos);
     }
+    if (tipoJuego === 'Quini 6' || tipoJuego === 'QUINI 6' || tipoJuego === 'Quini6') {
+      return generarActaControlPrevioQuini6(req, res, datos);
+    }
+    if (tipoJuego === 'Brinco' || tipoJuego === 'BRINCO') {
+      return generarActaControlPrevioBrinco(req, res, datos);
+    }
     // GENERAR ACTA CONTROL PREVIO - TOMBOLINA
     async function generarActaControlPrevioTombolina(req, res, datos) {
       try {
@@ -2198,6 +2204,328 @@ const generarActaControlPosterior = async (req, res) => {
       success: false,
       message: 'Error generando PDF: ' + error.message
     });
+  }
+}
+
+// ══════════════════════════════════════════════════════════════════════
+// ACTA CONTROL PREVIO - QUINI 6
+// ══════════════════════════════════════════════════════════════════════
+async function generarActaControlPrevioQuini6(req, res, datos) {
+  try {
+    const resumen = datos.resumen || {};
+    const comparacion = datos.comparacion || {};
+    const seguridad = datos.seguridad || {};
+    const porModalidad = datos.porModalidad || {};
+    
+    const doc = new PDFDocument({ 
+      size: 'A4',
+      margins: { top: 50, bottom: 50, left: 50, right: 50 }
+    });
+    
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `inline; filename=Acta_ControlPrevio_Quini6_${datos.sorteo || 'sorteo'}.pdf`);
+    doc.pipe(res);
+
+    const fechaHoy = new Date().toLocaleDateString('es-AR', {
+      weekday: 'long', year: 'numeric', month: 'long', day: 'numeric'
+    });
+    const horaHoy = new Date().toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit' });
+
+    // ENCABEZADO
+    doc.fontSize(10).fillColor('#666')
+       .text('LOTERÍA DE LA CIUDAD DE BUENOS AIRES S.E.', 50, 30)
+       .text('CONTROL PREVIO', 450, 30, { align: 'right' });
+    doc.moveTo(50, 55).lineTo(545, 55).stroke('#ddd');
+
+    // TÍTULO
+    doc.fontSize(20).fillColor('#1e293b')
+       .text('ACTA DE CONTROL PREVIO', 50, 80, { align: 'center' });
+    doc.fontSize(14).fillColor('#7c3aed')
+       .text('QUINI 6', 50, 105, { align: 'center' });
+    doc.fontSize(12).fillColor('#64748b')
+       .text(`Sorteo N° ${datos.sorteo || 'N/A'} - Archivo: ${datos.archivo || 'N/A'}`, 50, 125, { align: 'center' });
+    doc.text(`${fechaHoy} - ${horaHoy}`, 50, 142, { align: 'center' });
+
+    let y = 170;
+
+    // RESUMEN GENERAL
+    doc.fontSize(12).fillColor('#1e293b').font('Helvetica-Bold')
+       .text('RESUMEN DE VENTAS', 50, y);
+    y += 20;
+    
+    doc.fontSize(10).font('Helvetica').fillColor('#334155');
+    const formatNum = (n) => (n || 0).toLocaleString('es-AR');
+    const formatMoney = (n) => '$' + (n || 0).toLocaleString('es-AR', { minimumFractionDigits: 2 });
+    
+    doc.text(`Registros Válidos: ${formatNum(resumen.registros)}`, 50, y);
+    doc.text(`Registros Anulados: ${formatNum(resumen.anulados)}`, 300, y);
+    y += 18;
+    doc.text(`Apuestas Totales: ${formatNum(resumen.apuestasTotal)}`, 50, y);
+    doc.text(`Recaudación: ${formatMoney(resumen.recaudacion)}`, 300, y);
+    y += 25;
+
+    // COMPARACIÓN TXT vs XML
+    if (comparacion.registros) {
+      doc.fontSize(12).fillColor('#1e293b').font('Helvetica-Bold')
+         .text('COMPARACIÓN TXT vs XML', 50, y);
+      y += 20;
+      
+      doc.fontSize(9).font('Helvetica');
+      
+      // Cabecera tabla
+      doc.fillColor('#64748b')
+         .text('CONCEPTO', 50, y)
+         .text('CALCULADO', 200, y)
+         .text('OFICIAL', 300, y)
+         .text('DIFERENCIA', 420, y);
+      y += 15;
+      doc.moveTo(50, y).lineTo(520, y).stroke('#e2e8f0');
+      y += 8;
+      
+      const filas = [
+        ['Registros Válidos', comparacion.registros?.calculado, comparacion.registros?.oficial, comparacion.registros?.diferencia],
+        ['Registros Anulados', comparacion.anulados?.calculado, comparacion.anulados?.oficial, comparacion.anulados?.diferencia],
+        ['Apuestas', comparacion.apuestas?.calculado, comparacion.apuestas?.oficial, comparacion.apuestas?.diferencia],
+        ['Recaudación', comparacion.recaudacion?.calculado, comparacion.recaudacion?.oficial, comparacion.recaudacion?.diferencia]
+      ];
+      
+      doc.fillColor('#334155');
+      for (const fila of filas) {
+        const esRecaudacion = fila[0] === 'Recaudación';
+        doc.text(fila[0], 50, y);
+        doc.text(esRecaudacion ? formatMoney(fila[1]) : formatNum(fila[1]), 200, y);
+        doc.text(esRecaudacion ? formatMoney(fila[2]) : formatNum(fila[2]), 300, y);
+        const dif = fila[3] || 0;
+        doc.fillColor(dif === 0 ? '#22c55e' : '#ef4444')
+           .text(dif === 0 ? '✓ OK' : (esRecaudacion ? formatMoney(dif) : formatNum(dif)), 420, y);
+        doc.fillColor('#334155');
+        y += 15;
+      }
+      y += 15;
+    }
+
+    // DESGLOSE Y COMPARACIÓN POR MODALIDAD
+    const comparacionModalidad = datos.comparacionModalidad || {};
+    
+    if (porModalidad.tradicional || porModalidad.revancha || porModalidad.siempreSale) {
+      doc.fontSize(12).fillColor('#1e293b').font('Helvetica-Bold')
+         .text('COMPARACIÓN POR MODALIDAD (TXT vs XML)', 50, y);
+      y += 20;
+      
+      doc.fontSize(8).font('Helvetica').fillColor('#64748b')
+         .text('MODALIDAD', 50, y)
+         .text('REG TXT', 130, y)
+         .text('REG XML', 180, y)
+         .text('DIF', 225, y)
+         .text('REC TXT', 270, y)
+         .text('REC XML', 350, y)
+         .text('DIF', 430, y)
+         .text('%', 480, y);
+      y += 12;
+      doc.moveTo(50, y).lineTo(520, y).stroke('#e2e8f0');
+      y += 6;
+      
+      doc.fillColor('#334155').fontSize(8);
+      const totalReg = resumen.registros || 1;
+      
+      // Función para mostrar fila de modalidad con comparación
+      const filaModalidad = (nombre, mod, comp, color) => {
+        const pct = ((mod?.registros || 0) / totalReg * 100).toFixed(1);
+        const difReg = comp?.registros?.diferencia || 0;
+        const difRec = Math.round(comp?.recaudacion?.diferencia || 0);
+        
+        doc.fillColor(color).text(nombre, 50, y);
+        doc.fillColor('#334155')
+           .text(formatNum(mod?.registros || 0), 130, y)
+           .text(formatNum(comp?.registros?.oficial || 0), 180, y);
+        doc.fillColor(difReg === 0 ? '#22c55e' : '#ef4444')
+           .text(difReg === 0 ? '✓' : formatNum(difReg), 225, y);
+        doc.fillColor('#334155')
+           .text(formatMoney(mod?.recaudacion || 0), 270, y)
+           .text(formatMoney(comp?.recaudacion?.oficial || 0), 350, y);
+        doc.fillColor(difRec === 0 ? '#22c55e' : '#ef4444')
+           .text(difRec === 0 ? '✓' : formatMoney(difRec), 430, y);
+        doc.fillColor('#7c3aed').text(pct + '%', 480, y);
+        y += 13;
+      };
+      
+      if (porModalidad.tradicional) {
+        filaModalidad('Tradicional', porModalidad.tradicional, comparacionModalidad.tradicional, '#22c55e');
+      }
+      if (porModalidad.revancha) {
+        filaModalidad('Revancha', porModalidad.revancha, comparacionModalidad.revancha, '#3b82f6');
+      }
+      if (porModalidad.siempreSale) {
+        filaModalidad('Siempre Sale', porModalidad.siempreSale, comparacionModalidad.siempreSale, '#f59e0b');
+      }
+      y += 10;
+    }
+
+    // VERIFICACIÓN DE SEGURIDAD
+    doc.fontSize(12).fillColor('#1e293b').font('Helvetica-Bold')
+       .text('VERIFICACIÓN DE SEGURIDAD', 50, y);
+    y += 20;
+    
+    doc.fontSize(9).font('Helvetica');
+    const archivos = seguridad.archivos || {};
+    doc.fillColor(archivos.txt ? '#22c55e' : '#ef4444')
+       .text(`${archivos.txt ? '✓' : '✗'} Archivo TXT`, 50, y);
+    doc.fillColor(archivos.xml ? '#22c55e' : '#ef4444')
+       .text(`${archivos.xml ? '✓' : '✗'} Archivo XML`, 150, y);
+    doc.fillColor(archivos.hash ? '#22c55e' : '#ef4444')
+       .text(`${archivos.hash ? '✓' : '✗'} Hash TXT`, 250, y);
+    doc.fillColor(archivos.hashCP ? '#22c55e' : '#ef4444')
+       .text(`${archivos.hashCP ? '✓' : '✗'} Hash XML`, 350, y);
+    y += 18;
+    
+    const hashTxt = seguridad.verificado;
+    const hashXml = seguridad.verificadoXml;
+    doc.fillColor(hashTxt === true ? '#22c55e' : hashTxt === false ? '#ef4444' : '#f59e0b')
+       .text(`Hash TXT: ${hashTxt === true ? '✓ Verificado' : hashTxt === false ? '✗ NO Coincide' : '? No verificable'}`, 50, y);
+    doc.fillColor(hashXml === true ? '#22c55e' : hashXml === false ? '#ef4444' : '#f59e0b')
+       .text(`Hash XML: ${hashXml === true ? '✓ Verificado' : hashXml === false ? '✗ NO Coincide' : '? No verificable'}`, 250, y);
+
+    // PIE DE PÁGINA
+    doc.fontSize(8).fillColor('#94a3b8').font('Helvetica');
+    doc.text(`Generado: ${fechaHoy} a las ${horaHoy} | Sistema SIMBA v2`, 50, 770, { width: 495, align: 'center' });
+
+    doc.end();
+
+  } catch (error) {
+    console.error('Error generando acta QUINI 6:', error);
+    res.status(500).json({ success: false, message: 'Error generando PDF: ' + error.message });
+  }
+}
+
+// ══════════════════════════════════════════════════════════════════════
+// ACTA CONTROL PREVIO - BRINCO
+// ══════════════════════════════════════════════════════════════════════
+async function generarActaControlPrevioBrinco(req, res, datos) {
+  try {
+    const resumen = datos.resumen || {};
+    const comparacion = datos.comparacion || {};
+    const seguridad = datos.seguridad || {};
+    
+    const doc = new PDFDocument({ 
+      size: 'A4',
+      margins: { top: 50, bottom: 50, left: 50, right: 50 }
+    });
+    
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `inline; filename=Acta_ControlPrevio_Brinco_${datos.sorteo || 'sorteo'}.pdf`);
+    doc.pipe(res);
+
+    const fechaHoy = new Date().toLocaleDateString('es-AR', {
+      weekday: 'long', year: 'numeric', month: 'long', day: 'numeric'
+    });
+    const horaHoy = new Date().toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit' });
+
+    // ENCABEZADO
+    doc.fontSize(10).fillColor('#666')
+       .text('LOTERÍA DE LA CIUDAD DE BUENOS AIRES S.E.', 50, 30)
+       .text('CONTROL PREVIO', 450, 30, { align: 'right' });
+    doc.moveTo(50, 55).lineTo(545, 55).stroke('#ddd');
+
+    // TÍTULO
+    doc.fontSize(20).fillColor('#1e293b')
+       .text('ACTA DE CONTROL PREVIO', 50, 80, { align: 'center' });
+    doc.fontSize(14).fillColor('#f59e0b')
+       .text('BRINCO', 50, 105, { align: 'center' });
+    doc.fontSize(12).fillColor('#64748b')
+       .text(`Sorteo N° ${datos.sorteo || 'N/A'} - Archivo: ${datos.archivo || 'N/A'}`, 50, 125, { align: 'center' });
+    doc.text(`${fechaHoy} - ${horaHoy}`, 50, 142, { align: 'center' });
+
+    let y = 170;
+
+    // RESUMEN GENERAL
+    doc.fontSize(12).fillColor('#1e293b').font('Helvetica-Bold')
+       .text('RESUMEN DE VENTAS', 50, y);
+    y += 20;
+    
+    doc.fontSize(10).font('Helvetica').fillColor('#334155');
+    const formatNum = (n) => (n || 0).toLocaleString('es-AR');
+    const formatMoney = (n) => '$' + (n || 0).toLocaleString('es-AR', { minimumFractionDigits: 2 });
+    
+    doc.text(`Registros Válidos: ${formatNum(resumen.registros)}`, 50, y);
+    doc.text(`Registros Anulados: ${formatNum(resumen.anulados)}`, 300, y);
+    y += 18;
+    doc.text(`Apuestas Totales: ${formatNum(resumen.apuestasTotal)}`, 50, y);
+    doc.text(`Recaudación: ${formatMoney(resumen.recaudacion)}`, 300, y);
+    y += 25;
+
+    // COMPARACIÓN TXT vs XML
+    if (comparacion.registros) {
+      doc.fontSize(12).fillColor('#1e293b').font('Helvetica-Bold')
+         .text('COMPARACIÓN TXT vs XML', 50, y);
+      y += 20;
+      
+      doc.fontSize(9).font('Helvetica');
+      
+      // Cabecera tabla
+      doc.fillColor('#64748b')
+         .text('CONCEPTO', 50, y)
+         .text('CALCULADO', 200, y)
+         .text('OFICIAL', 300, y)
+         .text('DIFERENCIA', 420, y);
+      y += 15;
+      doc.moveTo(50, y).lineTo(520, y).stroke('#e2e8f0');
+      y += 8;
+      
+      const filas = [
+        ['Registros Válidos', comparacion.registros?.calculado, comparacion.registros?.oficial, comparacion.registros?.diferencia],
+        ['Registros Anulados', comparacion.anulados?.calculado, comparacion.anulados?.oficial, comparacion.anulados?.diferencia],
+        ['Apuestas', comparacion.apuestas?.calculado, comparacion.apuestas?.oficial, comparacion.apuestas?.diferencia],
+        ['Recaudación', comparacion.recaudacion?.calculado, comparacion.recaudacion?.oficial, comparacion.recaudacion?.diferencia]
+      ];
+      
+      doc.fillColor('#334155');
+      for (const fila of filas) {
+        const esRecaudacion = fila[0] === 'Recaudación';
+        doc.text(fila[0], 50, y);
+        doc.text(esRecaudacion ? formatMoney(fila[1]) : formatNum(fila[1]), 200, y);
+        doc.text(esRecaudacion ? formatMoney(fila[2]) : formatNum(fila[2]), 300, y);
+        const dif = fila[3] || 0;
+        doc.fillColor(dif === 0 ? '#22c55e' : '#ef4444')
+           .text(dif === 0 ? '✓ OK' : (esRecaudacion ? formatMoney(dif) : formatNum(dif)), 420, y);
+        doc.fillColor('#334155');
+        y += 15;
+      }
+      y += 15;
+    }
+
+    // VERIFICACIÓN DE SEGURIDAD
+    doc.fontSize(12).fillColor('#1e293b').font('Helvetica-Bold')
+       .text('VERIFICACIÓN DE SEGURIDAD', 50, y);
+    y += 20;
+    
+    doc.fontSize(9).font('Helvetica');
+    const archivos = seguridad.archivos || {};
+    doc.fillColor(archivos.txt ? '#22c55e' : '#ef4444')
+       .text(`${archivos.txt ? '✓' : '✗'} Archivo TXT`, 50, y);
+    doc.fillColor(archivos.xml ? '#22c55e' : '#ef4444')
+       .text(`${archivos.xml ? '✓' : '✗'} Archivo XML`, 150, y);
+    doc.fillColor(archivos.hash ? '#22c55e' : '#ef4444')
+       .text(`${archivos.hash ? '✓' : '✗'} Hash TXT`, 250, y);
+    doc.fillColor(archivos.hashCP ? '#22c55e' : '#ef4444')
+       .text(`${archivos.hashCP ? '✓' : '✗'} Hash XML`, 350, y);
+    y += 18;
+    
+    const hashTxt = seguridad.verificado;
+    const hashXml = seguridad.verificadoXml;
+    doc.fillColor(hashTxt === true ? '#22c55e' : hashTxt === false ? '#ef4444' : '#f59e0b')
+       .text(`Hash TXT: ${hashTxt === true ? '✓ Verificado' : hashTxt === false ? '✗ NO Coincide' : '? No verificable'}`, 50, y);
+    doc.fillColor(hashXml === true ? '#22c55e' : hashXml === false ? '#ef4444' : '#f59e0b')
+       .text(`Hash XML: ${hashXml === true ? '✓ Verificado' : hashXml === false ? '✗ NO Coincide' : '? No verificable'}`, 250, y);
+
+    // PIE DE PÁGINA
+    doc.fontSize(8).fillColor('#94a3b8').font('Helvetica');
+    doc.text(`Generado: ${fechaHoy} a las ${horaHoy} | Sistema SIMBA v2`, 50, 770, { width: 495, align: 'center' });
+
+    doc.end();
+
+  } catch (error) {
+    console.error('Error generando acta BRINCO:', error);
+    res.status(500).json({ success: false, message: 'Error generando PDF: ' + error.message });
   }
 }
 

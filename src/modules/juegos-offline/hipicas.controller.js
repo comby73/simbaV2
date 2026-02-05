@@ -40,37 +40,47 @@ function safeAmount(str) {
 
 /**
  * Parsear una línea del TXT de Turfito
- * Posiciones:
- * - codigo_juego: 0-4
- * - provincia_agencia: 4-11
- * - reunion: 19-22
+ * Posiciones corregidas basadas en archivo real:
+ * - codigo_juego: 0-4 (ej: "0099" = Palermo)
+ * - provincia_agencia: 4-12 (ej: "51000196" = CABA agencia 196)
+ * - dato_extra: 12-20 (8 chars, ignorado)
+ * - reunion: 20-22 (ej: "05" = reunión 5)
  * - fecha: 22-30 (DDMMYYYY)
- * - ventas: 30-42
- * - cancelaciones: 42-54
- * - devoluciones: 53-66
- * - premios: 64-78
+ * - ventas: 30-42 (12 chars)
+ * - cancelaciones: 42-54 (12 chars)
+ * - devoluciones: 54-66 (12 chars)
+ * - premios: 66-78 (12 chars)
  */
-function parsearLinea(line) {
-  if (!line || line.length < 75) return null;
+function parsearLinea(line, debug = false) {
+  if (!line || line.length < 78) {
+    if (debug) console.log('❌ Línea muy corta:', line?.length, line?.substring(0, 30));
+    return null;
+  }
   if (line.includes('999999999')) return null;
 
   try {
     const codigoJuego = line.substring(0, 4).trim();
-    const provinciaAgencia = line.substring(4, 11).trim();
-    const reunion = line.substring(19, 22).trim();
+    const provinciaAgencia = line.substring(4, 12).trim();  // Corregido: era 4-11
+    const reunion = line.substring(20, 22).trim();          // Corregido: era 19-22
     const fechaRaw = line.substring(22, 30).trim();
     const ventasRaw = line.substring(30, 42);
     const cancelacionesRaw = line.substring(42, 54);
-    const devolucionesRaw = line.substring(53, 66);
-    const premioRaw = line.substring(64, 78);
+    const devolucionesRaw = line.substring(54, 66);         // Corregido: era 53-66
+    const premioRaw = line.substring(66, 78);               // Corregido: era 64-78
 
     // Determinar hipódromo
     const hipodromo = HIPODROMOS[codigoJuego];
-    if (!hipodromo) return null; // No es un código de hipódromo conocido
+    if (!hipodromo) {
+      if (debug) console.log('❌ Código no reconocido:', codigoJuego, '| Línea:', line.substring(0, 40));
+      return null; // No es un código de hipódromo conocido
+    }
 
     // Número de reunión y sorteo concatenado
     const numeroReunion = parseInt(reunion, 10);
-    if (isNaN(numeroReunion)) return null;
+    if (isNaN(numeroReunion)) {
+      if (debug) console.log('❌ Reunión inválida:', reunion, '| Código:', codigoJuego);
+      return null;
+    }
     const sorteoConcatenado = `${numeroReunion}-${hipodromo.abrev}`;
 
     // Agencia (sin ceros a la izquierda)
@@ -122,14 +132,39 @@ function procesarContenidoTXT(contenido, nombreArchivo) {
   let lineasProcesadas = 0;
   let lineasIgnoradas = 0;
 
-  for (const line of lines) {
+  // Debug: mostrar primeras líneas para verificar formato
+  console.log('📄 Procesando archivo Turfito:', nombreArchivo);
+  console.log('📊 Total líneas:', lines.length);
+  if (lines.length > 0) {
+    console.log('📝 Primera línea (primeros 90 chars):', lines[0].substring(0, 90));
+    console.log('📝 Longitud primera línea:', lines[0].length);
+    // Debug parseo de primera línea
+    const primeraLinea = lines[0];
+    console.log('🔍 Desglose primera línea:');
+    console.log('   - Código juego (0-4):', primeraLinea.substring(0, 4));
+    console.log('   - Prov+Agencia (4-12):', primeraLinea.substring(4, 12));
+    console.log('   - Dato extra (12-20):', primeraLinea.substring(12, 20));
+    console.log('   - Reunión (20-22):', primeraLinea.substring(20, 22));
+    console.log('   - Fecha (22-30):', primeraLinea.substring(22, 30));
+  }
+
+  // Contador de reuniones encontradas
+  const reunionesEncontradas = {};
+
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
     if (!line.trim()) continue;
 
-    const parsed = parsearLinea(line);
+    // Debug las primeras 5 líneas ignoradas
+    const parsed = parsearLinea(line, i < 10);
     if (!parsed) {
       lineasIgnoradas++;
       continue;
     }
+
+    // Contar reuniones
+    const reunionKey = `${parsed.hipodromo.abrev}-${parsed.reunion}`;
+    reunionesEncontradas[reunionKey] = (reunionesEncontradas[reunionKey] || 0) + 1;
 
     lineasProcesadas++;
     const key = `${parsed.sorteoConcatenado}_${parsed.agente}`;
@@ -167,12 +202,17 @@ function procesarContenidoTXT(contenido, nombreArchivo) {
     total_premios: Math.round(a.total_premios * 100) / 100
   }));
 
+  // Log reuniones encontradas
+  console.log('🏇 Reuniones encontradas:', reunionesEncontradas);
+  console.log('📊 Sorteos únicos:', [...new Set(registros.map(r => r.sorteo))]);
+
   return {
     registros,
     lineasProcesadas,
     lineasIgnoradas,
     totalAgencias: registros.length,
-    sorteosUnicos: [...new Set(registros.map(r => r.sorteo))]
+    sorteosUnicos: [...new Set(registros.map(r => r.sorteo))],
+    reunionesEncontradas
   };
 }
 
@@ -324,8 +364,80 @@ const eliminarFacturacion = async (req, res) => {
   }
 };
 
+/**
+ * GET /hipicas/ventas
+ * Consulta de ventas agrupadas por hipódromo y reunión con filtros de fecha
+ * Query params: fechaDesde, fechaHasta
+ */
+const obtenerVentas = async (req, res) => {
+  try {
+    const { fechaDesde, fechaHasta } = req.query;
+
+    let sql = `
+      SELECT 
+        fecha_sorteo,
+        hipodromo_codigo,
+        hipodromo_nombre,
+        reunion,
+        SUM(recaudacion_total) AS recaudacion_bruta,
+        SUM(importe_cancelaciones) AS cancelaciones,
+        SUM(devoluciones) AS devoluciones,
+        SUM(total_premios) AS premios,
+        SUM(recaudacion_total - importe_cancelaciones - devoluciones) AS total_neto,
+        COUNT(DISTINCT agency) AS agencias
+      FROM facturacion_turfito
+      WHERE 1=1
+    `;
+    const params = [];
+
+    if (fechaDesde) {
+      sql += ' AND fecha_sorteo >= ?';
+      params.push(fechaDesde);
+    }
+
+    if (fechaHasta) {
+      sql += ' AND fecha_sorteo <= ?';
+      params.push(fechaHasta);
+    }
+
+    sql += `
+      GROUP BY fecha_sorteo, hipodromo_codigo, hipodromo_nombre, reunion
+      ORDER BY hipodromo_nombre ASC, CAST(reunion AS UNSIGNED) ASC
+    `;
+
+    const registros = await query(sql, params);
+
+    // Calcular totales
+    const totales = {
+      recaudacionBruta: 0,
+      cancelaciones: 0,
+      devoluciones: 0,
+      premios: 0,
+      totalNeto: 0
+    };
+
+    for (const r of registros) {
+      totales.recaudacionBruta += parseFloat(r.recaudacion_bruta) || 0;
+      totales.cancelaciones += parseFloat(r.cancelaciones) || 0;
+      totales.devoluciones += parseFloat(r.devoluciones) || 0;
+      totales.premios += parseFloat(r.premios) || 0;
+      totales.totalNeto += parseFloat(r.total_neto) || 0;
+    }
+
+    return successResponse(res, { 
+      registros, 
+      totales,
+      filtros: { fechaDesde, fechaHasta }
+    });
+  } catch (error) {
+    console.error('Error obteniendo ventas:', error);
+    return errorResponse(res, 'Error: ' + error.message, 500);
+  }
+};
+
 module.exports = {
   procesarTXT,
   obtenerFacturacion,
-  eliminarFacturacion
+  eliminarFacturacion,
+  obtenerVentas
 };
