@@ -2,7 +2,7 @@
 
 /**
  * QUINI 6 Controller - Control Previo
- * Procesa archivos NTF de QUINI 6 (código de juego: 86)
+ * Procesa archivos NTF de QUINI 6 (código de juego: 69)
  * 
  * QUINI 6 tiene las siguientes modalidades:
  * - Tradicional Primera: 6 números del 1-45, premios por 6/5/4 aciertos
@@ -28,7 +28,7 @@ const { successResponse, errorResponse, PROVINCIAS } = require('../../shared/hel
 // Posiciones 1-based del PDF convertidas a 0-based para JavaScript
 const NTF_GENERIC = {
   VERSION_GENERICA: { start: 0, length: 2 },      // Pos 1-2: "02" - Versión parte genérica
-  JUEGO: { start: 2, length: 2 },                  // Pos 3-4: Código de juego (86 = QUINI 6)
+  JUEGO: { start: 2, length: 2 },                  // Pos 3-4: Código de juego (69 = QUINI 6)
   NUMERO_SORTEO: { start: 4, length: 6 },          // Pos 5-10: Número de sorteo
   CANTIDAD_SORTEOS: { start: 10, length: 2 },      // Pos 11-12: Cantidad de sorteos jugados
   PROVEEDOR: { start: 12, length: 1 },             // Pos 13: Proveedor
@@ -199,6 +199,16 @@ async function procesarArchivoNTF(contenido) {
   const porAgencia = {};
   const porInstancia = { '1': 0, '2': 0, '3': 0 };
   
+  // Stats por modalidad (como en el Python)
+  // La lógica es: instancia 1,2,3 participa en Tradicional
+  //               instancia 2,3 participa en Revancha
+  //               instancia 3 participa en Siempre Sale
+  const porModalidad = {
+    tradicional: { registros: 0, recaudacion: 0, apuestasSimples: 0 },
+    revancha: { registros: 0, recaudacion: 0, apuestasSimples: 0 },
+    siempreSale: { registros: 0, recaudacion: 0, apuestasSimples: 0 }
+  };
+  
   for (let i = 0; i < lineas.length; i++) {
     const linea = lineas[i];
     if (linea.length < 237) continue; // Longitud mínima para QUINI 6
@@ -207,7 +217,7 @@ async function procesarArchivoNTF(contenido) {
     
     // Extraer campos genéricos
     const juego = extraerCampo(linea, NTF_GENERIC.JUEGO);
-    if (juego !== '86') continue; // Solo procesar QUINI 6 (código 86)
+    if (juego !== '69') continue; // Solo procesar QUINI 6 (código 69)
     
     if (!numeroSorteo) {
       numeroSorteo = extraerCampo(linea, NTF_GENERIC.NUMERO_SORTEO);
@@ -278,6 +288,27 @@ async function procesarArchivoNTF(contenido) {
       if (porInstancia.hasOwnProperty(instancias)) {
         porInstancia[instancias]++;
       }
+      
+      // Acumular por MODALIDAD según instancias jugadas
+      // Instancias: 1=Trad, 2=Trad+Rev, 3=Trad+Rev+SS
+      // Si jugó a 1, 2 o 3 → participa en Tradicional (primer + segunda vuelta)
+      if (instancias === '1' || instancias === '2' || instancias === '3') {
+        porModalidad.tradicional.registros++;
+        porModalidad.tradicional.recaudacion += valorRealApuesta;
+        porModalidad.tradicional.apuestasSimples += apuestasSimplesCampo;
+      }
+      // Si jugó a 2 o 3 → participa también en Revancha
+      if (instancias === '2' || instancias === '3') {
+        porModalidad.revancha.registros++;
+        porModalidad.revancha.recaudacion += valorRealApuesta;
+        porModalidad.revancha.apuestasSimples += apuestasSimplesCampo;
+      }
+      // Si jugó a 3 → participa también en Siempre Sale
+      if (instancias === '3') {
+        porModalidad.siempreSale.registros++;
+        porModalidad.siempreSale.recaudacion += valorRealApuesta;
+        porModalidad.siempreSale.apuestasSimples += apuestasSimplesCampo;
+      }
     }
     
     // Estadísticas por provincia
@@ -336,6 +367,13 @@ async function procesarArchivoNTF(contenido) {
       tradicional: porInstancia['1'],
       tradicionalRevancha: porInstancia['2'],
       tradicionalRevanchaSiempreSale: porInstancia['3']
+    },
+    // Stats por modalidad (como en Python)
+    // Cada registro participa en las modalidades según su instancia
+    porModalidad: {
+      tradicional: porModalidad.tradicional,      // Todos los registros (instancia 1, 2 o 3)
+      revancha: porModalidad.revancha,            // Solo instancia 2 o 3
+      siempreSale: porModalidad.siempreSale       // Solo instancia 3
     },
     porProvincia: Object.values(porProvincia).sort((a, b) => b.recaudacion - a.recaudacion),
     porAgencia: Object.values(porAgencia).sort((a, b) => b.recaudacion - a.recaudacion),
@@ -457,7 +495,7 @@ async function procesarZip(req, res) {
       archivo: txtFileInfo.name,
       archivoXml: xmlFileInfo ? xmlFileInfo.name : null,
       tipoJuego: 'QUINI 6',
-      codigoJuego: '86',
+      codigoJuego: '69',
       sorteo: resultadoNTF.numeroSorteo,
       
       // Estructura resumen compatible con frontend
@@ -536,7 +574,7 @@ async function procesarNTF(req, res) {
     return successResponse(res, {
       archivo: req.file.originalname,
       juego: 'QUINI 6',
-      codigoJuego: '86',
+      codigoJuego: '69',
       ...resultado
     }, 'Archivo NTF de QUINI 6 procesado correctamente');
     

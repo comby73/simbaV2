@@ -4,12 +4,16 @@ const AdmZip = require('adm-zip');
 const { errorResponse, successResponse } = require('../../shared/helpers');
 const quinielaController = require('./quiniela.controller');
 
-// Mapeo de códigos de juego (NTF Pos 3-4)
+// Mapeo de códigos de juego (NTF Pos 3-4) - Códigos internos LOTBA
 const JUEGOS_MAP = {
-  '01': { id: 'QUINIELA', nombre: 'Quiniela', controller: quinielaController },
-  '08': { id: 'POCEADA', nombre: 'Quiniela Poceada', controller: null }, // Próximamente
-  '05': { id: 'LOTO', nombre: 'Loto Plus', controller: null },
-  '09': { id: 'QUINI6', nombre: 'Quini 6', controller: null }
+  '05': { id: 'LOTO5', nombre: 'Loto 5', controller: null },
+  '09': { id: 'LOTO', nombre: 'Loto Plus', controller: null },
+  '13': { id: 'BRINCO', nombre: 'Brinco', controller: null },
+  '69': { id: 'QUINI6', nombre: 'Quini 6', controller: null },
+  '74': { id: 'TOMBOLINA', nombre: 'Tombolina', controller: null },
+  '79': { id: 'QUINIELA_YA', nombre: 'Quiniela YA', controller: null },
+  '80': { id: 'QUINIELA', nombre: 'La Quiniela', controller: quinielaController },
+  '82': { id: 'POCEADA', nombre: 'Quiniela Poceada', controller: null }
 };
 
 const procesarArchivoUniversal = async (req, res) => {

@@ -2120,21 +2120,36 @@ function renderTablasTombolina(data) {
 // Renderizado genérico para BRINCO, QUINI 6, Loto 5 (juegos sin tabla de provincias específica)
 function renderTablasGenerico(data) {
   console.log('📊 Renderizando tablas genéricas para:', data.tipoJuego);
-  
+
   // Ocultar cards específicas de otros juegos
   ocultarCardTombolina();
-  ocultarCardsProvincias();
-  
+
+  // Convertir provincias de objeto a array si es necesario
+  let provinciasArray = [];
+  if (data.provincias) {
+    if (Array.isArray(data.provincias)) {
+      provinciasArray = data.provincias;
+    } else {
+      // Es un objeto, convertir a array
+      provinciasArray = Object.entries(data.provincias).map(([nombre, datos]) => ({
+        nombre,
+        ...datos
+      }));
+    }
+  }
+
   // Mostrar tabla de provincias si hay datos
   const tablaProvincias = document.getElementById('cp-tabla-provincias');
-  if (tablaProvincias && data.provincias && data.provincias.length > 0) {
-    const cardProv = tablaProvincias.closest('.card');
-    if (cardProv) cardProv.style.display = '';
-    
+  if (tablaProvincias && provinciasArray.length > 0) {
+    mostrarCardsProvincias();
+
     const tbody = tablaProvincias.querySelector('tbody') || tablaProvincias;
     tbody.innerHTML = '';
-    
-    data.provincias.forEach(prov => {
+
+    // Ordenar por recaudación descendente
+    provinciasArray.sort((a, b) => (b.recaudacion || 0) - (a.recaudacion || 0));
+
+    provinciasArray.forEach(prov => {
       const tr = document.createElement('tr');
       tr.innerHTML = `
         <td>${prov.nombre || prov.provincia || '-'}</td>
@@ -2144,6 +2159,8 @@ function renderTablasGenerico(data) {
       `;
       tbody.appendChild(tr);
     });
+  } else {
+    ocultarCardsProvincias();
   }
   
   // Mostrar tabla de agencias si hay datos (top 10)
@@ -7203,7 +7220,9 @@ function mostrarResultadosEscrutinioQuini6(resultado) {
           <tr>
             <th>Nivel</th>
             <th>Aciertos</th>
-            <th>Ganadores</th>
+            <th>Ganadores TXT</th>
+            <th>Ganadores Extracto</th>
+            <th>Diferencia</th>
             <th>Premio Unitario</th>
             <th>Premio Total</th>
           </tr>
@@ -7211,16 +7230,21 @@ function mostrarResultadosEscrutinioQuini6(resultado) {
         <tbody>
           ${['6', '5', '4'].map(nivel => {
             const data = ganadores.tradicionalPrimera?.[nivel] || { cantidad: 0, premioUnitario: 0, premioTotal: 0 };
+            const comp = resultado.comparacion?.tradicionalPrimera?.[nivel] || {};
             const esGanador = data.cantidad > 0;
-            return `
-              <tr style="${esGanador ? 'background: rgba(16, 185, 129, 0.1);' : ''}">
-                <td>${nivel === '6' ? '1° Premio' : nivel === '5' ? '2° Premio' : '3° Premio'}</td>
-                <td>${nivel} aciertos</td>
-                <td style="font-weight: bold; color: ${esGanador ? 'var(--success)' : 'inherit'};">${formatNumber(data.cantidad)}</td>
-                <td>$${formatNumber(data.premioUnitario || 0)}</td>
-                <td style="font-weight: bold;">$${formatNumber(data.premioTotal || 0)}</td>
+            const difClass = (comp.diferencia || 0) === 0 ? 'text-success' : 'text-danger';
+            const difIcon = (comp.diferencia || 0) === 0 ? '✓' : '✗';
+            return \`
+              <tr style="\${esGanador ? 'background: rgba(16, 185, 129, 0.1);' : ''}">
+                <td>\${nivel === '6' ? '1° Premio' : nivel === '5' ? '2° Premio' : '3° Premio'}</td>
+                <td>\${nivel} aciertos</td>
+                <td style="font-weight: bold; color: \${esGanador ? 'var(--success)' : 'inherit'};">\${formatNumber(data.cantidad)}</td>
+                <td>\${formatNumber(data.ganadoresExtracto || comp.extracto || 0)}</td>
+                <td class="\${difClass}">\${difIcon} \${comp.diferencia || 0}</td>
+                <td>$\${formatNumber(data.premioUnitario || 0)}</td>
+                <td style="font-weight: bold;">$\${formatNumber(data.premioTotal || 0)}</td>
               </tr>
-            `;
+            \`;
           }).join('')}
         </tbody>
       </table>
@@ -7232,7 +7256,9 @@ function mostrarResultadosEscrutinioQuini6(resultado) {
           <tr>
             <th>Nivel</th>
             <th>Aciertos</th>
-            <th>Ganadores</th>
+            <th>Ganadores TXT</th>
+            <th>Ganadores Extracto</th>
+            <th>Diferencia</th>
             <th>Premio Unitario</th>
             <th>Premio Total</th>
           </tr>
@@ -7240,16 +7266,21 @@ function mostrarResultadosEscrutinioQuini6(resultado) {
         <tbody>
           ${['6', '5', '4'].map(nivel => {
             const data = ganadores.tradicionalSegunda?.[nivel] || { cantidad: 0, premioUnitario: 0, premioTotal: 0 };
+            const comp = resultado.comparacion?.tradicionalSegunda?.[nivel] || {};
             const esGanador = data.cantidad > 0;
-            return `
-              <tr style="${esGanador ? 'background: rgba(16, 185, 129, 0.1);' : ''}">
-                <td>${nivel === '6' ? '1° Premio' : nivel === '5' ? '2° Premio' : '3° Premio'}</td>
-                <td>${nivel} aciertos</td>
-                <td style="font-weight: bold; color: ${esGanador ? 'var(--success)' : 'inherit'};">${formatNumber(data.cantidad)}</td>
-                <td>$${formatNumber(data.premioUnitario || 0)}</td>
-                <td style="font-weight: bold;">$${formatNumber(data.premioTotal || 0)}</td>
+            const difClass = (comp.diferencia || 0) === 0 ? 'text-success' : 'text-danger';
+            const difIcon = (comp.diferencia || 0) === 0 ? '✓' : '✗';
+            return \`
+              <tr style="\${esGanador ? 'background: rgba(16, 185, 129, 0.1);' : ''}">
+                <td>\${nivel === '6' ? '1° Premio' : nivel === '5' ? '2° Premio' : '3° Premio'}</td>
+                <td>\${nivel} aciertos</td>
+                <td style="font-weight: bold; color: \${esGanador ? 'var(--success)' : 'inherit'};">\${formatNumber(data.cantidad)}</td>
+                <td>\${formatNumber(data.ganadoresExtracto || comp.extracto || 0)}</td>
+                <td class="\${difClass}">\${difIcon} \${comp.diferencia || 0}</td>
+                <td>$\${formatNumber(data.premioUnitario || 0)}</td>
+                <td style="font-weight: bold;">$\${formatNumber(data.premioTotal || 0)}</td>
               </tr>
-            `;
+            \`;
           }).join('')}
         </tbody>
       </table>
@@ -7261,7 +7292,9 @@ function mostrarResultadosEscrutinioQuini6(resultado) {
           <tr>
             <th>Nivel</th>
             <th>Aciertos</th>
-            <th>Ganadores</th>
+            <th>Ganadores TXT</th>
+            <th>Ganadores Extracto</th>
+            <th>Diferencia</th>
             <th>Premio Unitario</th>
             <th>Premio Total</th>
           </tr>
@@ -7269,12 +7302,17 @@ function mostrarResultadosEscrutinioQuini6(resultado) {
         <tbody>
           ${(() => {
             const data = ganadores.revancha?.['6'] || { cantidad: 0, premioUnitario: 0, premioTotal: 0 };
+            const comp = resultado.comparacion?.revancha?.['6'] || {};
             const esGanador = data.cantidad > 0;
+            const difClass = (comp.diferencia || 0) === 0 ? 'text-success' : 'text-danger';
+            const difIcon = (comp.diferencia || 0) === 0 ? '✓' : '✗';
             return `
               <tr style="${esGanador ? 'background: rgba(16, 185, 129, 0.1);' : ''}">
                 <td>Premio Revancha</td>
                 <td>6 aciertos</td>
                 <td style="font-weight: bold; color: ${esGanador ? 'var(--success)' : 'inherit'};">${formatNumber(data.cantidad)}</td>
+                <td>${formatNumber(data.ganadoresExtracto || comp.extracto || 0)}</td>
+                <td class="${difClass}">${difIcon} ${comp.diferencia || 0}</td>
                 <td>$${formatNumber(data.premioUnitario || 0)}</td>
                 <td style="font-weight: bold;">$${formatNumber(data.premioTotal || 0)}</td>
               </tr>
@@ -7290,7 +7328,9 @@ function mostrarResultadosEscrutinioQuini6(resultado) {
           <tr>
             <th>Nivel</th>
             <th>Aciertos Requeridos</th>
-            <th>Ganadores</th>
+            <th>Ganadores TXT</th>
+            <th>Ganadores Extracto</th>
+            <th>Diferencia</th>
             <th>Premio Unitario</th>
             <th>Premio Total</th>
           </tr>
@@ -7298,12 +7338,17 @@ function mostrarResultadosEscrutinioQuini6(resultado) {
         <tbody>
           ${(() => {
             const data = ganadores.siempreSale || { cantidad: 0, aciertosRequeridos: 6, premioUnitario: 0, premioTotal: 0 };
+            const comp = resultado.comparacion?.siempreSale || {};
             const esGanador = data.cantidad > 0;
+            const difClass = (comp.diferencia || 0) === 0 ? 'text-success' : 'text-danger';
+            const difIcon = (comp.diferencia || 0) === 0 ? '✓' : '✗';
             return `
               <tr style="${esGanador ? 'background: rgba(16, 185, 129, 0.1);' : ''}">
                 <td>Premio Siempre Sale</td>
                 <td>${data.aciertosRequeridos} aciertos</td>
                 <td style="font-weight: bold; color: ${esGanador ? 'var(--success)' : 'inherit'};">${formatNumber(data.cantidad)}</td>
+                <td>${formatNumber(data.ganadoresExtracto || comp.extracto || 0)}</td>
+                <td class="${difClass}">${difIcon} ${comp.diferencia || 0}</td>
                 <td>$${formatNumber(data.premioUnitario || 0)}</td>
                 <td style="font-weight: bold;">$${formatNumber(data.premioTotal || 0)}</td>
               </tr>
@@ -7320,7 +7365,9 @@ function mostrarResultadosEscrutinioQuini6(resultado) {
           <tr>
             <th>Nivel</th>
             <th>Aciertos</th>
-            <th>Ganadores</th>
+            <th>Ganadores TXT</th>
+            <th>Ganadores Extracto</th>
+            <th>Diferencia</th>
             <th>Premio Unitario</th>
             <th>Premio Total</th>
           </tr>
@@ -7328,12 +7375,17 @@ function mostrarResultadosEscrutinioQuini6(resultado) {
         <tbody>
           ${(() => {
             const data = ganadores.premioExtra?.['6'] || { cantidad: 0, premioUnitario: 0, premioTotal: 0 };
+            const comp = resultado.comparacion?.premioExtra?.['6'] || {};
             const esGanador = data.cantidad > 0;
+            const difClass = (comp.diferencia || 0) === 0 ? 'text-success' : 'text-danger';
+            const difIcon = (comp.diferencia || 0) === 0 ? '✓' : '✗';
             return `
               <tr style="${esGanador ? 'background: rgba(16, 185, 129, 0.1);' : ''}">
                 <td>Premio Extra</td>
                 <td>6 aciertos</td>
                 <td style="font-weight: bold; color: ${esGanador ? 'var(--success)' : 'inherit'};">${formatNumber(data.cantidad)}</td>
+                <td>${formatNumber(data.ganadoresExtracto || comp.extracto || 0)}</td>
+                <td class="${difClass}">${difIcon} ${comp.diferencia || 0}</td>
                 <td>$${formatNumber(data.premioUnitario || 0)}</td>
                 <td style="font-weight: bold;">$${formatNumber(data.premioTotal || 0)}</td>
               </tr>

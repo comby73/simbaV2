@@ -2,7 +2,7 @@
 
 /**
  * BRINCO Controller - Control Previo
- * Procesa archivos NTF de BRINCO (código de juego: 85)
+ * Procesa archivos NTF de BRINCO (código de juego: 13)
  * 
  * BRINCO tiene dos modalidades:
  * - BRINCO Tradicional: 6 números del 1-41, premios por 6/5/4/3 aciertos
@@ -25,7 +25,7 @@ const { successResponse, errorResponse, PROVINCIAS } = require('../../shared/hel
 // Posiciones 1-based del PDF convertidas a 0-based para JavaScript
 const NTF_GENERIC = {
   VERSION_GENERICA: { start: 0, length: 2 },      // Pos 1-2: "02" - Versión parte genérica
-  JUEGO: { start: 2, length: 2 },                  // Pos 3-4: Código de juego (85 = BRINCO)
+  JUEGO: { start: 2, length: 2 },                  // Pos 3-4: Código de juego (13 = BRINCO)
   NUMERO_SORTEO: { start: 4, length: 6 },          // Pos 5-10: Número de sorteo
   CANTIDAD_SORTEOS: { start: 10, length: 2 },      // Pos 11-12: Cantidad de sorteos jugados
   PROVEEDOR: { start: 12, length: 1 },             // Pos 13: Proveedor
@@ -196,7 +196,7 @@ async function procesarArchivoNTF(contenido) {
     
     // Extraer campos genéricos
     const juego = extraerCampo(linea, NTF_GENERIC.JUEGO);
-    if (juego !== '85') continue; // Solo procesar BRINCO (código 85)
+    if (juego !== '13') continue; // Solo procesar BRINCO (código 13)
     
     if (!numeroSorteo) {
       numeroSorteo = extraerCampo(linea, NTF_GENERIC.NUMERO_SORTEO);

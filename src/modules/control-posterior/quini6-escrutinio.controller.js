@@ -352,6 +352,175 @@ async function runScrutiny(registros, extracto) {
     }
   }
   
+  // ===========================================
+  // ASIGNAR PREMIOS DEL EXTRACTO JSON
+  // ===========================================
+  
+  // Tradicional Primera - premios por nivel
+  const premiosPrimera = extracto.tradicional?.premiosPrimera || {};
+  for (const nivel of ['6', '5', '4']) {
+    const nivelKey = nivel === '6' ? '1' : (nivel === '5' ? '2' : '3');
+    const premioInfo = premiosPrimera[nivelKey] || {};
+    resultados.ganadores.tradicionalPrimera[nivel].premioUnitario = 
+      parseFloat(premioInfo.premio_por_ganador || premioInfo.premioUnitario || 0);
+    resultados.ganadores.tradicionalPrimera[nivel].ganadoresExtracto = 
+      parseInt(premioInfo.winners || premioInfo.ganadores || 0);
+    resultados.ganadores.tradicionalPrimera[nivel].premioTotal = 
+      resultados.ganadores.tradicionalPrimera[nivel].cantidad * 
+      resultados.ganadores.tradicionalPrimera[nivel].premioUnitario;
+  }
+  
+  // Tradicional Segunda - premios por nivel
+  const premiosSegunda = extracto.tradicional?.premiosSegunda || {};
+  for (const nivel of ['6', '5', '4']) {
+    const nivelKey = nivel === '6' ? '1' : (nivel === '5' ? '2' : '3');
+    const premioInfo = premiosSegunda[nivelKey] || {};
+    resultados.ganadores.tradicionalSegunda[nivel].premioUnitario = 
+      parseFloat(premioInfo.premio_por_ganador || premioInfo.premioUnitario || 0);
+    resultados.ganadores.tradicionalSegunda[nivel].ganadoresExtracto = 
+      parseInt(premioInfo.winners || premioInfo.ganadores || 0);
+    resultados.ganadores.tradicionalSegunda[nivel].premioTotal = 
+      resultados.ganadores.tradicionalSegunda[nivel].cantidad * 
+      resultados.ganadores.tradicionalSegunda[nivel].premioUnitario;
+  }
+  
+  // Revancha - solo 6 aciertos
+  const premiosRevancha = extracto.revanchaPremios || {};
+  const premioRevanchaInfo = premiosRevancha['1'] || {};
+  resultados.ganadores.revancha['6'].premioUnitario = 
+    parseFloat(premioRevanchaInfo.premio_por_ganador || premioRevanchaInfo.premioUnitario || 0);
+  resultados.ganadores.revancha['6'].ganadoresExtracto = 
+    parseInt(premioRevanchaInfo.winners || premioRevanchaInfo.ganadores || 0);
+  resultados.ganadores.revancha['6'].premioTotal = 
+    resultados.ganadores.revancha['6'].cantidad * 
+    resultados.ganadores.revancha['6'].premioUnitario;
+  
+  // Siempre Sale
+  const premiosSiempreSale = extracto.siempreSalePremios || {};
+  const premioSSInfo = premiosSiempreSale['1'] || {};
+  resultados.ganadores.siempreSale.premioUnitario = 
+    parseFloat(premioSSInfo.premio_por_ganador || premioSSInfo.premioUnitario || 0);
+  resultados.ganadores.siempreSale.ganadoresExtracto = 
+    parseInt(premioSSInfo.winners || premioSSInfo.ganadores || 0);
+  resultados.ganadores.siempreSale.premioTotal = 
+    resultados.ganadores.siempreSale.cantidad * 
+    resultados.ganadores.siempreSale.premioUnitario;
+  
+  // Premio Extra
+  const premiosPremioExtra = extracto.premioExtraPremios || {};
+  const premioExtraInfo = premiosPremioExtra['1'] || {};
+  resultados.ganadores.premioExtra['6'].premioUnitario = 
+    parseFloat(premioExtraInfo.premio_por_ganador || premioExtraInfo.premioUnitario || 0);
+  resultados.ganadores.premioExtra['6'].ganadoresExtracto = 
+    parseInt(premioExtraInfo.winners || premioExtraInfo.ganadores || 0);
+  resultados.ganadores.premioExtra['6'].premioTotal = 
+    resultados.ganadores.premioExtra['6'].cantidad * 
+    resultados.ganadores.premioExtra['6'].premioUnitario;
+  
+  // Calcular totales
+  let totalGanadoresTXT = 0;
+  let totalGanadoresExtracto = 0;
+  let totalPremios = 0;
+  
+  // Sumar tradicional primera
+  for (const nivel of ['6', '5', '4']) {
+    totalGanadoresTXT += resultados.ganadores.tradicionalPrimera[nivel].cantidad;
+    totalGanadoresExtracto += resultados.ganadores.tradicionalPrimera[nivel].ganadoresExtracto || 0;
+    totalPremios += resultados.ganadores.tradicionalPrimera[nivel].premioTotal;
+  }
+  
+  // Sumar tradicional segunda
+  for (const nivel of ['6', '5', '4']) {
+    totalGanadoresTXT += resultados.ganadores.tradicionalSegunda[nivel].cantidad;
+    totalGanadoresExtracto += resultados.ganadores.tradicionalSegunda[nivel].ganadoresExtracto || 0;
+    totalPremios += resultados.ganadores.tradicionalSegunda[nivel].premioTotal;
+  }
+  
+  // Sumar revancha
+  totalGanadoresTXT += resultados.ganadores.revancha['6'].cantidad;
+  totalGanadoresExtracto += resultados.ganadores.revancha['6'].ganadoresExtracto || 0;
+  totalPremios += resultados.ganadores.revancha['6'].premioTotal;
+  
+  // Sumar siempre sale
+  totalGanadoresTXT += resultados.ganadores.siempreSale.cantidad;
+  totalGanadoresExtracto += resultados.ganadores.siempreSale.ganadoresExtracto || 0;
+  totalPremios += resultados.ganadores.siempreSale.premioTotal;
+  
+  // Sumar premio extra
+  totalGanadoresTXT += resultados.ganadores.premioExtra['6'].cantidad;
+  totalGanadoresExtracto += resultados.ganadores.premioExtra['6'].ganadoresExtracto || 0;
+  totalPremios += resultados.ganadores.premioExtra['6'].premioTotal;
+  
+  resultados.totales = {
+    ganadoresTXT: totalGanadoresTXT,
+    ganadoresExtracto: totalGanadoresExtracto,
+    premiosTotales: totalPremios
+  };
+  
+  // Estructura de comparación para el frontend (como BRINCO)
+  resultados.comparacion = {
+    tradicionalPrimera: {},
+    tradicionalSegunda: {},
+    revancha: {},
+    siempreSale: {},
+    premioExtra: {}
+  };
+  
+  // Comparación Tradicional Primera
+  for (const nivel of ['6', '5', '4']) {
+    const data = resultados.ganadores.tradicionalPrimera[nivel];
+    resultados.comparacion.tradicionalPrimera[nivel] = {
+      txt: data.cantidad,
+      extracto: data.ganadoresExtracto || 0,
+      diferencia: data.cantidad - (data.ganadoresExtracto || 0),
+      premioUnitario: data.premioUnitario,
+      premioTotal: data.premioTotal
+    };
+  }
+  
+  // Comparación Tradicional Segunda
+  for (const nivel of ['6', '5', '4']) {
+    const data = resultados.ganadores.tradicionalSegunda[nivel];
+    resultados.comparacion.tradicionalSegunda[nivel] = {
+      txt: data.cantidad,
+      extracto: data.ganadoresExtracto || 0,
+      diferencia: data.cantidad - (data.ganadoresExtracto || 0),
+      premioUnitario: data.premioUnitario,
+      premioTotal: data.premioTotal
+    };
+  }
+  
+  // Comparación Revancha
+  const revanchaData = resultados.ganadores.revancha['6'];
+  resultados.comparacion.revancha['6'] = {
+    txt: revanchaData.cantidad,
+    extracto: revanchaData.ganadoresExtracto || 0,
+    diferencia: revanchaData.cantidad - (revanchaData.ganadoresExtracto || 0),
+    premioUnitario: revanchaData.premioUnitario,
+    premioTotal: revanchaData.premioTotal
+  };
+  
+  // Comparación Siempre Sale
+  const ssData = resultados.ganadores.siempreSale;
+  resultados.comparacion.siempreSale = {
+    aciertosRequeridos: ssData.aciertosRequeridos,
+    txt: ssData.cantidad,
+    extracto: ssData.ganadoresExtracto || 0,
+    diferencia: ssData.cantidad - (ssData.ganadoresExtracto || 0),
+    premioUnitario: ssData.premioUnitario,
+    premioTotal: ssData.premioTotal
+  };
+  
+  // Comparación Premio Extra
+  const extraData = resultados.ganadores.premioExtra['6'];
+  resultados.comparacion.premioExtra['6'] = {
+    txt: extraData.cantidad,
+    extracto: extraData.ganadoresExtracto || 0,
+    diferencia: extraData.cantidad - (extraData.ganadoresExtracto || 0),
+    premioUnitario: extraData.premioUnitario,
+    premioTotal: extraData.premioTotal
+  };
+  
   // Convertir porAgencia a array ordenado por recaudación
   resultados.porAgencia = Object.entries(resultados.porAgencia)
     .map(([key, value]) => ({ ctaCte: key, ...value }))
@@ -392,17 +561,23 @@ async function ejecutar(req, res) {
       return errorResponse(res, 'El extracto de Tradicional Primera debe tener 6 números', 400);
     }
     
-    // Normalizar extracto
+    // Normalizar extracto incluyendo premios
     const extractoNormalizado = {
       sorteo: extracto.sorteo,
       tradicional: {
         primera: tradicionalPrimera.map(n => parseInt(n)),
-        segunda: tradicionalSegunda.map(n => parseInt(n))
+        segunda: tradicionalSegunda.map(n => parseInt(n)),
+        // Premios del extracto
+        premiosPrimera: extracto.tradicional?.primer?.prizes || extracto.tradicional?.primera?.prizes || {},
+        premiosSegunda: extracto.tradicional?.segunda?.prizes || {}
       },
       revancha: revancha.map(n => parseInt(n)),
+      revanchaPremios: extracto.revancha?.prizes || {},
       siempreSale: siempreSale.map(n => parseInt(n)),
       siempreSaleAciertos: parseInt(ssAciertos),
-      premioExtra: premioExtra.map(n => parseInt(n))
+      siempreSalePremios: extracto.siempreSale?.prizes || extracto.siempre_sale?.prizes || {},
+      premioExtra: premioExtra.map(n => parseInt(n)),
+      premioExtraPremios: extracto.premioExtra?.prizes || extracto.premio_extra?.prizes || {}
     };
     
     // Ejecutar escrutinio

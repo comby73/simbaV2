@@ -303,6 +303,12 @@ function procesarArchivoNTF(content) {
   const provincias = {};
   const registrosParseados = [];
 
+  // Contadores para Online (Agencia 88880)
+  let onlineRegistros = 0;
+  let onlineApuestas = 0;
+  let onlineRecaudacion = 0;
+  let onlineAnulados = 0;
+
   // Debug: mostrar códigos de juego encontrados
   const codigosEncontrados = new Set();
   for (let i = 0; i < Math.min(10, lines.length); i++) {
@@ -348,11 +354,21 @@ function procesarArchivoNTF(content) {
     const esVentaWeb = agenciaCompleta === '5188880';
 
     if (isCanceled) {
-      if (esRegistroUnico) anulados++;
+      if (esRegistroUnico) {
+        anulados++;
+        if (esVentaWeb) onlineAnulados++;
+      }
     } else {
       if (esRegistroUnico) registros++;
       apuestasTotal += nroApuestas;
       recaudacion += valor;
+
+      // Acumular Online (Agencia 88880)
+      if (esVentaWeb) {
+        onlineRegistros++;
+        onlineApuestas += nroApuestas;
+        onlineRecaudacion += valor;
+      }
 
       // Acumular por provincia
       const provInfo = PROVINCIAS[provCod] || { nombre: `Provincia ${provCod}`, codigo: provCod };
@@ -393,7 +409,13 @@ function procesarArchivoNTF(content) {
       anulados,
       apuestasTotal,
       recaudacion,
-      ventaWeb: totalVentaWeb
+      ventaWeb: totalVentaWeb,
+      online: {
+        registros: onlineRegistros,
+        apuestas: onlineApuestas,
+        recaudacion: onlineRecaudacion,
+        anulados: onlineAnulados
+      }
     },
     provincias,
     registrosParseados
