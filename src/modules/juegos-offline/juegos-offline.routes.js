@@ -29,6 +29,7 @@ router.use(authenticate);
 router.post('/hipicas/procesar-txt', upload.single('archivo'), hipicasController.procesarTXT);
 router.get('/hipicas/facturacion', hipicasController.obtenerFacturacion);
 router.get('/hipicas/ventas', hipicasController.obtenerVentas);
+router.get('/hipicas/facturacion-ute', hipicasController.calcularFacturacionUTE);
 router.delete('/hipicas/facturacion/:id', hipicasController.eliminarFacturacion);
 
 // ===== TELEKINO (futuro) =====

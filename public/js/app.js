@@ -11656,11 +11656,13 @@ async function buscarVentasTurfito() {
   const fechaHasta = document.getElementById('hipicas-ventas-hasta')?.value || '';
   const tbody = document.querySelector('#hipicas-tabla-ventas tbody');
   const totalesDiv = document.getElementById('hipicas-ventas-totales');
+  const uteDiv = document.getElementById('hipicas-facturacion-ute');
 
   if (!tbody) return;
 
   tbody.innerHTML = '<tr><td colspan="8" style="text-align: center; padding: 2rem;"><i class="fas fa-spinner fa-spin"></i> Buscando...</td></tr>';
   if (totalesDiv) totalesDiv.style.display = 'none';
+  if (uteDiv) uteDiv.style.display = 'none';
 
   try {
     const params = new URLSearchParams();
@@ -11702,6 +11704,9 @@ async function buscarVentasTurfito() {
       `;
       tbody.appendChild(tr);
     });
+
+    // Calcular y mostrar Facturación UTE
+    await calcularFacturacionUTE(fechaDesde, fechaHasta);
 
   } catch (error) {
     console.error('Error buscando ventas turfito:', error);
@@ -11776,4 +11781,75 @@ function exportarVentasTurfitoExcel() {
 
   URL.revokeObjectURL(url);
   showToast('Archivo Excel (CSV) descargado', 'success');
+}
+
+/**
+ * Calcular y mostrar Facturación UTE
+ * Se llama automáticamente después de buscar ventas
+ */
+async function calcularFacturacionUTE(fechaDesde, fechaHasta) {
+  const container = document.getElementById('hipicas-facturacion-ute');
+  if (!container) return;
+
+  try {
+    let url = '/api/juegos-offline/hipicas/facturacion-ute?';
+    if (fechaDesde) url += `fechaDesde=${fechaDesde}&`;
+    if (fechaHasta) url += `fechaHasta=${fechaHasta}`;
+
+    const response = await api.request(url);
+    if (!response.success || !response.data) {
+      container.style.display = 'none';
+      return;
+    }
+
+    const data = response.data;
+    container.style.display = 'block';
+
+    // Actualizar totales
+    document.getElementById('ute-recaudacion-total').textContent = formatMoneyHipicas(data.recaudacionTotal);
+    document.getElementById('ute-tope').textContent = formatMoneyHipicas(data.topeEstipulado);
+    document.getElementById('ute-excedente').textContent = formatMoneyHipicas(data.excedenteSobreTope);
+    document.getElementById('ute-total-facturar').textContent = formatMoneyHipicas(data.totales.total);
+
+    // Tabla por hipódromo
+    const tbody = document.getElementById('ute-tabla-body');
+    const tfoot = document.getElementById('ute-tabla-footer');
+    tbody.innerHTML = '';
+    tfoot.innerHTML = '';
+
+    data.hipodromos.forEach(h => {
+      const tr = document.createElement('tr');
+      tr.innerHTML = `
+        <td style="font-weight: 600; color: ${getColorHipodromo(h.codigo)};">${h.hipodromo}</td>
+        <td style="text-align: right;">${formatMoneyHipicas(h.recaudacion)}</td>
+        <td style="text-align: center;">${h.participacion.toFixed(2)}%</td>
+        <td style="text-align: right;">${formatMoneyHipicas(h.dentroDelTope)}</td>
+        <td style="text-align: right;">${formatMoneyHipicas(h.sobreElTope)}</td>
+        <td style="text-align: right;">${formatMoneyHipicas(h.montoAFacturar)}</td>
+        <td style="text-align: right; color: #f44336;">-${formatMoneyHipicas(h.descuentoTotal)}</td>
+        <td style="text-align: right;">${formatMoneyHipicas(h.iva)}</td>
+        <td style="text-align: right; color: #4caf50; font-weight: bold;">${formatMoneyHipicas(h.total)}</td>
+      `;
+      tbody.appendChild(tr);
+    });
+
+    // Fila de totales
+    const trTotal = document.createElement('tr');
+    trTotal.innerHTML = `
+      <td>TOTALES</td>
+      <td style="text-align: right;">${formatMoneyHipicas(data.totales.recaudacion)}</td>
+      <td style="text-align: center;">100%</td>
+      <td style="text-align: right;">${formatMoneyHipicas(data.totales.dentroDelTope)}</td>
+      <td style="text-align: right;">${formatMoneyHipicas(data.totales.sobreElTope)}</td>
+      <td style="text-align: right;">${formatMoneyHipicas(data.totales.montoAFacturar)}</td>
+      <td style="text-align: right; color: #f44336;">-${formatMoneyHipicas(data.totales.descuentoTotal)}</td>
+      <td style="text-align: right;">${formatMoneyHipicas(data.totales.iva)}</td>
+      <td style="text-align: right; color: #4caf50; font-weight: bold;">${formatMoneyHipicas(data.totales.total)}</td>
+    `;
+    tfoot.appendChild(trTotal);
+
+  } catch (error) {
+    console.error('Error calculando facturación UTE:', error);
+    container.style.display = 'none';
+  }
 }

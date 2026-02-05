@@ -407,7 +407,7 @@ const obtenerVentas = async (req, res) => {
 
     const registros = await query(sql, params);
 
-    // Calcular totales
+    // Calcular totales generales
     const totales = {
       recaudacionBruta: 0,
       cancelaciones: 0,
@@ -416,17 +416,48 @@ const obtenerVentas = async (req, res) => {
       totalNeto: 0
     };
 
+    // Calcular totales por hipódromo
+    const totalesPorHipodromo = {};
+
     for (const r of registros) {
-      totales.recaudacionBruta += parseFloat(r.recaudacion_bruta) || 0;
-      totales.cancelaciones += parseFloat(r.cancelaciones) || 0;
-      totales.devoluciones += parseFloat(r.devoluciones) || 0;
-      totales.premios += parseFloat(r.premios) || 0;
-      totales.totalNeto += parseFloat(r.total_neto) || 0;
+      const recaudacion = parseFloat(r.recaudacion_bruta) || 0;
+      const cancelaciones = parseFloat(r.cancelaciones) || 0;
+      const devoluciones = parseFloat(r.devoluciones) || 0;
+      const premios = parseFloat(r.premios) || 0;
+      const neto = parseFloat(r.total_neto) || 0;
+
+      totales.recaudacionBruta += recaudacion;
+      totales.cancelaciones += cancelaciones;
+      totales.devoluciones += devoluciones;
+      totales.premios += premios;
+      totales.totalNeto += neto;
+
+      // Acumular por hipódromo
+      const hip = r.hipodromo_nombre;
+      if (!totalesPorHipodromo[hip]) {
+        totalesPorHipodromo[hip] = {
+          hipodromo: hip,
+          codigo: r.hipodromo_codigo,
+          reuniones: 0,
+          recaudacion: 0,
+          cancelaciones: 0,
+          devoluciones: 0,
+          premios: 0,
+          neto: 0
+        };
+      }
+      totalesPorHipodromo[hip].reuniones++;
+      totalesPorHipodromo[hip].recaudacion += recaudacion;
+      totalesPorHipodromo[hip].cancelaciones += cancelaciones;
+      totalesPorHipodromo[hip].devoluciones += devoluciones;
+      totalesPorHipodromo[hip].premios += premios;
+      totalesPorHipodromo[hip].neto += neto;
     }
 
     return successResponse(res, { 
       registros, 
       totales,
+      totalesPorHipodromo: Object.values(totalesPorHipodromo),
       filtros: { fechaDesde, fechaHasta }
     });
   } catch (error) {
@@ -435,9 +466,161 @@ const obtenerVentas = async (req, res) => {
   }
 };
 
+/**
+ * GET /hipicas/facturacion-ute
+ * Calcula la facturación UTE según el modelo del Excel
+ * Constantes:
+ * - TOPE: $75,000,000
+ * - Porcentaje dentro del tope: 2%
+ * - Porcentaje sobre el tope: 1.5%
+ * - Descuento combinado (16%+5%): 20.2%
+ * - IVA: 21%
+ */
+const calcularFacturacionUTE = async (req, res) => {
+  try {
+    const { fechaDesde, fechaHasta } = req.query;
+
+    // Constantes de facturación
+    const TOPE = 75000000;
+    const PORCENTAJE_DENTRO_TOPE = 0.02;      // 2%
+    const PORCENTAJE_SOBRE_TOPE = 0.015;      // 1.5%
+    const DESCUENTO_COMBINADO = 0.202;        // 20.2% (efecto de 16% + 5%)
+    const IVA = 0.21;                          // 21%
+
+    // Obtener recaudación por hipódromo (solo CABA/Capital Federal)
+    let sql = `
+      SELECT 
+        hipodromo_nombre,
+        hipodromo_codigo,
+        SUM(recaudacion_total - importe_cancelaciones - devoluciones) AS recaudacion_neta
+      FROM facturacion_turfito
+      WHERE 1=1
+    `;
+    const params = [];
+
+    if (fechaDesde) {
+      sql += ' AND fecha_sorteo >= ?';
+      params.push(fechaDesde);
+    }
+
+    if (fechaHasta) {
+      sql += ' AND fecha_sorteo <= ?';
+      params.push(fechaHasta);
+    }
+
+    sql += ' GROUP BY hipodromo_nombre, hipodromo_codigo ORDER BY hipodromo_nombre';
+
+    const hipodromos = await query(sql, params);
+
+    // Calcular recaudación total
+    const recaudacionTotal = hipodromos.reduce((sum, h) => sum + (parseFloat(h.recaudacion_neta) || 0), 0);
+    const excedente = Math.max(0, recaudacionTotal - TOPE);
+
+    // Calcular facturación por hipódromo
+    const facturacionHipodromos = hipodromos.map(h => {
+      const recaudacion = parseFloat(h.recaudacion_neta) || 0;
+      const participacion = recaudacionTotal > 0 ? recaudacion / recaudacionTotal : 0;
+      
+      // Dentro y sobre el tope
+      const dentroDelTope = TOPE * participacion;
+      const sobreElTope = recaudacion - dentroDelTope;
+
+      // Importes
+      const importeDentroTope = dentroDelTope * PORCENTAJE_DENTRO_TOPE;
+      const descuentoDentroTope = importeDentroTope * DESCUENTO_COMBINADO;
+      
+      const importeSobreTope = sobreElTope * PORCENTAJE_SOBRE_TOPE;
+      const descuentoSobreTope = importeSobreTope * DESCUENTO_COMBINADO;
+
+      // Monto a facturar
+      const montoAFacturar = importeDentroTope + importeSobreTope;
+      const descuentoTotal = montoAFacturar * DESCUENTO_COMBINADO;
+      
+      // Base IVA y Total
+      const baseIVA = montoAFacturar - descuentoTotal;
+      const iva = baseIVA * IVA;
+      const total = baseIVA + iva;
+
+      return {
+        hipodromo: h.hipodromo_nombre,
+        codigo: h.hipodromo_codigo,
+        recaudacion: Math.round(recaudacion * 100) / 100,
+        participacion: Math.round(participacion * 10000) / 100, // %
+        porcentajeOfertado: PORCENTAJE_DENTRO_TOPE * 100,
+        porcentajeReduccion: PORCENTAJE_SOBRE_TOPE * 100,
+        dentroDelTope: Math.round(dentroDelTope * 100) / 100,
+        sobreElTope: Math.round(sobreElTope * 100) / 100,
+        importeDentroTope: Math.round(importeDentroTope * 100) / 100,
+        descuentoDentroTope: Math.round(descuentoDentroTope * 100) / 100,
+        importeSobreTope: Math.round(importeSobreTope * 100) / 100,
+        descuentoSobreTope: Math.round(descuentoSobreTope * 100) / 100,
+        montoAFacturar: Math.round(montoAFacturar * 100) / 100,
+        descuentoTotal: Math.round(descuentoTotal * 100) / 100,
+        baseIVA: Math.round(baseIVA * 100) / 100,
+        iva: Math.round(iva * 100) / 100,
+        total: Math.round(total * 100) / 100
+      };
+    });
+
+    // Totales de facturación
+    const totalesFacturacion = facturacionHipodromos.reduce((acc, h) => ({
+      recaudacion: acc.recaudacion + h.recaudacion,
+      dentroDelTope: acc.dentroDelTope + h.dentroDelTope,
+      sobreElTope: acc.sobreElTope + h.sobreElTope,
+      importeDentroTope: acc.importeDentroTope + h.importeDentroTope,
+      descuentoDentroTope: acc.descuentoDentroTope + h.descuentoDentroTope,
+      importeSobreTope: acc.importeSobreTope + h.importeSobreTope,
+      descuentoSobreTope: acc.descuentoSobreTope + h.descuentoSobreTope,
+      montoAFacturar: acc.montoAFacturar + h.montoAFacturar,
+      descuentoTotal: acc.descuentoTotal + h.descuentoTotal,
+      baseIVA: acc.baseIVA + h.baseIVA,
+      iva: acc.iva + h.iva,
+      total: acc.total + h.total
+    }), {
+      recaudacion: 0, dentroDelTope: 0, sobreElTope: 0,
+      importeDentroTope: 0, descuentoDentroTope: 0,
+      importeSobreTope: 0, descuentoSobreTope: 0,
+      montoAFacturar: 0, descuentoTotal: 0, baseIVA: 0, iva: 0, total: 0
+    });
+
+    return successResponse(res, {
+      periodo: { fechaDesde, fechaHasta },
+      constantes: {
+        tope: TOPE,
+        porcentajeDentroTope: PORCENTAJE_DENTRO_TOPE * 100,
+        porcentajeSobreTope: PORCENTAJE_SOBRE_TOPE * 100,
+        descuentoCombinado: DESCUENTO_COMBINADO * 100,
+        iva: IVA * 100
+      },
+      recaudacionTotal: Math.round(recaudacionTotal * 100) / 100,
+      topeEstipulado: TOPE,
+      excedenteSobreTope: Math.round(excedente * 100) / 100,
+      hipodromos: facturacionHipodromos,
+      totales: {
+        recaudacion: Math.round(totalesFacturacion.recaudacion * 100) / 100,
+        dentroDelTope: Math.round(totalesFacturacion.dentroDelTope * 100) / 100,
+        sobreElTope: Math.round(totalesFacturacion.sobreElTope * 100) / 100,
+        importeDentroTope: Math.round(totalesFacturacion.importeDentroTope * 100) / 100,
+        descuentoDentroTope: Math.round(totalesFacturacion.descuentoDentroTope * 100) / 100,
+        importeSobreTope: Math.round(totalesFacturacion.importeSobreTope * 100) / 100,
+        descuentoSobreTope: Math.round(totalesFacturacion.descuentoSobreTope * 100) / 100,
+        montoAFacturar: Math.round(totalesFacturacion.montoAFacturar * 100) / 100,
+        descuentoTotal: Math.round(totalesFacturacion.descuentoTotal * 100) / 100,
+        baseIVA: Math.round(totalesFacturacion.baseIVA * 100) / 100,
+        iva: Math.round(totalesFacturacion.iva * 100) / 100,
+        total: Math.round(totalesFacturacion.total * 100) / 100
+      }
+    }, 'Facturación UTE calculada');
+  } catch (error) {
+    console.error('Error calculando facturación UTE:', error);
+    return errorResponse(res, 'Error: ' + error.message, 500);
+  }
+};
+
 module.exports = {
   procesarTXT,
   obtenerFacturacion,
   eliminarFacturacion,
-  obtenerVentas
+  obtenerVentas,
+  calcularFacturacionUTE
 };
