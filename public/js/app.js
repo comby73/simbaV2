@@ -11870,16 +11870,16 @@ function renderTablaLineasSAP(lineasSAP) {
   container.style.display = 'block';
 
   let html = `
-    <div style="margin-top: 20px; background: #f8f9fa; border-radius: 8px; padding: 15px;">
+    <div style="margin-top: 20px; background: var(--card-bg, #1e1e1e); border-radius: 8px; padding: 15px; border: 1px solid var(--border-color, #333);">
       <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
-        <h4 style="margin: 0; color: #333;"><i class="fas fa-file-export"></i> Líneas para SAP</h4>
+        <h4 style="margin: 0; color: var(--text-color, #fff);"><i class="fas fa-file-export"></i> Líneas para SAP</h4>
         <button onclick="copiarLineasSAP()" class="btn btn-sm btn-primary">
           <i class="fas fa-copy"></i> Copiar para SAP
         </button>
       </div>
       <table id="tabla-lineas-sap" class="table-results" style="width: 100%; font-size: 13px;">
         <thead>
-          <tr style="background: #e0e0e0;">
+          <tr style="background: var(--table-header-bg, #2a2a2a);">
             <th>Descripción</th>
             <th style="text-align: center; width: 50px;">Cant</th>
             <th style="text-align: center; width: 50px;">Unidad</th>
