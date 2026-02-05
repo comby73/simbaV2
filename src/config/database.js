@@ -3,22 +3,20 @@ const path = require('path');
 const fs = require('fs');
 const os = require('os');
 
-// Cargar .env.local primero si existe (para desarrollo), sino .env
-// En producción (Hostinger), las variables vienen del panel, no de archivos
+// Cargar .env.local primero si existe (para desarrollo local), sino .env
 const envLocalPath = path.join(__dirname, '../../.env.local');
 const envPath = path.join(__dirname, '../../.env');
 
-if (process.env.NODE_ENV !== 'production') {
-  // Solo cargar dotenv en desarrollo
-  if (fs.existsSync(envLocalPath)) {
-    require('dotenv').config({ path: envLocalPath });
-    console.log('📁 Usando configuración: .env.local');
-  } else if (fs.existsSync(envPath)) {
-    require('dotenv').config({ path: envPath });
-    console.log('📁 Usando configuración: .env');
-  }
+// En local: prioridad a .env.local
+// En producción: usa .env (que ahora está en git)
+if (fs.existsSync(envLocalPath)) {
+  require('dotenv').config({ path: envLocalPath });
+  console.log('📁 Usando configuración: .env.local (LOCAL)');
+} else if (fs.existsSync(envPath)) {
+  require('dotenv').config({ path: envPath });
+  console.log('📁 Usando configuración: .env (PRODUCCIÓN)');
 } else {
-  console.log('📁 Modo PRODUCCIÓN: usando variables de entorno del servidor');
+  console.log('⚠️ No se encontró archivo .env');
 }
 
 let pool;
