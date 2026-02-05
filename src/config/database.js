@@ -3,14 +3,22 @@ const path = require('path');
 const fs = require('fs');
 const os = require('os');
 
-// Siempre intentar cargar dotenv como fallback (Hostinger no siempre inyecta las variables)
+// Cargar .env.local primero si existe (para desarrollo), sino .env
+// En producción (Hostinger), las variables vienen del panel, no de archivos
 const envLocalPath = path.join(__dirname, '../../.env.local');
 const envPath = path.join(__dirname, '../../.env');
 
-if (fs.existsSync(envLocalPath)) {
-  require('dotenv').config({ path: envLocalPath });
-} else if (fs.existsSync(envPath)) {
-  require('dotenv').config({ path: envPath });
+if (process.env.NODE_ENV !== 'production') {
+  // Solo cargar dotenv en desarrollo
+  if (fs.existsSync(envLocalPath)) {
+    require('dotenv').config({ path: envLocalPath });
+    console.log('📁 Usando configuración: .env.local');
+  } else if (fs.existsSync(envPath)) {
+    require('dotenv').config({ path: envPath });
+    console.log('📁 Usando configuración: .env');
+  }
+} else {
+  console.log('📁 Modo PRODUCCIÓN: usando variables de entorno del servidor');
 }
 
 let pool;
@@ -23,23 +31,23 @@ function isBlank(value) {
 function isProduction() {
   // Si existe variable de entorno NODE_ENV=production, es producción
   if (process.env.NODE_ENV === 'production') return true;
-
+  
   // Si el hostname no es tu PC local, es producción
   const hostname = os.hostname().toLowerCase();
   const localHostnames = ['desktop', 'laptop', 'comby', 'pc', 'localhost'];
   const isLocal = localHostnames.some(h => hostname.includes(h));
-
+  
   // Si no parece local y no es Windows, probablemente es servidor
   if (!isLocal && process.platform === 'linux') return true;
-
+  
   return false;
 }
 
 function getDbConfig() {
   const isProd = isProduction();
-
+  
   console.log(`🔧 Entorno detectado: ${isProd ? 'PRODUCCIÓN (Hostinger)' : 'LOCAL (XAMPP)'}`);
-
+  
   // Debug: mostrar todas las variables de entorno de BD
   console.log('📋 Variables de entorno BD:', {
     DB_HOST: process.env.DB_HOST || '(no definido)',
@@ -48,15 +56,15 @@ function getDbConfig() {
     DB_PASSWORD: process.env.DB_PASSWORD ? '****' : '(no definido)',
     NODE_ENV: process.env.NODE_ENV || '(no definido)'
   });
-
+  
   if (isProd) {
-    // PRODUCCIÓN: Credenciales de Hostinger (fallbacks por si las env vars no se inyectan)
+    // PRODUCCIÓN: Credenciales de Hostinger
     return {
-      host: process.env.DB_HOST || 'srv1663.hstgr.io',
+      host: process.env.DB_HOST || 'localhost',
       port: parseInt(process.env.DB_PORT) || 3306,
-      user: process.env.DB_USER || 'u870508525_simba',
-      password: process.env.DB_PASSWORD || 'Casiolv10',
-      database: process.env.DB_NAME || 'u870508525_control_loteri',
+      user: process.env.DB_USER,
+      password: process.env.DB_PASSWORD,
+      database: process.env.DB_NAME,
       connectTimeout: 10000,
     };
   } else {
@@ -76,7 +84,7 @@ function getPool() {
   if (pool) return pool;
 
   const config = getDbConfig();
-
+  
   // LOG CRÍTICO PARA DEBUG EN PRODUCCIÓN (sin mostrar password completa)
   console.log('🗄️  Intentando conectar a BD:', {
     host: config.host,
@@ -138,9 +146,4 @@ async function transaction(callback) {
   }
 }
 
-module.exports = {
-  get pool() { return getPool(); },
-  query,
-  transaction,
-  testConnection
-};
+module.exports = { pool, query, transaction, testConnection };

@@ -4,7 +4,7 @@
  *
  * Procesa archivos ZIP con NTF de Loto 5 Plus
  *
- * Código de juego NTF: 12 (Loto 5)
+ * Código de juego NTF: 05 (Loto 5)
  *
  * Rango de números: 0-36 (37 números posibles)
  * Apuesta base: 5 números
@@ -18,10 +18,9 @@ const crypto = require('crypto');
 const { query } = require('../../config/database');
 const { successResponse, errorResponse, PROVINCIAS } = require('../../shared/helpers');
 
-// Códigos de juego Loto 5 en el NTF
-// Puede ser '12' o '05' dependiendo de la fuente
-const LOTO5_GAME_CODES = ['12', '05'];
-const LOTO5_GAME_CODE = '12'; // Mantener por compatibilidad
+// Código de juego Loto 5 en el NTF
+const LOTO5_GAME_CODE = '05';
+const LOTO5_GAME_CODES = ['05']; // Array para compatibilidad
 
 // Posiciones NTF genéricas (idénticas a todos los juegos)
 const NTF_GENERIC = {

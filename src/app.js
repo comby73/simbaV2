@@ -6,15 +6,17 @@ const fs = require('fs');
 const envLocalPath = path.join(__dirname, '../.env.local');
 const envPath = path.join(__dirname, '../.env');
 
-// Siempre intentar cargar dotenv como fallback (Hostinger no siempre inyecta las variables)
-if (fs.existsSync(envLocalPath)) {
-  require('dotenv').config({ path: envLocalPath });
-  console.log('📁 Usando configuración: .env.local (LOCAL)');
-} else if (fs.existsSync(envPath)) {
-  require('dotenv').config({ path: envPath });
-  console.log('📁 Usando configuración: .env');
+if (process.env.NODE_ENV !== 'production') {
+  // Solo cargar dotenv en desarrollo
+  if (fs.existsSync(envLocalPath)) {
+    require('dotenv').config({ path: envLocalPath });
+    console.log('📁 Usando configuración: .env.local (LOCAL)');
+  } else if (fs.existsSync(envPath)) {
+    require('dotenv').config({ path: envPath });
+    console.log('📁 Usando configuración: .env');
+  }
 } else {
-  console.log('📁 No se encontró archivo .env, usando variables del servidor');
+  console.log('📁 Modo PRODUCCIÓN: usando variables de entorno del servidor');
 }
 
 const express = require('express');
@@ -22,9 +24,7 @@ const cors = require('cors');
 const helmet = require('helmet');
 const { testConnection } = require('./config/database');
 
-// Leer versión desde package.json
-const packageJson = require('../package.json');
-const APP_VERSION = packageJson.version;
+// v2.1.0 - Sistema actualizado con fix de letras en escrutinio
 
 // Importar rutas
 const authRoutes = require('./modules/auth/auth.routes');
@@ -36,7 +36,6 @@ const agenciasRoutes = require('./modules/agencias/agencias.routes');
 const programacionRoutes = require('./modules/programacion/programacion.routes');
 const historialRoutes = require('./modules/historial/historial.routes');
 const extractosRoutes = require('./modules/extractos/extractos.routes');
-const juegosOfflineRoutes = require('./modules/juegos-offline/juegos-offline.routes');
 
 // Redirigir consola a un archivo solo en Hostinger (producción)
 if (process.env.NODE_ENV === 'production') {
@@ -58,13 +57,7 @@ app.get('/health', async (req, res) => {
     uptime: process.uptime(),
     database: dbStatus ? 'connected' : 'error',
     env: process.env.NODE_ENV,
-    time: new Date().toISOString(),
-    db_config: {
-      host: process.env.DB_HOST || '(vacío)',
-      user: process.env.DB_USER || '(vacío)',
-      name: process.env.DB_NAME || '(vacío)',
-      hasPassword: !!process.env.DB_PASSWORD
-    }
+    time: new Date().toISOString()
   });
 });
 
@@ -83,24 +76,6 @@ app.use(express.urlencoded({ extended: true, limit: '200mb' }));
 // Archivos estáticos
 app.use(express.static(path.join(__dirname, '../public')));
 
-// Health check y versión (ANTES de las rutas de módulos para que siempre respondan)
-app.get('/api/health', (req, res) => {
-  res.json({
-    status: 'ok',
-    timestamp: new Date().toISOString(),
-    app: 'SIMBA V2',
-    version: APP_VERSION
-  });
-});
-
-app.get('/api/version', (req, res) => {
-  res.json({
-    version: APP_VERSION,
-    app: 'SIMBA V2',
-    environment: process.env.NODE_ENV || 'development'
-  });
-});
-
 // Rutas de la API
 app.use('/api/auth', authRoutes);
 app.use('/api/users', usersRoutes);
@@ -111,11 +86,20 @@ app.use('/api/agencias', agenciasRoutes);
 app.use('/api/programacion', programacionRoutes);
 app.use('/api/historial', historialRoutes);
 app.use('/api/extractos', extractosRoutes);
-app.use('/api/juegos-offline', juegosOfflineRoutes);
 
 // Ruta principal
 app.get('/', (req, res) => {
   res.sendFile(path.join(__dirname, '../public/index.html'));
+});
+
+// Health check
+app.get('/api/health', (req, res) => {
+  res.json({ 
+    status: 'ok', 
+    timestamp: new Date().toISOString(),
+    app: process.env.APP_NAME,
+    version: process.env.APP_VERSION
+  });
 });
 
 // Manejo de errores
