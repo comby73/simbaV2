@@ -249,7 +249,7 @@ async function procesarArchivoNTF(contenido) {
       cancelado: esCancelado,
       fechaCancelacion: esCancelado ? fechaCancelacion : null,
       tipoJuego: 'Brinco',
-      tipo: 'BRC'
+      tipo: 'BRN'
     };
     
     registros.push(registro);
@@ -370,7 +370,7 @@ const procesarZip = async (req, res) => {
     console.log('✅ Archivo recibido:', req.file.originalname);
     
     const zipPath = req.file.path;
-    const extractPath = path.join(__dirname, '../../../uploads/temp', `brc_extract_${Date.now()}`);
+    const extractPath = path.join(__dirname, '../../../uploads/temp', `brn_extract_${Date.now()}`);
     
     if (!fs.existsSync(extractPath)) {
       fs.mkdirSync(extractPath, { recursive: true });
@@ -400,12 +400,12 @@ const procesarZip = async (req, res) => {
     console.log('📁 Archivos encontrados en ZIP:', files);
     
     // Buscar archivos TXT - BRINCO puede ser:
-    // - BRC + dígitos + .TXT (ej: BRC051676.TXT)
+    // - BRN + dígitos + .TXT (ej: BRN051676.TXT)
     // - BRINCO + dígitos + .TXT
     const txtFileInfo = todosLosArchivos.find(f => {
       const name = f.name.toUpperCase();
-      const esBRC = (name.includes('BRC') || name.includes('BRINCO')) && name.endsWith('.TXT');
-      if (esBRC) {
+      const esBRN = (name.includes('BRN') || name.includes('BRINCO')) && name.endsWith('.TXT');
+      if (esBRN) {
         console.log(`✅ Archivo TXT BRINCO encontrado: ${f.name} en ${f.path}`);
         return true;
       }
@@ -420,7 +420,7 @@ const procesarZip = async (req, res) => {
     if (!txtFileInfo) {
       console.log('❌ No se encontró archivo TXT. Archivos disponibles:', files);
       limpiarDirectorio(extractPath);
-      return errorResponse(res, `No se encontró archivo TXT de BRINCO (BRC*.TXT). Archivos en ZIP: ${files.join(', ')}`, 400);
+      return errorResponse(res, `No se encontró archivo TXT de BRINCO (BRN*.TXT). Archivos en ZIP: ${files.join(', ')}`, 400);
     }
     
     // Procesar TXT
@@ -478,8 +478,16 @@ const procesarZip = async (req, res) => {
       tipoJuego: 'Brinco',
       sorteo: logsTxt.numeroSorteo,
       
-      // Datos calculados del TXT
-      resumen: logsTxt.resumen,
+      // Datos calculados del TXT (compatibilidad con frontend)
+      resumen: {
+        ...logsTxt.resumen,
+        online: {
+          registros: 0,
+          apuestas: 0,
+          recaudacion: 0,
+          anulados: 0
+        }
+      },
       provincias: logsTxt.provincias,
       agencias: logsTxt.agencias,
       registrosNTF: logsTxt.registros,

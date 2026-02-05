@@ -378,52 +378,139 @@ async function procesarZip(req, res) {
       return errorResponse(res, 'No se recibió ningún archivo', 400);
     }
     
-    const zipBuffer = req.file.buffer;
-    const zip = new AdmZip(zipBuffer);
+    console.log('✅ Archivo recibido QUINI 6:', req.file.originalname);
+    
+    // Usar req.file.path (diskStorage) en lugar de buffer
+    const zipPath = req.file.path;
     
     // Crear directorio temporal único
     const tempId = crypto.randomBytes(8).toString('hex');
     tempDir = path.join(__dirname, '../../../uploads/temp', `quini6_${tempId}`);
     fs.mkdirSync(tempDir, { recursive: true });
     
-    // Extraer archivos
+    // Extraer archivos desde el path del ZIP
+    const zip = new AdmZip(zipPath);
     zip.extractAllTo(tempDir, true);
     
-    // Buscar archivos NTF (pueden ser .txt o .TXT)
-    const archivos = fs.readdirSync(tempDir);
-    const archivosTxt = archivos.filter(f => 
-      /\.(txt|TXT)$/i.test(f) && 
-      (f.toUpperCase().startsWith('Q6') || f.toUpperCase().includes('QUINI'))
-    );
-    const archivosXml = archivos.filter(f => /\.(xml|XML)$/i.test(f));
+    // Limpiar el ZIP temporal
+    if (fs.existsSync(zipPath)) fs.unlinkSync(zipPath);
     
-    if (archivosTxt.length === 0) {
-      limpiarDirectorio(tempDir);
-      return errorResponse(res, 'No se encontraron archivos NTF de QUINI 6 en el ZIP', 400);
+    // Función para buscar archivos recursivamente (ZIP puede tener subcarpetas)
+    function buscarArchivosRecursivo(dir) {
+      let resultados = [];
+      const items = fs.readdirSync(dir);
+      for (const item of items) {
+        const fullPath = path.join(dir, item);
+        const stat = fs.statSync(fullPath);
+        if (stat.isDirectory()) {
+          resultados = resultados.concat(buscarArchivosRecursivo(fullPath));
+        } else {
+          resultados.push({ name: item, path: fullPath });
+        }
+      }
+      return resultados;
     }
     
-    // Procesar el primer archivo TXT encontrado
-    const archivoNTF = archivosTxt[0];
-    const contenidoNTF = fs.readFileSync(path.join(tempDir, archivoNTF), 'latin1');
+    const todosLosArchivos = buscarArchivosRecursivo(tempDir);
+    const files = todosLosArchivos.map(f => f.name);
+    console.log('📁 Archivos encontrados en ZIP QUINI 6:', files);
+    
+    // Buscar archivos TXT - QUINI 6 puede ser:
+    // - QN6 + dígitos + .TXT (ej: QN6051676.TXT)
+    // - QUINI + algo + .TXT
+    const txtFileInfo = todosLosArchivos.find(f => {
+      const name = f.name.toUpperCase();
+      const esQN6 = (name.startsWith('QN6') || name.includes('QUINI')) && name.endsWith('.TXT');
+      if (esQN6) {
+        console.log(`✅ Archivo TXT QUINI 6 encontrado: ${f.name} en ${f.path}`);
+        return true;
+      }
+      return false;
+    });
+    
+    const xmlFileInfo = todosLosArchivos.find(f => f.name.toUpperCase().endsWith('CP.XML'));
+    const hashFileInfo = todosLosArchivos.find(f => f.name.toUpperCase().endsWith('.HASH') && !f.name.toUpperCase().includes('CP'));
+    const hashCPFileInfo = todosLosArchivos.find(f => f.name.toUpperCase().endsWith('CP.HASH'));
+    
+    if (!txtFileInfo) {
+      console.log('❌ No se encontró archivo TXT. Archivos disponibles:', files);
+      limpiarDirectorio(tempDir);
+      return errorResponse(res, `No se encontraron archivos NTF de QUINI 6 (QN6*.TXT) en el ZIP. Archivos encontrados: ${files.join(', ')}`, 400);
+    }
+    
+    // Procesar TXT
+    const contenidoNTF = fs.readFileSync(txtFileInfo.path, 'latin1');
     const resultadoNTF = await procesarArchivoNTF(contenidoNTF);
     
     // Procesar XML si existe
     let resultadoXML = null;
-    if (archivosXml.length > 0) {
-      const contenidoXML = fs.readFileSync(path.join(tempDir, archivosXml[0]), 'utf8');
+    if (xmlFileInfo) {
+      const contenidoXML = fs.readFileSync(xmlFileInfo.path, 'utf8');
       resultadoXML = await parsearXmlControlPrevio(contenidoXML);
     }
     
     // Limpiar directorio temporal
     limpiarDirectorio(tempDir);
     
+    // Preparar respuesta con estructura compatible con frontend
     return successResponse(res, {
-      archivo: archivoNTF,
-      archivoXml: archivosXml.length > 0 ? archivosXml[0] : null,
-      juego: 'QUINI 6',
+      archivo: txtFileInfo.name,
+      archivoXml: xmlFileInfo ? xmlFileInfo.name : null,
+      tipoJuego: 'QUINI 6',
       codigoJuego: '86',
-      ...resultadoNTF,
-      xml: resultadoXML
+      sorteo: resultadoNTF.numeroSorteo,
+      
+      // Estructura resumen compatible con frontend
+      resumen: {
+        totalRegistros: resultadoNTF.resumen?.totalRegistros || 0,
+        registros: resultadoNTF.resumen?.registros || 0,
+        anulados: resultadoNTF.resumen?.anulados || 0,
+        apuestasTotal: resultadoNTF.resumen?.apuestasTotal || 0,
+        recaudacion: resultadoNTF.resumen?.recaudacion || 0,
+        recaudacionAnulada: resultadoNTF.resumen?.recaudacionAnulada || 0,
+        online: {
+          registros: 0,
+          apuestas: 0,
+          recaudacion: 0,
+          anulados: 0
+        }
+      },
+      
+      provincias: resultadoNTF.provincias || [],
+      agencias: resultadoNTF.agencias || [],
+      registrosNTF: resultadoNTF.registros || [],
+      
+      datosOficiales: resultadoXML,
+      
+      comparacion: resultadoXML ? {
+        registros: {
+          calculado: resultadoNTF.resumen?.registros || 0,
+          oficial: resultadoXML.registrosValidos || 0,
+          diferencia: (resultadoNTF.resumen?.registros || 0) - (resultadoXML.registrosValidos || 0)
+        },
+        anulados: {
+          calculado: resultadoNTF.resumen?.anulados || 0,
+          oficial: resultadoXML.registrosAnulados || 0,
+          diferencia: (resultadoNTF.resumen?.anulados || 0) - (resultadoXML.registrosAnulados || 0)
+        },
+        apuestas: {
+          calculado: resultadoNTF.resumen?.apuestasTotal || 0,
+          oficial: resultadoXML.apuestas || 0,
+          diferencia: (resultadoNTF.resumen?.apuestasTotal || 0) - (resultadoXML.apuestas || 0)
+        },
+        recaudacion: {
+          calculado: resultadoNTF.resumen?.recaudacion || 0,
+          oficial: resultadoXML.recaudacion || 0,
+          diferencia: (resultadoNTF.resumen?.recaudacion || 0) - (resultadoXML.recaudacion || 0)
+        }
+      } : null,
+      
+      seguridad: {
+        txt: !!txtFileInfo,
+        xml: !!xmlFileInfo,
+        hash: !!hashFileInfo,
+        hashCP: !!hashCPFileInfo
+      }
     }, 'Archivo QUINI 6 procesado correctamente');
     
   } catch (error) {

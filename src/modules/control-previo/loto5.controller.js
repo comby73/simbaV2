@@ -18,8 +18,10 @@ const crypto = require('crypto');
 const { query } = require('../../config/database');
 const { successResponse, errorResponse, PROVINCIAS } = require('../../shared/helpers');
 
-// Código de juego Loto 5 en el NTF
-const LOTO5_GAME_CODE = '12';
+// Códigos de juego Loto 5 en el NTF
+// Puede ser '12' o '05' dependiendo de la fuente
+const LOTO5_GAME_CODES = ['12', '05'];
+const LOTO5_GAME_CODE = '12'; // Mantener por compatibilidad
 
 // Posiciones NTF genéricas (idénticas a todos los juegos)
 const NTF_GENERIC = {
@@ -167,10 +169,10 @@ const procesarZip = async (req, res) => {
     const files = todosLosArchivos.map(f => f.name);
     console.log('📁 Archivos encontrados en ZIP:', files);
 
-    // Buscar archivo TXT de Loto 5: L5*.TXT
+    // Buscar archivo TXT de Loto 5: LT5*.TXT o L5*.TXT
     const txtFileInfo = todosLosArchivos.find(f => {
       const name = f.name.toUpperCase();
-      return name.startsWith('L5') && name.endsWith('.TXT');
+      return (name.startsWith('LT5') || name.startsWith('L5')) && name.endsWith('.TXT');
     });
 
     const xmlFileInfo = todosLosArchivos.find(f => f.name.toUpperCase().endsWith('CP.XML'));
@@ -179,7 +181,7 @@ const procesarZip = async (req, res) => {
 
     if (!txtFileInfo) {
       limpiarDirectorio(extractPath);
-      return errorResponse(res, `No se encontró archivo TXT de Loto 5 (L5*.TXT). Archivos en ZIP: ${files.join(', ')}`, 400);
+      return errorResponse(res, `No se encontró archivo TXT de Loto 5 (L5*.TXT o LT5*.TXT). Archivos en ZIP: ${files.join(', ')}`, 400);
     }
 
     // Procesar TXT
@@ -292,6 +294,7 @@ const procesarZip = async (req, res) => {
 function procesarArchivoNTF(content) {
   // Loto 5 NTF: genérica (200) + específica (~38+) = mínimo 232 caracteres
   const lines = content.split('\n').filter(l => l.trim().length >= 232);
+  console.log(`📊 Loto 5: ${lines.length} líneas de >= 232 caracteres`);
 
   let numeroSorteo = '';
   let registros = 0;
@@ -301,11 +304,20 @@ function procesarArchivoNTF(content) {
   const provincias = {};
   const registrosParseados = [];
 
+  // Debug: mostrar códigos de juego encontrados
+  const codigosEncontrados = new Set();
+  for (let i = 0; i < Math.min(10, lines.length); i++) {
+    const code = lines[i].substr(NTF_GENERIC.JUEGO.start, NTF_GENERIC.JUEGO.length);
+    codigosEncontrados.add(code);
+  }
+  console.log(`📊 Códigos de juego encontrados en primeras 10 líneas:`, Array.from(codigosEncontrados));
+  console.log(`📊 Buscando código: ${LOTO5_GAME_CODE}`);
+
   for (const line of lines) {
     const gameCode = line.substr(NTF_GENERIC.JUEGO.start, NTF_GENERIC.JUEGO.length);
 
-    // Solo procesar código de Loto 5 (12)
-    if (gameCode !== LOTO5_GAME_CODE) continue;
+    // Solo procesar códigos de Loto 5 (12 o 05)
+    if (!LOTO5_GAME_CODES.includes(gameCode)) continue;
 
     if (!numeroSorteo) {
       numeroSorteo = line.substr(NTF_GENERIC.NUMERO_SORTEO.start, NTF_GENERIC.NUMERO_SORTEO.length).trim();

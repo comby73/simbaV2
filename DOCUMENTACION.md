@@ -566,10 +566,17 @@ Permite gestionar la base de datos de agencias desde archivos Excel.
 ## 📝 Notas de Desarrollo
 
 ### Detección Polimórfica de Juegos
-El sistema está diseñado para detectar automáticamente el tipo de juego:
-- **Quiniela**: Archivos `QNL*.TXT`
-- **Poceada**: Archivos `PCD*.TXT` o `TMB*.TXT`
-- **Loto**: (Futuro) Archivos `LOT*.TXT`
+El sistema está diseñado para detectar automáticamente el tipo de juego basándose en el prefijo del archivo:
+
+| Juego | Prefijo ZIP/TXT | Ejemplo |
+|-------|-----------------|---------|
+| Quiniela | QNL | QNL051234.TXT |
+| Poceada | PCD | PCD051234.TXT |
+| Tombolina | TMB | TMB051234.TXT |
+| Loto | LOTO / LOT / LTO | LOTO051234.TXT |
+| Loto 5 | LT5 | LT5051234.TXT |
+| BRINCO | BRN | BRN051234.TXT |
+| QUINI 6 | QN6 | QN6051234.TXT |
 
 ### Formato NTF v2
 El formato NTF v2 es un formato de longitud fija donde cada campo tiene posiciones específicas. Ver código fuente para detalles de posiciones.

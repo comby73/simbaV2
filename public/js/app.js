@@ -9,11 +9,12 @@ const PREFIJOS_JUEGOS = {
   'QNL': { nombre: 'Quiniela', api: 'procesarQuiniela' },
   'PCD': { nombre: 'Poceada', api: 'procesarPoceada' },
   'TMB': { nombre: 'Tombolina', api: 'procesarTombolina' },
-  'Q6': { nombre: 'Quini 6', api: 'procesarQuini6' },
-  'BRC': { nombre: 'Brinco', api: 'procesarBrinco' },
+  'QN6': { nombre: 'Quini 6', api: 'procesarQuini6' },
+  'BRN': { nombre: 'Brinco', api: 'procesarBrinco' },
   'LOTO': { nombre: 'Loto', api: 'procesarLoto' },
   'LTO': { nombre: 'Loto', api: 'procesarLoto' },
   'LOT': { nombre: 'Loto', api: 'procesarLoto' },
+  'LT5': { nombre: 'Loto 5', api: 'procesarLoto5' },
   'L5': { nombre: 'Loto 5', api: 'procesarLoto5' }
 };
 
@@ -968,10 +969,21 @@ function mostrarResultadosCP(data) {
   // Normalizar datos según el juego
   const isPoceada = data.tipoJuego === 'Poceada';
   const isLoto = data.tipoJuego === 'Loto';
-  const calc = (isPoceada || isLoto) ? data.resumen : data.datosCalculados;
+  const isBrinco = data.tipoJuego === 'Brinco';
+  const isQuini6 = data.tipoJuego === 'QUINI 6' || data.tipoJuego === 'Quini 6';
+  const isLoto5 = data.tipoJuego === 'Loto 5' || data.tipoJuego === 'Loto5';
+  const usaResumen = isPoceada || isLoto || isBrinco || isQuini6 || isLoto5;
+  const calc = usaResumen ? data.resumen : data.datosCalculados;
   const oficial = data.datosOficiales;
 
-  console.log('🔍 calc.online:', calc.online);
+  // Validar que calc existe
+  if (!calc) {
+    console.error('❌ No se encontraron datos calculados (resumen ni datosCalculados)');
+    showToast('Error: No se encontraron datos calculados en la respuesta', 'error');
+    return;
+  }
+
+  console.log('🔍 calc:', calc);
   console.log('🔍 data.comparacion:', data.comparacion);
 
   // Título y badges
@@ -1028,6 +1040,9 @@ function mostrarResultadosCP(data) {
     renderTablasTombolina(data);
     // Tombolina NO tiene provincias - ocultar esas cards
     ocultarCardsProvincias();
+  } else if (isBrinco || isQuini6 || isLoto5) {
+    // BRINCO, QUINI 6 y Loto 5 usan renderizado genérico
+    renderTablasGenerico(data);
   } else {
     renderTablasQuiniela(data);
   }
@@ -2102,6 +2117,60 @@ function renderTablasTombolina(data) {
   document.getElementById('cp-tmb-total-general').textContent = formatNumber(totalValidas + totalAnuladas);
 }
 
+// Renderizado genérico para BRINCO, QUINI 6, Loto 5 (juegos sin tabla de provincias específica)
+function renderTablasGenerico(data) {
+  console.log('📊 Renderizando tablas genéricas para:', data.tipoJuego);
+  
+  // Ocultar cards específicas de otros juegos
+  ocultarCardTombolina();
+  ocultarCardsProvincias();
+  
+  // Mostrar tabla de provincias si hay datos
+  const tablaProvincias = document.getElementById('cp-tabla-provincias');
+  if (tablaProvincias && data.provincias && data.provincias.length > 0) {
+    const cardProv = tablaProvincias.closest('.card');
+    if (cardProv) cardProv.style.display = '';
+    
+    const tbody = tablaProvincias.querySelector('tbody') || tablaProvincias;
+    tbody.innerHTML = '';
+    
+    data.provincias.forEach(prov => {
+      const tr = document.createElement('tr');
+      tr.innerHTML = `
+        <td>${prov.nombre || prov.provincia || '-'}</td>
+        <td class="text-right">${formatNumber(prov.registros || 0)}</td>
+        <td class="text-right">${formatNumber(prov.apuestas || 0)}</td>
+        <td class="text-right">$${formatNumber(prov.recaudacion || 0)}</td>
+      `;
+      tbody.appendChild(tr);
+    });
+  }
+  
+  // Mostrar tabla de agencias si hay datos (top 10)
+  const tablaAgencias = document.getElementById('cp-tabla-agencias');
+  if (tablaAgencias && data.agencias && data.agencias.length > 0) {
+    const cardAg = tablaAgencias.closest('.card');
+    if (cardAg) cardAg.style.display = '';
+    
+    const tbody = tablaAgencias.querySelector('tbody') || tablaAgencias;
+    tbody.innerHTML = '';
+    
+    // Top 10 agencias por recaudación
+    const top10 = [...data.agencias].sort((a, b) => (b.recaudacion || 0) - (a.recaudacion || 0)).slice(0, 10);
+    
+    top10.forEach(ag => {
+      const tr = document.createElement('tr');
+      tr.innerHTML = `
+        <td>${ag.ctaCte || ag.agencia || '-'}</td>
+        <td class="text-right">${formatNumber(ag.registros || 0)}</td>
+        <td class="text-right">${formatNumber(ag.apuestas || 0)}</td>
+        <td class="text-right">$${formatNumber(ag.recaudacion || 0)}</td>
+      `;
+      tbody.appendChild(tr);
+    });
+  }
+}
+
 // Ocultar card de Tombolina cuando se procesa otro juego
 function ocultarCardTombolina() {
   const card = document.getElementById('cp-tombolina-desglose-card');
@@ -2112,16 +2181,16 @@ function ocultarCardTombolina() {
 function ocultarCardsProvincias() {
   const tablaRecProv = document.getElementById('cp-tabla-recaudacion-prov');
   const tablaProv = document.getElementById('cp-tabla-provincias');
-  if (tablaRecProv) tablaRecProv.closest('.card').style.display = 'none';
-  if (tablaProv) tablaProv.closest('.card').style.display = 'none';
+  if (tablaRecProv && tablaRecProv.closest('.card')) tablaRecProv.closest('.card').style.display = 'none';
+  if (tablaProv && tablaProv.closest('.card')) tablaProv.closest('.card').style.display = 'none';
 }
 
 // Mostrar cards de Provincias (para Quiniela/Poceada)
 function mostrarCardsProvincias() {
   const tablaRecProv = document.getElementById('cp-tabla-recaudacion-prov');
   const tablaProv = document.getElementById('cp-tabla-provincias');
-  if (tablaRecProv) tablaRecProv.closest('.card').style.display = '';
-  if (tablaProv) tablaProv.closest('.card').style.display = '';
+  if (tablaRecProv && tablaRecProv.closest('.card')) tablaRecProv.closest('.card').style.display = '';
+  if (tablaProv && tablaProv.closest('.card')) tablaProv.closest('.card').style.display = '';
 }
 
 // =============================================
