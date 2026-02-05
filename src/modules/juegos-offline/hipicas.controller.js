@@ -583,6 +583,35 @@ const calcularFacturacionUTE = async (req, res) => {
       montoAFacturar: 0, descuentoTotal: 0, baseIVA: 0, iva: 0, total: 0
     });
 
+    // Mapeo de códigos SAP
+    const CODIGOS_SAP = {
+      'Palermo': 'LCBAJTA009',
+      'San Isidro': 'LCBAJTA011',
+      'La Plata': 'LCBAJTA010'
+    };
+
+    // Generar líneas para SAP (formato completo/reducido)
+    const lineasSAP = [];
+    facturacionHipodromos.forEach(h => {
+      const codigoSAP = CODIGOS_SAP[h.hipodromo] || 'LCBAJTA000';
+      // Línea completo (2% sobre parte proporcional del tope)
+      lineasSAP.push({
+        descripcion: `APUESTAS HIPICAS ${h.hipodromo.toUpperCase()} completo`,
+        cantidad: 1,
+        unidad: 'C/U',
+        importe: Math.round(h.importeDentroTope * 100) / 100,
+        codigoSAP: codigoSAP
+      });
+      // Línea reducido (1.5% sobre excedente)
+      lineasSAP.push({
+        descripcion: `APUESTAS HIPICAS ${h.hipodromo.toUpperCase()} reducido`,
+        cantidad: 1,
+        unidad: 'C/U',
+        importe: Math.round(h.importeSobreTope * 100) / 100,
+        codigoSAP: codigoSAP
+      });
+    });
+
     return successResponse(res, {
       periodo: { fechaDesde, fechaHasta },
       constantes: {
@@ -596,6 +625,7 @@ const calcularFacturacionUTE = async (req, res) => {
       topeEstipulado: TOPE,
       excedenteSobreTope: Math.round(excedente * 100) / 100,
       hipodromos: facturacionHipodromos,
+      lineasSAP: lineasSAP,
       totales: {
         recaudacion: Math.round(totalesFacturacion.recaudacion * 100) / 100,
         dentroDelTope: Math.round(totalesFacturacion.dentroDelTope * 100) / 100,

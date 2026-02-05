@@ -11848,8 +11848,92 @@ async function calcularFacturacionUTE(fechaDesde, fechaHasta) {
     `;
     tfoot.appendChild(trTotal);
 
+    // Tabla de líneas SAP para copiar
+    renderTablaLineasSAP(data.lineasSAP);
+
   } catch (error) {
     console.error('Error calculando facturación UTE:', error);
     container.style.display = 'none';
   }
+}
+
+// Renderizar tabla de líneas SAP para copiar
+function renderTablaLineasSAP(lineasSAP) {
+  const container = document.getElementById('ute-lineas-sap-container');
+  if (!container) return;
+
+  if (!lineasSAP || lineasSAP.length === 0) {
+    container.style.display = 'none';
+    return;
+  }
+
+  container.style.display = 'block';
+
+  let html = `
+    <div style="margin-top: 20px; background: #f8f9fa; border-radius: 8px; padding: 15px;">
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
+        <h4 style="margin: 0; color: #333;"><i class="fas fa-file-export"></i> Líneas para SAP</h4>
+        <button onclick="copiarLineasSAP()" class="btn btn-sm btn-primary">
+          <i class="fas fa-copy"></i> Copiar para SAP
+        </button>
+      </div>
+      <table id="tabla-lineas-sap" class="table-results" style="width: 100%; font-size: 13px;">
+        <thead>
+          <tr style="background: #e0e0e0;">
+            <th>Descripción</th>
+            <th style="text-align: center; width: 50px;">Cant</th>
+            <th style="text-align: center; width: 50px;">Unidad</th>
+            <th style="text-align: right; width: 120px;">Importe</th>
+            <th style="text-align: center; width: 110px;">Código SAP</th>
+          </tr>
+        </thead>
+        <tbody>
+  `;
+
+  lineasSAP.forEach(linea => {
+    html += `
+      <tr>
+        <td>${linea.descripcion}</td>
+        <td style="text-align: center;">${linea.cantidad}</td>
+        <td style="text-align: center;">${linea.unidad}</td>
+        <td style="text-align: right;">${formatNumberSAP(linea.importe)}</td>
+        <td style="text-align: center; font-family: monospace;">${linea.codigoSAP}</td>
+      </tr>
+    `;
+  });
+
+  html += `
+        </tbody>
+      </table>
+    </div>
+  `;
+
+  container.innerHTML = html;
+}
+
+// Formatear número para SAP (con punto de miles y coma decimal)
+function formatNumberSAP(num) {
+  return num.toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
+
+// Copiar líneas SAP al portapapeles
+function copiarLineasSAP() {
+  const tabla = document.getElementById('tabla-lineas-sap');
+  if (!tabla) return;
+
+  let texto = '';
+  const filas = tabla.querySelectorAll('tbody tr');
+  filas.forEach(fila => {
+    const celdas = fila.querySelectorAll('td');
+    const valores = [];
+    celdas.forEach(celda => valores.push(celda.textContent.trim()));
+    texto += valores.join('\t') + '\n';
+  });
+
+  navigator.clipboard.writeText(texto).then(() => {
+    showToast('Líneas copiadas al portapapeles', 'success');
+  }).catch(err => {
+    showToast('Error al copiar', 'error');
+    console.error(err);
+  });
 }
