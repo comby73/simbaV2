@@ -590,24 +590,38 @@ const calcularFacturacionUTE = async (req, res) => {
       'La Plata': 'LCBAJTA010'
     };
 
+    // Constantes para líneas SAP
+    const DESCUENTO_SAP = 0.16;  // 16% descuento
+    const IVA_SAP = 0.21;        // 21% IVA
+
     // Generar líneas para SAP (formato completo/reducido)
     const lineasSAP = [];
     facturacionHipodromos.forEach(h => {
       const codigoSAP = CODIGOS_SAP[h.hipodromo] || 'LCBAJTA000';
+      
       // Línea completo (2% sobre parte proporcional del tope)
+      const baseCompleto = h.importeDentroTope;
+      const netoCompleto = baseCompleto * (1 - DESCUENTO_SAP);
+      const totalCompleto = netoCompleto * (1 + IVA_SAP);
+      
       lineasSAP.push({
         descripcion: `APUESTAS HIPICAS ${h.hipodromo.toUpperCase()} completo`,
         cantidad: 1,
         unidad: 'C/U',
-        importe: Math.round(h.importeDentroTope * 100) / 100,
+        importe: Math.round(totalCompleto * 100) / 100,
         codigoSAP: codigoSAP
       });
+      
       // Línea reducido (1.5% sobre excedente)
+      const baseReducido = h.importeSobreTope;
+      const netoReducido = baseReducido * (1 - DESCUENTO_SAP);
+      const totalReducido = netoReducido * (1 + IVA_SAP);
+      
       lineasSAP.push({
         descripcion: `APUESTAS HIPICAS ${h.hipodromo.toUpperCase()} reducido`,
         cantidad: 1,
         unidad: 'C/U',
-        importe: Math.round(h.importeSobreTope * 100) / 100,
+        importe: Math.round(totalReducido * 100) / 100,
         codigoSAP: codigoSAP
       });
     });
