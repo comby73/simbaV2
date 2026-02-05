@@ -2,10 +2,34 @@
 
 ## 📋 Descripción General
 
-Sistema web para el **control y análisis de sorteos de lotería**, diseñado para ser **polimórfico** (detecta automáticamente el tipo de juego). Actualmente implementado para **Quiniela** (completo y operativo) y **Poceada** (en planificación).
+Sistema web para el **control y análisis de sorteos de lotería**, diseñado para ser **polimórfico** (detecta automáticamente el tipo de juego). Actualmente soporta **7 juegos completos**: Quiniela, Poceada, Tombolina, Loto, Loto 5, BRINCO y QUINI 6.
 
 El sistema permite:
 
+
+---
+
+## 🆕 Actualizaciones recientes (febrero 2026)
+
+### Versión 3.0 (5 de febrero 2026)
+- **BRINCO**: Implementación completa (Control Previo + Escrutinio) con modalidades Tradicional y Revancha
+- **QUINI 6**: Implementación completa (Control Previo + Escrutinio) con 5 modalidades: Tradicional Primera, Tradicional Segunda, Revancha, Siempre Sale y Premio Extra
+- **Historial/Reportes**: Extendido para soportar los 7 juegos (Quiniela, Poceada, Tombolina, Loto, Loto5, BRINCO, QUINI6)
+- **Base de datos**: 8 nuevas tablas para BRINCO y QUINI 6
+- **Frontend**: ~1000 líneas nuevas para UI de escrutinio de ambos juegos
+
+### Versión 2.9 (2 de febrero 2026)
+- Corrección completa del escrutinio de LOTO: todas las apuestas participan en todas las modalidades (Tradicional, Match, Desquite, Sale o Sale), sin clasificar por modalidad en el parsing NTF.
+- Las tarjetas de resumen (tickets, recaudación, anulados) ahora muestran los valores correctos en el frontend.
+- Mejoras en reportes PDF y HTML:
+  - Columna "NIVEL" simplificada (solo nivel o modalidad, sin redundancia).
+  - Siempre se muestra la columna Multiplicador/PLUS.
+  - El total de ganadores solo suma niveles con premio.
+  - El texto de la columna GANADORES se simplificó (sin redundancias).
+- Se eliminó la opción duplicada de LOTO en el selector de juegos del frontend, y el label se redujo a "6/45 + PLUS" para mayor claridad.
+- Todos los cambios fueron versionados y confirmados en los commits correspondientes.
+
+Para detalles técnicos de cada cambio, consultar los commits de febrero 2026 y la historia de prompts en prompt.md.
 1. **Control Previo**: Análisis de archivos ZIP con datos de apuestas antes del sorteo.
 2. **Actas Notariales**: Generación de documentos legales PDF para escribanos.
 3. **Control Posterior**: Escrutinio detallado de ganadores comparando apuestas reales vs extractos sorteados.
@@ -1203,15 +1227,200 @@ Faltaba la función `cargarExcel` en el API client de agencias. Se agregó en `a
 
 ---
 
-**Versión del Documento**: 2.9
-**Última actualización**: 2 de Febrero, 2026
+**Versión del Documento**: 3.0
+**Última actualización**: 5 de Febrero, 2026
 **Estado**:
 - ✅ Quiniela: Completo y Optimizado
 - ✅ Poceada: Control Previo completo, Escrutinio completo, Modal 4 Pozos de Arrastre
 - ✅ Tombolina: Control Previo y Escrutinio Profesional
+- ✅ Loto: Control Previo y Escrutinio con modalidades Tradicional, Match, Desquite, Sale o Sale
+- ✅ Loto 5: Control Previo y Escrutinio
+- ✅ BRINCO: Control Previo y Escrutinio (Tradicional + Revancha)
+- ✅ QUINI 6: Control Previo y Escrutinio (5 modalidades completas)
 - ✅ Programación: Filtro por mes corregido, horas UTC, mes_carga individual
 - ✅ Deploy: Sincronización main ↔ principal para Hostinger
 - ✅ Juegos Offline - Hipicas: Parser TXT Turfito, facturación por agencia, integrado en reportes
 - ✅ Reportes: Vista agrupada por agencia, columnas condicionales, cancelaciones/devoluciones
+- ✅ Historial: Soporte completo para los 7 juegos (Quiniela, Poceada, Tombolina, Loto, Loto5, BRINCO, QUINI6)
 - 📋 Pendiente: Telekino y Money Las Vegas (placeholder creado)
 - 📋 Pendiente en producción: CREATE TABLE facturacion_turfito + ALTER TABLE programacion_sorteos
+
+---
+
+## 🆕 Actualizaciones 5 de Febrero 2026 (Versión 3.0)
+
+### Nuevo Juego: BRINCO (Completo)
+
+**Descripción:** Juego de 6 números del 00 al 39 con modalidades Tradicional y Revancha.
+
+**Código NTF:** 85
+
+**Instancias:**
+| Código | Descripción | Modalidades Activas |
+|--------|-------------|---------------------|
+| 1 | Solo Tradicional | Tradicional |
+| 2 | Tradicional + Revancha | Tradicional, Revancha |
+
+**Modalidades y Aciertos:**
+| Modalidad | Aciertos | Premio |
+|-----------|----------|--------|
+| Tradicional | 6 | 1er Premio (33%) |
+| Tradicional | 5 | 2do Premio (11%) |
+| Tradicional | 4 | 3er Premio (13%) |
+| Tradicional | 3 | 4to Premio (25%) |
+| Revancha | 6 | Premio Revancha (10%) |
+
+**Backend:**
+- `src/modules/control-previo/brinco.controller.js` - Parser NTF completo
+  - Decodificación binaria de números (letras A-P = 4 bits)
+  - Cálculo de apuestas múltiples
+  - Validación de instancias
+- `src/modules/control-posterior/brinco-escrutinio.controller.js` - Motor de escrutinio
+  - Comparación con números sorteados (Tradicional + Revancha)
+  - Cálculo de premios por nivel de aciertos
+  - Exportación CSV de ganadores
+
+**Frontend:**
+- Selector de juego BRINCO en Control Posterior
+- Interfaz de carga de extracto (6 números Tradicional + 6 Revancha)
+- Resultados con tablas por modalidad
+- Listado de ganadores exportable
+
+**Base de Datos:**
+```sql
+-- Migración: database/migration_brinco.js
+control_previo_brinco
+control_previo_brinco_tickets
+escrutinio_brinco
+escrutinio_brinco_ganadores
+```
+
+### Nuevo Juego: QUINI 6 (Completo)
+
+**Descripción:** Juego de 6 números del 01 al 45 con 5 modalidades de premio.
+
+**Código NTF:** 86
+
+**Instancias:**
+| Código | Descripción | Modalidades Activas |
+|--------|-------------|---------------------|
+| 1 | Solo Tradicional | Trad. Primera, Trad. Segunda, Premio Extra |
+| 2 | Tradicional + Revancha | + Revancha |
+| 3 | Completo | + Siempre Sale |
+
+**Modalidades y Aciertos:**
+| Modalidad | Aciertos | Distribución |
+|-----------|----------|--------------|
+| Tradicional Primera | 6, 5, 4 | 45% del pozo |
+| Tradicional Segunda | 6, 5, 4 | 19% del pozo |
+| Revancha | 6 | 13% del pozo |
+| Siempre Sale | 6-3 (variable) | 14% del pozo |
+| Premio Extra | 6 | Jackpot acumulado |
+
+**Backend:**
+- `src/modules/control-previo/quini6.controller.js` - Parser NTF completo (~430 líneas)
+  - Decodificación binaria de números (igual que BRINCO)
+  - Soporte para apuestas múltiples
+  - Validación de las 3 instancias
+- `src/modules/control-posterior/quini6-escrutinio.controller.js` - Motor de escrutinio (~550 líneas)
+  - Lógica completa para las 5 modalidades
+  - Siempre Sale: sorteos iterativos hasta encontrar ganador
+  - Premio Extra: validación de 6 aciertos exactos
+  - Estadísticas por agencia
+
+**Frontend:**
+- Selector de juego QUINI 6 en Control Posterior
+- Interfaz de carga de extracto compleja:
+  - 6 números Tradicional Primera
+  - 6 números Tradicional Segunda  
+  - 6 números Revancha
+  - 6 números Siempre Sale (con cantidad de sorteos)
+- Resultados con 5 tablas independientes por modalidad
+- Resumen ejecutivo con totales
+- Listado de ganadores exportable a CSV
+
+**Base de Datos:**
+```sql
+-- Migración: database/migration_quini6.js
+control_previo_quini6
+control_previo_quini6_tickets
+escrutinio_quini6
+escrutinio_quini6_ganadores
+```
+
+**Configuración (`distribucion-juegos.json`):**
+```json
+"quini6": {
+  "nombre": "Quini 6",
+  "codigoNTF": "86",
+  "numerosPorApuesta": 6,
+  "rangoNumeros": { "min": 1, "max": 45 },
+  "instancias": { "1": "Tradicional", "2": "Trad+Revancha", "3": "Completo" },
+  "modalidades": {
+    "tradicionalPrimera": { "aciertos": [6, 5, 4], "porcentajePozo": 45 },
+    "tradicionalSegunda": { "aciertos": [6, 5, 4], "porcentajePozo": 19 },
+    "revancha": { "aciertos": [6], "porcentajePozo": 13 },
+    "siempreSale": { "aciertos": [6, 5, 4, 3], "porcentajePozo": 14 },
+    "premioExtra": { "aciertos": [6], "tipo": "jackpot" }
+  },
+  "apuestasMultiples": { "7": 7, "8": 28, "9": 84, ... "18": 18564 }
+}
+```
+
+### Extensión del Módulo de Historial/Reportes
+
+**Problema detectado:** El módulo `historial.controller.js` solo soportaba Quiniela y Poceada, con soporte parcial para Tombolina y Loto.
+
+**Solución implementada:** Extensión completa para los 7 juegos.
+
+**Funciones actualizadas:**
+
+| Función | Cambio |
+|---------|--------|
+| `listarEscrutinios` | Validación extendida a 7 juegos |
+| `obtenerGanadores` | Soporte para todos los juegos |
+| `obtenerPremiosAgencias` | Soporte para todos los juegos |
+| `obtenerDetalleEscrutinio` | Mapeo de tablas para loto5, brinco, quini6 |
+| `obtenerAgenciasEscrutinio` | Soporte para todos los juegos |
+| `buscarSorteo` | Queries para 7 juegos (control previo + escrutinio) |
+| `listarControlPrevioGeneral` | Agregadas queries para Loto5, BRINCO, QUINI6 |
+| `listarEscrutiniosGeneral` | Agregadas queries para Loto5, BRINCO, QUINI6 |
+
+**Lista de juegos soportados:**
+```javascript
+const juegosValidos = ['quiniela', 'poceada', 'tombolina', 'loto', 'loto5', 'brinco', 'quini6'];
+```
+
+### Migraciones de Base de Datos Ejecutadas
+
+**BRINCO (`database/migration_brinco.js`):**
+- `control_previo_brinco` - Datos de Control Previo
+- `control_previo_brinco_tickets` - Detalle de tickets
+- `escrutinio_brinco` - Resultados de escrutinio
+- `escrutinio_brinco_ganadores` - Ganadores por agencia
+
+**QUINI 6 (`database/migration_quini6.js`):**
+- `control_previo_quini6` - Datos de Control Previo
+- `control_previo_quini6_tickets` - Detalle de tickets
+- `escrutinio_quini6` - Resultados con campos para 4 sorteos
+- `escrutinio_quini6_ganadores` - Ganadores por modalidad y agencia
+
+### Archivos Modificados/Creados
+
+**Nuevos archivos:**
+- `src/modules/control-previo/brinco.controller.js`
+- `src/modules/control-previo/quini6.controller.js`
+- `src/modules/control-posterior/brinco-escrutinio.controller.js`
+- `src/modules/control-posterior/quini6-escrutinio.controller.js`
+- `database/migration_brinco.js`
+- `database/migration_quini6.js`
+
+**Archivos modificados:**
+- `src/config/distribucion-juegos.json` - Configuración BRINCO y QUINI 6
+- `src/modules/control-previo/control-previo.routes.js` - Rutas BRINCO y QUINI 6
+- `src/modules/control-posterior/control-posterior.routes.js` - Rutas escrutinio
+- `src/modules/historial/historial.controller.js` - Soporte 7 juegos
+- `public/js/api.js` - Funciones API para BRINCO y QUINI 6
+- `public/js/app.js` - UI escrutinio BRINCO y QUINI 6 (~1000 líneas nuevas)
+
+---

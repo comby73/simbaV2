@@ -408,7 +408,9 @@ function runScrutiny(registrosNTF, extracto, datosControlPrevio) {
               agencia: reg.agencia || '',
               agenciaCompleta: reg.agenciaCompleta || '',
               ticket: reg.ticket || '',
-              esVentaWeb: reg.esVentaWeb || false
+              esVentaWeb: reg.esVentaWeb || false,
+              importe: parseFloat(reg.importe || 0),
+              numerosJugados: reg.betNumbers.slice()
             });
           }
         }
@@ -427,7 +429,9 @@ function runScrutiny(registrosNTF, extracto, datosControlPrevio) {
             ticket: reg.ticket || '',
             esMultiple: true,
             cantidad: ganadoresMultiples[6],
-            esVentaWeb: reg.esVentaWeb || false
+            esVentaWeb: reg.esVentaWeb || false,
+            importe: parseFloat(reg.importe || 0),
+            numerosJugados: reg.betNumbers.slice()
           });
         }
       }
@@ -751,7 +755,10 @@ function procesarMultiplicador(registrosMultiplicador, extractoPorModalidad, num
         premioOriginal: g.premioUnitario,
         premioMultiplicador: premioExtra,
         premioTotal: g.premioUnitario * 3,
-        esVentaWeb: g.esVentaWeb
+        esVentaWeb: g.esVentaWeb,
+        importe: parseFloat(reg.importe || 0),
+        numerosJugados: reg.betNumbers ? reg.betNumbers.slice() : [],
+        numeroPlus: reg.numeroPlus
       });
     }
   }

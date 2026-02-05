@@ -217,7 +217,9 @@ function runScrutiny(registrosNTF, extracto, datosControlPrevio, xmlPremios) {
           porNivel[5].agenciasGanadoras.push({
             agencia: reg.agencia || '',
             agenciaCompleta: reg.agenciaCompleta || '',
-            ticket: reg.ticket || ''
+            ticket: reg.ticket || '',
+            importe: importe,
+            numerosJugados: betNumbers.slice()
           });
         }
         if (hits === 3) {
@@ -237,7 +239,9 @@ function runScrutiny(registrosNTF, extracto, datosControlPrevio, xmlPremios) {
           agenciaCompleta: reg.agenciaCompleta || '',
           ticket: reg.ticket || '',
           esMultiple: true,
-          cantidad: ganadoresMultiples[5]
+          cantidad: ganadoresMultiples[5],
+          importe: importe,
+          numerosJugados: betNumbers.slice()
         });
       }
       if (ganadoresMultiples[3] > 0) {

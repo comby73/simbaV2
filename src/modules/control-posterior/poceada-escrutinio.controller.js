@@ -312,7 +312,10 @@ function runScrutiny(registrosNTF, extracto, datosControlPrevio, registrosAnulad
             agencia: registro.agencia || '',
             provincia: codProv,
             ctaCte: `${codProv}-${codAgencia}`,
-            posicion: registro.posicion || null
+            posicion: registro.posicion || null,
+            ticket: registro.ticket || registro.numeroTicket || '',
+            importe: importe,
+            numerosJugados: betNumbers.slice()
           });
         }
 
@@ -336,7 +339,10 @@ function runScrutiny(registrosNTF, extracto, datosControlPrevio, registrosAnulad
           provincia: codProv,
           ctaCte: `${codProv}-${codAgencia}`,
           esMultiple: true,
-          cantidad: ganadoresMultiples[8]
+          cantidad: ganadoresMultiples[8],
+          ticket: registro.ticket || registro.numeroTicket || '',
+          importe: importe,
+          numerosJugados: betNumbers.slice()
         });
       }
 

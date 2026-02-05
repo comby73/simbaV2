@@ -2,10 +2,12 @@
  * Controller para consultar historial de Control Previo y Escrutinios
  * 
  * Provee endpoints para:
- * - Listar historial de control previo (Quiniela/Poceada)
+ * - Listar historial de control previo (todos los juegos)
  * - Listar historial de escrutinios
  * - Ver detalle de ganadores
  * - Ver premios por agencia/provincia
+ * 
+ * Juegos soportados: quiniela, poceada, tombolina, loto, loto5, brinco, quini6
  */
 
 const { query } = require('../../config/database');
@@ -65,8 +67,9 @@ const listarEscrutinios = async (req, res) => {
     const { juego } = req.params;
     const { fecha, desde, hasta, numeroSorteo, limit } = req.query;
 
-    if (!['quiniela', 'poceada'].includes(juego)) {
-      return errorResponse(res, 'Juego inválido. Use "quiniela" o "poceada"', 400);
+    const juegosValidos = ['quiniela', 'poceada', 'tombolina', 'loto', 'loto5', 'brinco', 'quini6'];
+    if (!juegosValidos.includes(juego)) {
+      return errorResponse(res, `Juego inválido. Use uno de: ${juegosValidos.join(', ')}`, 400);
     }
 
     const historial = await obtenerHistorialEscrutinio(juego, {
@@ -101,7 +104,8 @@ const obtenerGanadores = async (req, res) => {
     const { juego, id } = req.params;
     const { limit, offset } = req.query;
 
-    if (!['quiniela', 'poceada'].includes(juego)) {
+    const juegosValidos = ['quiniela', 'poceada', 'tombolina', 'loto', 'loto5', 'brinco', 'quini6'];
+    if (!juegosValidos.includes(juego)) {
       return errorResponse(res, 'Juego inválido', 400);
     }
 
@@ -165,7 +169,8 @@ const obtenerPremiosAgencias = async (req, res) => {
   try {
     const { juego, id } = req.params;
 
-    if (!['quiniela', 'poceada'].includes(juego)) {
+    const juegosValidos = ['quiniela', 'poceada', 'tombolina', 'loto', 'loto5', 'brinco', 'quini6'];
+    if (!juegosValidos.includes(juego)) {
       return errorResponse(res, 'Juego inválido', 400);
     }
 
@@ -347,8 +352,8 @@ const buscarSorteo = async (req, res) => {
     }
 
     const resultado = {
-      controlPrevio: { quiniela: null, poceada: null },
-      escrutinio: { quiniela: null, poceada: null }
+      controlPrevio: { quiniela: null, poceada: null, tombolina: null, loto: null, loto5: null, brinco: null, quini6: null },
+      escrutinio: { quiniela: null, poceada: null, tombolina: null, loto: null, loto5: null, brinco: null, quini6: null }
     };
 
     // Buscar en Control Previo Quiniela
@@ -385,6 +390,101 @@ const buscarSorteo = async (req, res) => {
       if (fecha) { sqlEP += ' AND fecha = ?'; paramsEP.push(fecha); }
       sqlEP += ' ORDER BY created_at DESC LIMIT 10';
       resultado.escrutinio.poceada = await query(sqlEP, paramsEP);
+    }
+
+    // Buscar en Control Previo Tombolina
+    if (!juego || juego === 'tombolina') {
+      try {
+        let sqlT = 'SELECT * FROM control_previo_tombolina WHERE 1=1';
+        const paramsT = [];
+        if (numeroSorteo) { sqlT += ' AND numero_sorteo = ?'; paramsT.push(numeroSorteo); }
+        if (fecha) { sqlT += ' AND fecha = ?'; paramsT.push(fecha); }
+        sqlT += ' ORDER BY created_at DESC LIMIT 10';
+        resultado.controlPrevio.tombolina = await query(sqlT, paramsT);
+
+        let sqlET = 'SELECT * FROM escrutinio_tombolina WHERE 1=1';
+        const paramsET = [];
+        if (numeroSorteo) { sqlET += ' AND numero_sorteo = ?'; paramsET.push(numeroSorteo); }
+        if (fecha) { sqlET += ' AND fecha = ?'; paramsET.push(fecha); }
+        sqlET += ' ORDER BY created_at DESC LIMIT 10';
+        resultado.escrutinio.tombolina = await query(sqlET, paramsET);
+      } catch (e) { /* tabla no disponible */ }
+    }
+
+    // Buscar en Control Previo Loto
+    if (!juego || juego === 'loto') {
+      try {
+        let sqlL = 'SELECT * FROM control_previo_loto WHERE 1=1';
+        const paramsL = [];
+        if (numeroSorteo) { sqlL += ' AND numero_sorteo = ?'; paramsL.push(numeroSorteo); }
+        if (fecha) { sqlL += ' AND fecha = ?'; paramsL.push(fecha); }
+        sqlL += ' ORDER BY created_at DESC LIMIT 10';
+        resultado.controlPrevio.loto = await query(sqlL, paramsL);
+
+        let sqlEL = 'SELECT * FROM escrutinio_loto WHERE 1=1';
+        const paramsEL = [];
+        if (numeroSorteo) { sqlEL += ' AND numero_sorteo = ?'; paramsEL.push(numeroSorteo); }
+        if (fecha) { sqlEL += ' AND fecha = ?'; paramsEL.push(fecha); }
+        sqlEL += ' ORDER BY created_at DESC LIMIT 10';
+        resultado.escrutinio.loto = await query(sqlEL, paramsEL);
+      } catch (e) { /* tabla no disponible */ }
+    }
+
+    // Buscar en Control Previo Loto 5
+    if (!juego || juego === 'loto5') {
+      try {
+        let sqlL5 = 'SELECT * FROM control_previo_loto5 WHERE 1=1';
+        const paramsL5 = [];
+        if (numeroSorteo) { sqlL5 += ' AND numero_sorteo = ?'; paramsL5.push(numeroSorteo); }
+        if (fecha) { sqlL5 += ' AND fecha = ?'; paramsL5.push(fecha); }
+        sqlL5 += ' ORDER BY created_at DESC LIMIT 10';
+        resultado.controlPrevio.loto5 = await query(sqlL5, paramsL5);
+
+        let sqlEL5 = 'SELECT * FROM escrutinio_loto5 WHERE 1=1';
+        const paramsEL5 = [];
+        if (numeroSorteo) { sqlEL5 += ' AND numero_sorteo = ?'; paramsEL5.push(numeroSorteo); }
+        if (fecha) { sqlEL5 += ' AND fecha = ?'; paramsEL5.push(fecha); }
+        sqlEL5 += ' ORDER BY created_at DESC LIMIT 10';
+        resultado.escrutinio.loto5 = await query(sqlEL5, paramsEL5);
+      } catch (e) { /* tabla no disponible */ }
+    }
+
+    // Buscar en Control Previo BRINCO
+    if (!juego || juego === 'brinco') {
+      try {
+        let sqlB = 'SELECT * FROM control_previo_brinco WHERE 1=1';
+        const paramsB = [];
+        if (numeroSorteo) { sqlB += ' AND numero_sorteo = ?'; paramsB.push(numeroSorteo); }
+        if (fecha) { sqlB += ' AND fecha = ?'; paramsB.push(fecha); }
+        sqlB += ' ORDER BY created_at DESC LIMIT 10';
+        resultado.controlPrevio.brinco = await query(sqlB, paramsB);
+
+        let sqlEB = 'SELECT * FROM escrutinio_brinco WHERE 1=1';
+        const paramsEB = [];
+        if (numeroSorteo) { sqlEB += ' AND numero_sorteo = ?'; paramsEB.push(numeroSorteo); }
+        if (fecha) { sqlEB += ' AND fecha = ?'; paramsEB.push(fecha); }
+        sqlEB += ' ORDER BY created_at DESC LIMIT 10';
+        resultado.escrutinio.brinco = await query(sqlEB, paramsEB);
+      } catch (e) { /* tabla no disponible */ }
+    }
+
+    // Buscar en Control Previo QUINI 6
+    if (!juego || juego === 'quini6') {
+      try {
+        let sqlQ6 = 'SELECT * FROM control_previo_quini6 WHERE 1=1';
+        const paramsQ6 = [];
+        if (numeroSorteo) { sqlQ6 += ' AND numero_sorteo = ?'; paramsQ6.push(numeroSorteo); }
+        if (fecha) { sqlQ6 += ' AND fecha = ?'; paramsQ6.push(fecha); }
+        sqlQ6 += ' ORDER BY created_at DESC LIMIT 10';
+        resultado.controlPrevio.quini6 = await query(sqlQ6, paramsQ6);
+
+        let sqlEQ6 = 'SELECT * FROM escrutinio_quini6 WHERE 1=1';
+        const paramsEQ6 = [];
+        if (numeroSorteo) { sqlEQ6 += ' AND numero_sorteo = ?'; paramsEQ6.push(numeroSorteo); }
+        if (fecha) { sqlEQ6 += ' AND fecha = ?'; paramsEQ6.push(fecha); }
+        sqlEQ6 += ' ORDER BY created_at DESC LIMIT 10';
+        resultado.escrutinio.quini6 = await query(sqlEQ6, paramsEQ6);
+      } catch (e) { /* tabla no disponible */ }
     }
 
     return successResponse(res, resultado);
@@ -492,6 +592,75 @@ const listarControlPrevioGeneral = async (req, res) => {
       }
     }
 
+    // Obtener Loto 5 si no se especifica juego o es loto5
+    if (!juego || juego === 'loto5') {
+      try {
+        let sqlL5 = `
+          SELECT cp.*, u.nombre as usuario_nombre, 'loto5' as juego
+          FROM control_previo_loto5 cp
+          LEFT JOIN usuarios u ON cp.usuario_id = u.id
+          WHERE 1=1
+        `;
+        const paramsL5 = [];
+
+        if (fechaDesde) { sqlL5 += ' AND cp.fecha >= ?'; paramsL5.push(fechaDesde); }
+        if (fechaHasta) { sqlL5 += ' AND cp.fecha <= ?'; paramsL5.push(fechaHasta); }
+
+        sqlL5 += ` ORDER BY cp.fecha DESC, cp.created_at DESC LIMIT ${maxLimit}`;
+
+        const loto5Data = await query(sqlL5, paramsL5);
+        resultados = resultados.concat(loto5Data);
+      } catch (e) {
+        console.log('Tabla control_previo_loto5 no disponible');
+      }
+    }
+
+    // Obtener BRINCO si no se especifica juego o es brinco
+    if (!juego || juego === 'brinco') {
+      try {
+        let sqlB = `
+          SELECT cp.*, u.nombre as usuario_nombre, 'brinco' as juego
+          FROM control_previo_brinco cp
+          LEFT JOIN usuarios u ON cp.usuario_id = u.id
+          WHERE 1=1
+        `;
+        const paramsB = [];
+
+        if (fechaDesde) { sqlB += ' AND cp.fecha >= ?'; paramsB.push(fechaDesde); }
+        if (fechaHasta) { sqlB += ' AND cp.fecha <= ?'; paramsB.push(fechaHasta); }
+
+        sqlB += ` ORDER BY cp.fecha DESC, cp.created_at DESC LIMIT ${maxLimit}`;
+
+        const brincoData = await query(sqlB, paramsB);
+        resultados = resultados.concat(brincoData);
+      } catch (e) {
+        console.log('Tabla control_previo_brinco no disponible');
+      }
+    }
+
+    // Obtener QUINI 6 si no se especifica juego o es quini6
+    if (!juego || juego === 'quini6') {
+      try {
+        let sqlQ6 = `
+          SELECT cp.*, u.nombre as usuario_nombre, 'quini6' as juego
+          FROM control_previo_quini6 cp
+          LEFT JOIN usuarios u ON cp.usuario_id = u.id
+          WHERE 1=1
+        `;
+        const paramsQ6 = [];
+
+        if (fechaDesde) { sqlQ6 += ' AND cp.fecha >= ?'; paramsQ6.push(fechaDesde); }
+        if (fechaHasta) { sqlQ6 += ' AND cp.fecha <= ?'; paramsQ6.push(fechaHasta); }
+
+        sqlQ6 += ` ORDER BY cp.fecha DESC, cp.created_at DESC LIMIT ${maxLimit}`;
+
+        const quini6Data = await query(sqlQ6, paramsQ6);
+        resultados = resultados.concat(quini6Data);
+      } catch (e) {
+        console.log('Tabla control_previo_quini6 no disponible');
+      }
+    }
+
     // Ordenar por fecha y limitar
     resultados.sort((a, b) => new Date(b.fecha) - new Date(a.fecha));
     resultados = resultados.slice(0, maxLimit);
@@ -513,7 +682,7 @@ const obtenerDetalleControlPrevio = async (req, res) => {
     const { id } = req.params;
     const { juego } = req.query;
 
-    const juegosValidos = ['quiniela', 'poceada', 'tombolina', 'loto'];
+    const juegosValidos = ['quiniela', 'poceada', 'tombolina', 'loto', 'loto5', 'brinco', 'quini6'];
     if (!juego || !juegosValidos.includes(juego)) {
       return errorResponse(res, `Debe especificar juego válido: ${juegosValidos.join(', ')}`, 400);
     }
@@ -522,7 +691,10 @@ const obtenerDetalleControlPrevio = async (req, res) => {
       'quiniela': 'control_previo_quiniela',
       'poceada': 'control_previo_poceada',
       'tombolina': 'control_previo_tombolina',
-      'loto': 'control_previo_loto'
+      'loto': 'control_previo_loto',
+      'loto5': 'control_previo_loto5',
+      'brinco': 'control_previo_brinco',
+      'quini6': 'control_previo_quini6'
     };
     const tabla = tablaMap[juego];
 
@@ -640,6 +812,75 @@ const listarEscrutiniosGeneral = async (req, res) => {
       }
     }
 
+    // Obtener Loto 5
+    if (!juego || juego === 'loto5') {
+      try {
+        let sqlL5 = `
+          SELECT e.*, u.nombre as usuario_nombre, 'loto5' as juego
+          FROM escrutinio_loto5 e
+          LEFT JOIN usuarios u ON e.usuario_id = u.id
+          WHERE 1=1
+        `;
+        const paramsL5 = [];
+
+        if (fechaDesde) { sqlL5 += ' AND e.fecha >= ?'; paramsL5.push(fechaDesde); }
+        if (fechaHasta) { sqlL5 += ' AND e.fecha <= ?'; paramsL5.push(fechaHasta); }
+
+        sqlL5 += ` ORDER BY e.fecha DESC, e.created_at DESC LIMIT ${maxLimit}`;
+
+        const loto5Data = await query(sqlL5, paramsL5);
+        resultados = resultados.concat(loto5Data);
+      } catch (e) {
+        console.log('Tabla escrutinio_loto5 no disponible');
+      }
+    }
+
+    // Obtener BRINCO
+    if (!juego || juego === 'brinco') {
+      try {
+        let sqlB = `
+          SELECT e.*, u.nombre as usuario_nombre, 'brinco' as juego
+          FROM escrutinio_brinco e
+          LEFT JOIN usuarios u ON e.usuario_id = u.id
+          WHERE 1=1
+        `;
+        const paramsB = [];
+
+        if (fechaDesde) { sqlB += ' AND e.fecha >= ?'; paramsB.push(fechaDesde); }
+        if (fechaHasta) { sqlB += ' AND e.fecha <= ?'; paramsB.push(fechaHasta); }
+
+        sqlB += ` ORDER BY e.fecha DESC, e.created_at DESC LIMIT ${maxLimit}`;
+
+        const brincoData = await query(sqlB, paramsB);
+        resultados = resultados.concat(brincoData);
+      } catch (e) {
+        console.log('Tabla escrutinio_brinco no disponible');
+      }
+    }
+
+    // Obtener QUINI 6
+    if (!juego || juego === 'quini6') {
+      try {
+        let sqlQ6 = `
+          SELECT e.*, u.nombre as usuario_nombre, 'quini6' as juego
+          FROM escrutinio_quini6 e
+          LEFT JOIN usuarios u ON e.usuario_id = u.id
+          WHERE 1=1
+        `;
+        const paramsQ6 = [];
+
+        if (fechaDesde) { sqlQ6 += ' AND e.fecha >= ?'; paramsQ6.push(fechaDesde); }
+        if (fechaHasta) { sqlQ6 += ' AND e.fecha <= ?'; paramsQ6.push(fechaHasta); }
+
+        sqlQ6 += ` ORDER BY e.fecha DESC, e.created_at DESC LIMIT ${maxLimit}`;
+
+        const quini6Data = await query(sqlQ6, paramsQ6);
+        resultados = resultados.concat(quini6Data);
+      } catch (e) {
+        console.log('Tabla escrutinio_quini6 no disponible');
+      }
+    }
+
     // Ordenar por fecha y limitar
     resultados.sort((a, b) => new Date(b.fecha) - new Date(a.fecha));
     resultados = resultados.slice(0, maxLimit);
@@ -661,7 +902,7 @@ const obtenerDetalleEscrutinio = async (req, res) => {
     const { id } = req.params;
     const { juego } = req.query;
 
-    const juegosValidos = ['quiniela', 'poceada', 'tombolina', 'loto'];
+    const juegosValidos = ['quiniela', 'poceada', 'tombolina', 'loto', 'loto5', 'brinco', 'quini6'];
     if (!juego || !juegosValidos.includes(juego)) {
       return errorResponse(res, `Debe especificar juego válido: ${juegosValidos.join(', ')}`, 400);
     }
@@ -670,7 +911,10 @@ const obtenerDetalleEscrutinio = async (req, res) => {
       'quiniela': 'escrutinio_quiniela',
       'poceada': 'escrutinio_poceada',
       'tombolina': 'escrutinio_tombolina',
-      'loto': 'escrutinio_loto'
+      'loto': 'escrutinio_loto',
+      'loto5': 'escrutinio_loto5',
+      'brinco': 'escrutinio_brinco',
+      'quini6': 'escrutinio_quini6'
     };
     const tabla = tablaMap[juego];
 
@@ -702,8 +946,9 @@ const obtenerAgenciasEscrutinio = async (req, res) => {
     const { id } = req.params;
     const { juego } = req.query;
 
-    if (!juego || !['quiniela', 'poceada'].includes(juego)) {
-      return errorResponse(res, 'Debe especificar juego (quiniela o poceada)', 400);
+    const juegosValidos = ['quiniela', 'poceada', 'tombolina', 'loto', 'loto5', 'brinco', 'quini6'];
+    if (!juego || !juegosValidos.includes(juego)) {
+      return errorResponse(res, `Debe especificar juego válido: ${juegosValidos.join(', ')}`, 400);
     }
 
     const agencias = await query(`

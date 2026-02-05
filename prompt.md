@@ -85,6 +85,33 @@
 
 ### Ejemplos recopilados del historial:
 
+---
+
+## Historia de prompts y pedidos - Febrero 2026
+
+### Prompt 1: Corrección escrutinio LOTO
+- "El escrutinio de LOTO clasifica todo como Desquite, quiero que todas las apuestas participen en todas las modalidades."
+	- Se corrigió el parsing y el escrutinio para que todas las apuestas sean genéricas y participen en todas las modalidades.
+
+### Prompt 2: Tarjetas de resumen en cero
+- "Las tarjetas de tickets y recaudación aparecen en cero."
+	- Se actualizó el frontend y backend para mostrar correctamente los totales y anulados.
+
+### Prompt 3: Mejoras en reportes PDF y HTML
+- "Simplificá la columna NIVEL, que siempre se muestre Multiplicador/PLUS, y que el total de ganadores solo cuente niveles con premio."
+	- Se modificaron los reportes PDF y HTML según lo pedido.
+
+### Prompt 4: Eliminar opción duplicada de LOTO
+- "Hay dos opciones de LOTO en el selector, dejá solo una y con label corto."
+	- Se dejó solo una opción de LOTO en el selector, con label "6/45 + PLUS".
+
+### Prompt 5: Commit de todos los cambios
+- "Hacé commit de todos los cambios realizados."
+	- Se realizaron los commits correspondientes tras cada cambio importante.
+
+---
+Para detalles técnicos, ver DOCUMENTACION.md y los commits de febrero 2026.
+
 - "vos ves el archivo pmpt.md en mi aplicacion?"
 - "si ese quiero que lo veas lo entieneas pero admes le agregus toso lso prompt que tneemos aca los que modificaron la aplicaicon desde el nacimiento"
 - "si todos los de la hostoria de la aplicac"
@@ -383,3 +410,63 @@
 > "bueno cargame el prompt y documentacion.md"
 
 *Fin de registros de la sesión - 2 de Febrero 2026*
+
+---
+
+## Sesión: 5 de Febrero 2026
+
+### Prompt 36 - Implementar BRINCO (Control Previo y Escrutinio)
+> "bueno y lo mismo ahora con brinco el prompt lo tenes y te adjunto este que es el py de brinco que tengo"
+>
+> **Contexto:**
+> - Usuario solicita implementar el juego BRINCO siguiendo el mismo patrón de los juegos existentes
+> - Se proporcionó el código Python de referencia (`brinco_analyzer.py`)
+> - Juego de 6 números del 00-39, con modalidades Tradicional y Revancha
+> - Instancias: 1 (Solo Tradicional), 2 (Tradicional + Revancha)
+>
+> **Implementado:**
+> - Backend: `brinco.controller.js` (Control Previo NTF con código 85)
+> - Backend: `brinco-escrutinio.controller.js` (Escrutinio con 2 modalidades)
+> - Configuración en `distribucion-juegos.json`
+> - Rutas en `control-previo.routes.js` y `control-posterior.routes.js`
+> - Frontend: API functions, escrutinio UI, extracto loading
+
+### Prompt 37 - Implementar QUINI 6 (Control Previo y Escrutinio)
+> "bueno y lo mismo ahora con quini6 el prompt lo tenes y te adjunto este que es el py de quini 6 que tengo"
+>
+> **Contexto:**
+> - Usuario solicita implementar el juego QUINI 6 con el mismo patrón
+> - Se proporcionó el código Python de referencia (`quini6_analyzer.py`)
+> - Juego de 6 números del 01-45
+> - 5 modalidades: Tradicional Primera, Tradicional Segunda, Revancha, Siempre Sale, Premio Extra
+> - Instancias: 1 (Trad), 2 (Trad+Rev), 3 (Trad+Rev+SiempreSale)
+>
+> **Implementado:**
+> - Backend: `quini6.controller.js` (Control Previo NTF con código 86)
+> - Backend: `quini6-escrutinio.controller.js` (Escrutinio con 5 modalidades)
+> - Configuración completa en `distribucion-juegos.json`
+> - Rutas en `control-previo.routes.js` y `control-posterior.routes.js`
+> - Frontend: API functions, escrutinio UI (~500 líneas), extracto loading
+
+### Prompt 38 - Verificar Reportes y Extender Historial
+> "y en la parte de reportes de mi aplicacion suma todos los juegos y genera todos los reportes o no?"
+>
+> **Contexto:**
+> - Usuario pregunta si el módulo de reportes/historial soporta todos los juegos
+> - Se descubrió que `historial.controller.js` solo soportaba parcialmente algunos juegos
+>
+> **Implementado:**
+> - Extendido `listarEscrutinios` para soportar los 7 juegos
+> - Extendido `obtenerGanadores`, `obtenerPremiosAgencias`, `obtenerDetalleEscrutinio`, `obtenerAgenciasEscrutinio`
+> - Extendido `buscarSorteo` con queries para todos los juegos
+> - Extendido `listarControlPrevioGeneral` y `listarEscrutiniosGeneral` con Loto5, BRINCO, QUINI 6
+> - Creadas migraciones: `migration_brinco.js`, `migration_quini6.js`
+> - Ejecutadas migraciones: 8 tablas nuevas creadas en BD
+
+### Prompt 39 - Actualizar Documentación
+> "me podes actualizar el prompt y documentacion ambos .md en base al os utlimos cmabios al final de todos"
+>
+> **Contexto:** Solicitud de agregar todos los cambios de BRINCO, QUINI 6 y extensión de historial a los archivos de documentación.
+
+*Fin de registros de la sesión - 5 de Febrero 2026*
+

@@ -167,6 +167,117 @@
         }
       },
       "premioPuntoVentaPorcentaje": 20
+    },
+    "brinco": {
+      "nombre": "BRINCO",
+      "codigoJuego": "85",
+      "numerosRango": {
+        "min": 1,
+        "max": 41,
+        "cantidad": 6,
+        "descripcion": "6 números del 1 al 41"
+      },
+      "modalidades": {
+        "tradicional": {
+          "nombre": "BRINCO Tradicional",
+          "niveles": {
+            "1": { "aciertos": 6, "descripcion": "Primer Premio - 6 aciertos" },
+            "2": { "aciertos": 5, "descripcion": "Segundo Premio - 5 aciertos" },
+            "3": { "aciertos": 4, "descripcion": "Tercer Premio - 4 aciertos" },
+            "4": { "aciertos": 3, "descripcion": "Cuarto Premio - 3 aciertos" }
+          },
+          "estimuloAgenciero": {
+            "descripcion": "Premio al agente vendedor del ticket con 6 aciertos",
+            "condicion": "Solo si hay ganador de 6 aciertos"
+          }
+        },
+        "junior": {
+          "nombre": "BRINCO Junior Siempre Sale",
+          "aciertosRequeridos": 5,
+          "descripcion": "Premio especial para 5 o más aciertos (siempre sale ganador)",
+          "estimuloAgenciero": {
+            "descripcion": "Premio al agente vendedor del ticket ganador"
+          }
+        }
+      },
+      "apuestasMultiples": {
+        "7": { "combinaciones": 7, "descripcion": "C(7,6)" },
+        "8": { "combinaciones": 28, "descripcion": "C(8,6)" },
+        "9": { "combinaciones": 84, "descripcion": "C(9,6)" },
+        "10": { "combinaciones": 210, "descripcion": "C(10,6)" },
+        "11": { "combinaciones": 462, "descripcion": "C(11,6)" },
+        "12": { "combinaciones": 924, "descripcion": "C(12,6)" }
+      },
+      "valorApuesta": {
+        "simple": 500,
+        "descripcion": "6 números del 1 al 41"
+      },
+      "agenciaVentaWeb": "5188880"
+    },
+    "quini6": {
+      "nombre": "QUINI 6",
+      "codigoJuego": "86",
+      "numerosRango": {
+        "min": 1,
+        "max": 45,
+        "cantidad": 6,
+        "descripcion": "6 números del 1 al 45"
+      },
+      "modalidades": {
+        "tradicionalPrimera": {
+          "nombre": "Tradicional Primera",
+          "niveles": {
+            "1": { "aciertos": 6, "descripcion": "Primer Premio - 6 aciertos" },
+            "2": { "aciertos": 5, "descripcion": "Segundo Premio - 5 aciertos" },
+            "3": { "aciertos": 4, "descripcion": "Tercer Premio - 4 aciertos" }
+          }
+        },
+        "tradicionalSegunda": {
+          "nombre": "Tradicional Segunda",
+          "niveles": {
+            "1": { "aciertos": 6, "descripcion": "Primer Premio - 6 aciertos" },
+            "2": { "aciertos": 5, "descripcion": "Segundo Premio - 5 aciertos" },
+            "3": { "aciertos": 4, "descripcion": "Tercer Premio - 4 aciertos" }
+          }
+        },
+        "revancha": {
+          "nombre": "La Revancha",
+          "niveles": {
+            "1": { "aciertos": 6, "descripcion": "Premio - 6 aciertos" }
+          }
+        },
+        "siempreSale": {
+          "nombre": "Siempre Sale",
+          "descripcion": "Premio garantizado - ajusta aciertos si no hay ganador de 6",
+          "aciertosMinimo": 3,
+          "aciertosMaximo": 6
+        },
+        "premioExtra": {
+          "nombre": "Premio Extra",
+          "descripcion": "Números adicionales sorteados",
+          "niveles": {
+            "1": { "aciertos": 6, "descripcion": "Premio Extra - 6 aciertos" }
+          }
+        }
+      },
+      "instancias": {
+        "1": { "nombre": "Tradicional", "descripcion": "Solo Tradicional (Primera + Segunda)" },
+        "2": { "nombre": "Tradicional + Revancha", "descripcion": "Tradicional más La Revancha" },
+        "3": { "nombre": "Tradicional + Revancha + Siempre Sale", "descripcion": "Todas las modalidades" }
+      },
+      "apuestasMultiples": {
+        "7": { "combinaciones": 7, "descripcion": "C(7,6)" },
+        "8": { "combinaciones": 28, "descripcion": "C(8,6)" },
+        "9": { "combinaciones": 84, "descripcion": "C(9,6)" },
+        "10": { "combinaciones": 210, "descripcion": "C(10,6)" },
+        "11": { "combinaciones": 462, "descripcion": "C(11,6)" },
+        "12": { "combinaciones": 924, "descripcion": "C(12,6)" }
+      },
+      "valorApuesta": {
+        "simple": 600,
+        "descripcion": "6 números del 1 al 45"
+      },
+      "agenciaVentaWeb": "5188880"
     }
   },
   "entesParticipantes": {

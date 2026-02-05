@@ -178,6 +178,34 @@ const controlPrevioAPI = {
     return data;
   },
 
+  procesarBrinco: async (file) => {
+    const formData = new FormData();
+    formData.append('archivo', file);
+    const token = getToken();
+    const response = await fetch(`${API_BASE}/control-previo/brinco/procesar-zip`, {
+      method: 'POST',
+      headers: { 'Authorization': `Bearer ${token}` },
+      body: formData
+    });
+    const data = await response.json();
+    if (!response.ok) throw new Error(data.message || 'Error procesando BRINCO');
+    return data;
+  },
+
+  procesarQuini6: async (file) => {
+    const formData = new FormData();
+    formData.append('archivo', file);
+    const token = getToken();
+    const response = await fetch(`${API_BASE}/control-previo/quini6/procesar-zip`, {
+      method: 'POST',
+      headers: { 'Authorization': `Bearer ${token}` },
+      body: formData
+    });
+    const data = await response.json();
+    if (!response.ok) throw new Error(data.message || 'Error procesando QUINI 6');
+    return data;
+  },
+
   buscarPozoPoceada: (sorteo) => apiRequest(`/control-previo/poceada/buscar-pozo/${sorteo}`),
 
   getHistorial: (params = {}) => {
@@ -209,6 +237,16 @@ const controlPosteriorAPI = {
   }),
 
   escrutinioLoto5: (datos) => apiRequest('/control-posterior/loto5/escrutinio', {
+    method: 'POST',
+    body: JSON.stringify(datos)
+  }),
+
+  escrutinioBrinco: (datos) => apiRequest('/control-posterior/brinco/escrutinio', {
+    method: 'POST',
+    body: JSON.stringify(datos)
+  }),
+
+  escrutinioQuini6: (datos) => apiRequest('/control-posterior/quini6/escrutinio', {
     method: 'POST',
     body: JSON.stringify(datos)
   }),

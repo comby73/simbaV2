@@ -205,6 +205,242 @@ Responde SOLO con este JSON (INCLUIR SIEMPRE EL CAMPO "letras"):
     };
   },
 
+  /**
+   * PROCESAR IMAGEN DE EXTRACTO BRINCO
+   * Extrae los datos de un extracto de BRINCO (Tradicional + Junior)
+   */
+  async procesarImagenBrinco(imageBase64, mimeType) {
+    const prompt = `Actuás como un extractor especializado de resultados de lotería para Argentina.
+
+Analizá esta imagen de extracto de BRINCO y devolvé SOLO un objeto JSON válido.
+
+REGLAS DE EXTRACCIÓN BRINCO:
+
+1. BRINCO tiene dos modalidades:
+   - BRINCO Tradicional: 6 números del 1 al 41
+   - BRINCO Junior Siempre Sale: 6 números del 1 al 41
+
+2. Para cada modalidad extraer:
+   - Los 6 números sorteados (formato "XX" con dos dígitos, ej: "05", "28", "36")
+   - Cantidad de ganadores por categoría
+   - Premio por ganador (monto en pesos)
+
+3. BRINCO TRADICIONAL tiene 4 niveles de premios:
+   - 6 aciertos (Primer Premio)
+   - 5 aciertos (Segundo Premio)  
+   - 4 aciertos (Tercer Premio)
+   - 3 aciertos (Cuarto Premio)
+   - Estímulo agenciero
+
+4. BRINCO JUNIOR (Siempre Sale) tiene:
+   - Premio por 5 o 6 aciertos (el que salga primero)
+   - Siempre hay ganadores
+   - Estímulo agenciero
+
+5. MONTOS: Convertí de formato argentino "999.999.999,99" a número decimal con punto (ej: 1696937067.00)
+
+6. NÚMERO DE SORTEO: Extraer el número de sorteo del encabezado
+
+7. FECHA: Extraer la fecha del sorteo en formato "YYYY-MM-DD"
+
+Responde ÚNICAMENTE con este JSON:
+{
+  "game": "BRINCO",
+  "sorteo_number": "XXXX",
+  "date": "YYYY-MM-DD",
+  "currency": "ARS",
+  "brinco": {
+    "numbers": ["XX", "XX", "XX", "XX", "XX", "XX"],
+    "prizes": {
+      "1": { "winners": N, "premio_por_ganador": MONTO, "vacante": BOOL },
+      "2": { "winners": N, "premio_por_ganador": MONTO },
+      "3": { "winners": N, "premio_por_ganador": MONTO },
+      "4": { "winners": N, "premio_por_ganador": MONTO }
+    },
+    "estimulo": { "monto": MONTO, "vacante": BOOL }
+  },
+  "brinco_junior": {
+    "numbers": ["XX", "XX", "XX", "XX", "XX", "XX"],
+    "aciertos_requeridos": 5,
+    "prizes": {
+      "1": { "winners": N, "premio_por_ganador": MONTO, "pozo_total": MONTO }
+    },
+    "estimulo": { "monto": MONTO, "winners": N, "pagado_total": MONTO }
+  }
+}`;
+
+    return await this.llamarAPI(imageBase64, mimeType, prompt);
+  },
+
+  /**
+   * PROCESAR IMAGEN DE EXTRACTO QUINI 6
+   * Extrae los datos de un extracto de QUINI 6
+   */
+  async procesarImagenQuini6(imageBase64, mimeType) {
+    const prompt = `Actuás como un extractor especializado de resultados de lotería para Argentina.
+
+Analizá esta imagen de extracto de QUINI 6 y devolvé SOLO un objeto JSON válido.
+
+REGLAS DE EXTRACCIÓN QUINI 6:
+
+1. QUINI 6 tiene múltiples modalidades:
+   - TRADICIONAL PRIMER SORTEO
+   - TRADICIONAL LA SEGUNDA DEL QUINI  
+   - REVANCHA
+   - SIEMPRE SALE
+   - PREMIO EXTRA
+
+2. Para cada modalidad de números:
+   - Extraer los 6 números sorteados (formato "XX" con dos dígitos)
+   - Buscar SOLO los 6 números grandes debajo de cada título
+   - IGNORAR montos de dinero y números de ganadores
+
+3. ESTRUCTURA DE PREMIOS por modalidad:
+   - TRADICIONAL (Primer y Segunda): 1° (6 aciertos), 2° (5 aciertos), 3° (4 aciertos)
+   - REVANCHA: Solo 1° premio
+   - SIEMPRE SALE: Puede ser por 5 o 6 aciertos
+
+4. PREMIO EXTRA:
+   - Lee los números desde la sección "PREMIO EXTRA"
+   - Son muchos números de 2 dígitos (algunos pueden repetirse)
+   - Conservar duplicados y orden de aparición
+
+5. MONTOS: Convertí de formato argentino "999.999.999,99" a número decimal
+
+6. NÚMERO DE SORTEO (drawNumber): Extraer del encabezado
+
+Responde ÚNICAMENTE con este JSON:
+{
+  "game": "QUINI_6",
+  "scope": "nacional",
+  "drawNumber": "XXXX",
+  "date": "YYYY-MM-DD",
+  "currency": "ARS",
+  "tradicional": {
+    "primer": {
+      "numbers": ["XX","XX","XX","XX","XX","XX"],
+      "prizes": { 
+        "1": { "pot": MONTO, "winners": N, "premio_por_ganador": MONTO, "pagado_total": MONTO, "vacante": BOOL },
+        "2": { "pot": MONTO, "winners": N, "premio_por_ganador": MONTO, "pagado_total": MONTO },
+        "3": { "pot": MONTO, "winners": N, "premio_por_ganador": MONTO, "pagado_total": MONTO },
+        "estimulo": { "monto": MONTO }
+      }
+    },
+    "segunda": {
+      "numbers": ["XX","XX","XX","XX","XX","XX"],
+      "prizes": { ... mismo formato ... }
+    }
+  },
+  "revancha": {
+    "numbers": ["XX","XX","XX","XX","XX","XX"],
+    "prizes": {
+      "1": { "pot": MONTO, "winners": N, "premio_por_ganador": MONTO, "vacante": BOOL },
+      "estimulo": { "monto": MONTO }
+    }
+  },
+  "siempre_sale": {
+    "numbers": ["XX","XX","XX","XX","XX","XX"],
+    "winning_hits": N,
+    "prizes": {
+      "1": { "pot": MONTO, "winners": N, "premio_por_ganador": MONTO, "pagado_total": MONTO },
+      "estimulo": { "monto": MONTO, "winners": N, "pagado_total": MONTO }
+    }
+  },
+  "premio_extra": {
+    "numbers": ["XX", "XX", ...lista de números...],
+    "pot": MONTO,
+    "winners": N,
+    "premio_por_ganador": MONTO,
+    "pagado_total": MONTO
+  }
+}`;
+
+    return await this.llamarAPI(imageBase64, mimeType, prompt);
+  },
+
+  /**
+   * DETECTAR TIPO DE EXTRACTO Y PROCESAR
+   * Detecta automáticamente si es BRINCO, QUINI 6 o Quiniela y procesa
+   */
+  async procesarExtractoAuto(imageBase64, mimeType) {
+    // Primero detectar el tipo de extracto
+    const promptDeteccion = `Analiza esta imagen de lotería argentina y determina qué tipo de juego es.
+Responde SOLO con uno de estos valores exactos:
+- "BRINCO" si ves textos como "BRINCO EXTRACCIONES", "BRINCO JUNIOR"
+- "QUINI_6" si ves textos como "TRADICIONAL PRIMER SORTEO", "REVANCHA", "SIEMPRE SALE"
+- "QUINIELA" si ves una tabla de 20 números con posiciones del 1 al 20
+
+Responde SOLO con la palabra del tipo de juego, sin explicaciones.`;
+
+    try {
+      const resultado = await this.llamarAPI(imageBase64, mimeType, promptDeteccion);
+      
+      if (!resultado.success) {
+        throw new Error('No se pudo detectar el tipo de extracto');
+      }
+
+      let tipoDetectado = '';
+      if (typeof resultado.data === 'string') {
+        tipoDetectado = resultado.data.trim().toUpperCase();
+      } else if (resultado.data.tipo) {
+        tipoDetectado = resultado.data.tipo.toUpperCase();
+      }
+
+      console.log('[OCR] Tipo de extracto detectado:', tipoDetectado);
+
+      // Procesar según el tipo detectado
+      if (tipoDetectado.includes('BRINCO')) {
+        return await this.procesarImagenBrinco(imageBase64, mimeType);
+      } else if (tipoDetectado.includes('QUINI') || tipoDetectado.includes('Q6')) {
+        return await this.procesarImagenQuini6(imageBase64, mimeType);
+      } else {
+        // Por defecto, procesar como Quiniela
+        return await this.procesarImagenQuiniela(imageBase64, mimeType);
+      }
+    } catch (error) {
+      console.error('Error en detección automática:', error);
+      // Si falla la detección, intentar como Quiniela por defecto
+      return await this.procesarImagenQuiniela(imageBase64, mimeType);
+    }
+  },
+
+  /**
+   * GENERAR NOMBRE DE ARCHIVO PARA JSON
+   */
+  generarNombreArchivo(data) {
+    if (!data) return null;
+
+    if (data.game === 'BRINCO' && data.sorteo_number) {
+      return \`extracto_brinco_\${data.sorteo_number}.json\`;
+    } else if (data.game === 'QUINI_6' && data.drawNumber) {
+      return \`extracto_quini6_\${data.drawNumber}.json\`;
+    } else if (data.sorteo) {
+      return \`extracto_quiniela_\${data.sorteo}.json\`;
+    }
+
+    return \`extracto_\${Date.now()}.json\`;
+  },
+
+  /**
+   * DESCARGAR JSON DEL EXTRACTO
+   */
+  descargarJSON(data, filename = null) {
+    const nombreArchivo = filename || this.generarNombreArchivo(data);
+    const jsonString = JSON.stringify(data, null, 2);
+    const blob = new Blob([jsonString], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = nombreArchivo;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+    
+    return nombreArchivo;
+  },
+
   // Limpiar y validar letras
   limpiarLetras(letras) {
     const letrasValidas = 'ABCDEFGHIJKLMNOP';

@@ -6,6 +6,8 @@ const quinielaController = require('./quiniela.controller');
 const poceadaController = require('./poceada.controller');
 const lotoController = require('./loto.controller');
 const loto5Controller = require('./loto5.controller');
+const brincoController = require('./brinco.controller');
+const quini6Controller = require('./quini6.controller');
 const { authenticate, requirePermission } = require('../../shared/middleware');
 
 // Configurar multer para subida de archivos
@@ -105,6 +107,45 @@ router.post('/loto5/procesar',
 router.post('/loto5/procesar-zip',
   upload.single('archivo'),
   loto5Controller.procesarZip
+);
+
+// BRINCO
+router.post('/brinco/procesar',
+  requirePermission('control_previo.ejecutar'),
+  upload.single('archivo'),
+  brincoController.procesarZip
+);
+
+router.post('/brinco/procesar-zip',
+  upload.single('archivo'),
+  brincoController.procesarZip
+);
+
+router.post('/brinco/guardar-resultado',
+  requirePermission('control_previo.ejecutar'),
+  brincoController.guardarResultado
+);
+
+// QUINI 6
+router.post('/quini6/procesar',
+  requirePermission('control_previo.ejecutar'),
+  upload.single('archivo'),
+  quini6Controller.procesarZip
+);
+
+router.post('/quini6/procesar-zip',
+  upload.single('archivo'),
+  quini6Controller.procesarZip
+);
+
+router.post('/quini6/guardar-resultado',
+  requirePermission('control_previo.ejecutar'),
+  quini6Controller.guardarResultado
+);
+
+router.get('/quini6/estadisticas/:sorteo',
+  requirePermission('control_previo.ver'),
+  quini6Controller.obtenerEstadisticas
 );
 
 // Configuración de juegos
