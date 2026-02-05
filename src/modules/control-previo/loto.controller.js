@@ -299,21 +299,23 @@ const procesarZip = async (req, res) => {
       modalidades: logsTxt.modalidades,
       datosOficiales: datosXml,
       distribucionConfig: cargarDistribucionLoto(),
+      // LOTO: cada ticket participa en 5 modalidades, el XML suma las 5
+      // Por eso multiplicamos por 5 los valores del TXT para comparar con XML
       comparacion: datosXml ? {
         registros: {
-          calculado: logsTxt.resumen.registros,
+          calculado: logsTxt.resumen.registros * 5,
           oficial: datosXml.totales?.registrosValidos || 0,
-          diferencia: logsTxt.resumen.registros - (datosXml.totales?.registrosValidos || 0)
+          diferencia: (logsTxt.resumen.registros * 5) - (datosXml.totales?.registrosValidos || 0)
         },
         anulados: {
-          calculado: logsTxt.resumen.anulados,
+          calculado: logsTxt.resumen.anulados * 5,
           oficial: datosXml.totales?.registrosAnulados || 0,
-          diferencia: logsTxt.resumen.anulados - (datosXml.totales?.registrosAnulados || 0)
+          diferencia: (logsTxt.resumen.anulados * 5) - (datosXml.totales?.registrosAnulados || 0)
         },
         apuestas: {
-          calculado: logsTxt.resumen.apuestasTotal,
+          calculado: logsTxt.resumen.apuestasTotal * 5,
           oficial: datosXml.totales?.apuestas || 0,
-          diferencia: logsTxt.resumen.apuestasTotal - (datosXml.totales?.apuestas || 0)
+          diferencia: (logsTxt.resumen.apuestasTotal * 5) - (datosXml.totales?.apuestas || 0)
         },
         recaudacion: {
           calculado: logsTxt.resumen.recaudacion,
