@@ -11792,11 +11792,11 @@ async function calcularFacturacionUTE(fechaDesde, fechaHasta) {
   if (!container) return;
 
   try {
-    let url = '/api/juegos-offline/hipicas/facturacion-ute?';
+    let url = `/juegos-offline/hipicas/facturacion-ute?`;
     if (fechaDesde) url += `fechaDesde=${fechaDesde}&`;
     if (fechaHasta) url += `fechaHasta=${fechaHasta}`;
 
-    const response = await api.request(url);
+    const response = await apiRequest(url);
     if (!response.success || !response.data) {
       container.style.display = 'none';
       return;
