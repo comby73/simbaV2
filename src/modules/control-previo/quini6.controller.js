@@ -124,8 +124,8 @@ function calcularCombinaciones(n, r) {
 }
 
 /**
- * Decodifica la secuencia de 25 caracteres de QUINI 6 a un array de números (1-45)
- * Igual que BRINCO pero los números van de 1 a 45
+ * Decodifica la secuencia de 25 caracteres de QUINI 6 a un array de números (0-45)
+ * Los números de QUINI 6 van del 00 al 45 (46 números posibles)
  */
 function decodificarNumerosQuini6(secuencia25) {
   const numeros = [];
@@ -135,9 +135,9 @@ function decodificarNumerosQuini6(secuencia25) {
     for (let j = 0; j < 4; j++) {
       if (binario[j] === '1') {
         const numero = i * 4 + j;
-        // QUINI 6 usa números del 1 al 45 (el bit 0 corresponde al número 1)
-        if (numero >= 0 && numero <= 44) {
-          numeros.push(numero + 1); // +1 porque QUINI 6 es 1-indexed
+        // QUINI 6 usa números del 00 al 45 (NO sumar 1, es 0-indexed)
+        if (numero >= 0 && numero <= 45) {
+          numeros.push(numero);
         }
       }
     }

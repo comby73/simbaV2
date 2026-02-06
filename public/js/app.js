@@ -2897,6 +2897,8 @@ async function imprimirReportePosterior() {
         resultado: cpstResultados,
         extractos: cpstExtractos, // Para Quiniela
         extractoLoto: cpstExtractoLoto, // Para Loto
+        extractoQuini6: cpstExtractoQuini6, // Para Quini 6
+        extractoBrinco: cpstExtractoBrinco, // Para Brinco
         xmlDataLoto: cpstLotoXmlData // Datos del XML para Loto
       })
     });
@@ -3205,6 +3207,8 @@ function seleccionarJuegoPosterior(juego) {
   const extractoPoceada = document.getElementById('cpst-extracto-poceada-card');
   const extractoLoto = document.getElementById('cpst-extracto-loto-card');
   const extractoLoto5 = document.getElementById('cpst-extracto-loto5-card');
+  const extractoQuini6 = document.getElementById('cpst-extracto-quini6-card');
+  const extractoBrinco = document.getElementById('cpst-extracto-brinco-card');
   const detalleQuiniela = document.getElementById('cpst-detalle-quiniela');
   const detallePoceada = document.getElementById('cpst-detalle-poceada');
   const detalleLoto = document.getElementById('cpst-detalle-loto');
@@ -3215,6 +3219,8 @@ function seleccionarJuegoPosterior(juego) {
   extractoPoceada?.classList.add('hidden');
   extractoLoto?.classList.add('hidden');
   extractoLoto5?.classList.add('hidden');
+  extractoQuini6?.classList.add('hidden');
+  extractoBrinco?.classList.add('hidden');
   detalleQuiniela?.classList.add('hidden');
   detallePoceada?.classList.add('hidden');
   detalleLoto?.classList.add('hidden');
@@ -3229,8 +3235,12 @@ function seleccionarJuegoPosterior(juego) {
   } else if (juego === 'Loto 5') {
     extractoLoto5?.classList.remove('hidden');
     detalleLoto5?.classList.remove('hidden');
+  } else if (juego === 'Quini 6') {
+    extractoQuini6?.classList.remove('hidden');
+  } else if (juego === 'Brinco') {
+    extractoBrinco?.classList.remove('hidden');
   } else {
-    // For Poceada, Tombolina, Quini 6, Brinco, etc.
+    // For Poceada, Tombolina, etc.
     extractoPoceada?.classList.remove('hidden');
 
     if (juego === 'Poceada') {
@@ -3250,9 +3260,6 @@ function seleccionarJuegoPosterior(juego) {
     if (poceadaHeader) {
       if (juego === 'Poceada') poceadaHeader.innerHTML = '<i class="fas fa-list-ol"></i> Extracto Poceada (20 Números + 4 Letras)';
       else if (juego === 'Tombolina') poceadaHeader.innerHTML = '<i class="fas fa-list-ol"></i> Extracto Tombolina (20 Números de Quiniela)';
-      else if (juego === 'Quini 6') poceadaHeader.innerHTML = '<i class="fas fa-list-ol"></i> Extracto Quini 6 (Tradicional, Segunda, Revancha, Sale o Sale)';
-      else if (juego === 'Brinco') poceadaHeader.innerHTML = '<i class="fas fa-list-ol"></i> Extracto Brinco (Tradicional y Junior)';
-      else if (juego === 'Loto 5') poceadaHeader.innerHTML = '<i class="fas fa-list-ol"></i> Extracto Loto 5 (5 Números)';
       else poceadaHeader.innerHTML = `<i class="fas fa-list-ol"></i> Extracto ${juego}`;
     }
   }
@@ -5864,6 +5871,8 @@ async function ejecutarEscrutinio() {
 
     } else if (cpstJuegoSeleccionado === 'Quini 6') {
       // Ejecutar escrutinio de QUINI 6
+      console.log('[QUINI6] Extracto a enviar:', JSON.stringify(cpstExtractoQuini6, null, 2));
+      
       const response = await controlPosteriorAPI.escrutinioQuini6({
         registros: cpstRegistrosNTF,
         extracto: cpstExtractoQuini6,
@@ -7153,6 +7162,23 @@ function mostrarResultadosEscrutinioBrinco(resultado) {
   }
   detalleBrinco.classList.remove('hidden');
 
+  // ======== RESUMEN DE TICKETS Y RECAUDACIÓN (desde Control Previo) ========
+  const cp = resultado.datosControlPrevio || cpstDatosControlPrevio || {};
+  const recValida = parseFloat(cp.totalRecaudacion || cp.recaudacion || 0) || 0;
+  const recAnulada = parseFloat(cp.totalRecaudacionAnulada || cp.recaudacionAnulada || 0) || 0;
+  const recTotal = recValida + recAnulada;
+  const ticketsValidos = parseInt(cp.totalApuestas || cp.registros || 0) || 0;
+  const ticketsAnulados = parseInt(cp.totalAnulados || cp.anulados || 0) || 0;
+  const ticketsTotal = ticketsValidos + ticketsAnulados;
+
+  document.getElementById('cpst-tickets-total').textContent = formatNumber(ticketsTotal);
+  document.getElementById('cpst-tickets-validos').textContent = formatNumber(ticketsValidos);
+  document.getElementById('cpst-tickets-anulados').textContent = formatNumber(ticketsAnulados);
+
+  document.getElementById('cpst-recaudacion-total').textContent = '$' + formatNumber(recTotal);
+  document.getElementById('cpst-recaudacion-valida').textContent = '$' + formatNumber(recValida);
+  document.getElementById('cpst-recaudacion-anulada').textContent = '$' + formatNumber(recAnulada);
+
   // Totales
   const totalGanadoresTrad = resultado.tradicional?.totalGanadores || 0;
   const totalGanadoresJunior = resultado.junior?.totalGanadores || 0;
@@ -7162,6 +7188,12 @@ function mostrarResultadosEscrutinioBrinco(resultado) {
   // Resumen general
   document.getElementById('cpst-total-ganadores').textContent = formatNumber(totalGanadoresTrad + totalGanadoresJunior);
   document.getElementById('cpst-total-premios').textContent = '$' + formatNumber(totalPremiosTrad + totalPremiosJunior);
+
+  // Tasa de devolución
+  const totalPremios = totalPremiosTrad + totalPremiosJunior;
+  const tasaDev = recValida > 0 ? (totalPremios / recValida * 100) : 0;
+  const tasaElem = document.getElementById('cpst-tasa-devolucion');
+  if (tasaElem) tasaElem.textContent = tasaDev.toFixed(2) + '%';
 
   // Generar contenido HTML para BRINCO
   let html = `
@@ -7262,8 +7294,85 @@ function mostrarResultadosEscrutinioBrinco(resultado) {
         <td>$${formatNumber(totalPremiosJunior)}</td>
       </tr>
     </tbody>
-  </table>
+  </table>`;
 
+  // ========== TICKETS GANADORES PRIMER PREMIO (TRADICIONAL 6 ACIERTOS) ==========
+  const ganadoresTrad6 = resultado.tradicional?.porNivel?.[6]?.agenciasGanadoras || [];
+  if (ganadoresTrad6.length > 0) {
+    const numsTrad = cpstExtractoBrinco?.tradicional?.numeros || [];
+    html += `
+      <div style="margin-top: 2rem;">
+        <h4 style="margin-bottom: 0.75rem; color: var(--primary);"><i class="fas fa-trophy"></i> Tickets Ganadores - BRINCO Tradicional 6 Aciertos (${ganadoresTrad6.length})</h4>
+        <div style="margin-bottom: 0.5rem; padding: 0.5rem; background: var(--bg-input); border-radius: 6px;">
+          <strong>Números Ganadores:</strong> <span style="font-family: monospace; color: var(--primary);">${numsTrad.map(n => n.toString().padStart(2, '0')).join(' - ')}</span>
+        </div>
+        <table class="table table-compact">
+          <thead>
+            <tr>
+              <th>Ticket</th>
+              <th>Agencia</th>
+              <th>Números Jugados</th>
+              <th>Importe</th>
+            </tr>
+          </thead>
+          <tbody>`;
+    ganadoresTrad6.forEach(g => {
+      html += `
+            <tr>
+              <td><code>${g.ticket || '-'}</code></td>
+              <td><strong>${g.ctaCte || g.agencia || '-'}</strong></td>
+              <td style="font-family: monospace;">${(g.numerosJugados || []).map(n => n.toString().padStart(2, '0')).join(' - ')}${g.esMultiple ? ` <span class="badge badge-warning">×${g.cantidad || g.cantidadCombinaciones}</span>` : ''}</td>
+              <td>$${formatNumber(g.importe || 0)}</td>
+            </tr>`;
+    });
+    html += `
+          </tbody>
+        </table>
+      </div>`;
+  }
+
+  // ========== TICKETS GANADORES BRINCO JUNIOR (5+ ACIERTOS) ==========
+  const ganadoresJunior5 = resultado.junior?.porNivel?.[5]?.agenciasGanadoras || [];
+  const ganadoresJunior6 = resultado.junior?.porNivel?.[6]?.agenciasGanadoras || [];
+  const todosGanadoresJunior = [...ganadoresJunior6, ...ganadoresJunior5];
+  
+  if (todosGanadoresJunior.length > 0) {
+    const numsJunior = cpstExtractoBrinco?.junior?.numeros || cpstExtractoBrinco?.tradicional?.numeros || [];
+    html += `
+      <div style="margin-top: 2rem;">
+        <h4 style="margin-bottom: 0.75rem; color: var(--success);"><i class="fas fa-star"></i> Tickets Ganadores - BRINCO Junior Siempre Sale (${todosGanadoresJunior.length})</h4>
+        <div style="margin-bottom: 0.5rem; padding: 0.5rem; background: var(--bg-input); border-radius: 6px;">
+          <strong>Números Ganadores:</strong> <span style="font-family: monospace; color: var(--success);">${numsJunior.map(n => n.toString().padStart(2, '0')).join(' - ')}</span>
+        </div>
+        <table class="table table-compact">
+          <thead>
+            <tr>
+              <th>Ticket</th>
+              <th>Agencia</th>
+              <th>Aciertos</th>
+              <th>Números Jugados</th>
+              <th>Importe</th>
+            </tr>
+          </thead>
+          <tbody>`;
+    todosGanadoresJunior.forEach(g => {
+      html += `
+            <tr>
+              <td><code>${g.ticket || '-'}</code></td>
+              <td><strong>${g.ctaCte || g.agencia || '-'}</strong></td>
+              <td><span class="badge ${g.aciertos >= 6 ? 'badge-primary' : 'badge-success'}">${g.aciertos}</span></td>
+              <td style="font-family: monospace;">${(g.numerosJugados || []).map(n => n.toString().padStart(2, '0')).join(' - ')}${g.esMultiple ? ` <span class="badge badge-warning">×${g.cantidadCombinaciones}</span>` : ''}</td>
+              <td>$${formatNumber(g.importe || 0)}</td>
+            </tr>`;
+    });
+    html += `
+          </tbody>
+        </table>
+      </div>`;
+  }
+
+  // ========== RESUMEN TOTAL ==========
+  html += `
   <div style="margin-top: 2rem; padding: 1rem; background: var(--surface-hover); border-radius: 8px;">
     <h4 style="margin-bottom: 0.5rem;">RESUMEN TOTAL BRINCO</h4>
     <div style="display: flex; gap: 2rem; flex-wrap: wrap;">
@@ -7412,7 +7521,7 @@ function cargarExtractoBrincoManual() {
   const numsTrad = [];
   const numsJunior = [];
 
-  // Leer números de BRINCO Tradicional
+  // Leer números de BRINCO Tradicional (0-40)
   for (let i = 1; i <= 6; i++) {
     const input = document.getElementById(`cpst-brinco-trad-${i}`);
     if (!input || input.value === '') {
@@ -7420,8 +7529,8 @@ function cargarExtractoBrincoManual() {
       return false;
     }
     const num = parseInt(input.value);
-    if (isNaN(num) || num < 1 || num > 41) {
-      showToast(`BRINCO Tradicional - Número ${i} debe estar entre 1 y 41`, 'warning');
+    if (isNaN(num) || num < 0 || num > 40) {
+      showToast(`BRINCO Tradicional - Número ${i} debe estar entre 0 y 40`, 'warning');
       return false;
     }
     numsTrad.push(num);
@@ -7434,8 +7543,8 @@ function cargarExtractoBrincoManual() {
     if (input && input.value !== '') {
       juniorVacio = false;
       const num = parseInt(input.value);
-      if (isNaN(num) || num < 1 || num > 41) {
-        showToast(`BRINCO Junior - Número ${i} debe estar entre 1 y 41`, 'warning');
+      if (isNaN(num) || num < 0 || num > 40) {
+        showToast(`BRINCO Junior - Número ${i} debe estar entre 0 y 40`, 'warning');
         return false;
       }
       numsJunior.push(num);
@@ -7474,7 +7583,13 @@ async function cargarExtractoBrincoDesdeArchivo(file) {
   try {
     const text = await file.text();
     const data = JSON.parse(text);
-    return cargarExtractoBrincoDesdeJSON(data);
+    const result = cargarExtractoBrincoDesdeJSON(data);
+    if (result) {
+      // Mostrar info del archivo cargado
+      document.getElementById('cpst-brinco-json-info')?.classList.remove('hidden');
+      document.getElementById('cpst-brinco-json-filename').textContent = file.name;
+    }
+    return result;
   } catch (error) {
     console.error('Error cargando JSON BRINCO:', error);
     showToast('Error al cargar archivo JSON de BRINCO', 'error');
@@ -7489,11 +7604,19 @@ async function cargarExtractoBrincoDesdeArchivo(file) {
 function mostrarResultadosEscrutinioQuini6(resultado) {
   document.getElementById('cpst-resultados').classList.remove('hidden');
 
-  // Ocultar otras tablas
+  // Ocultar otras tablas de juegos
   document.getElementById('cpst-detalle-quiniela')?.classList.add('hidden');
   document.getElementById('cpst-detalle-poceada')?.classList.add('hidden');
   document.getElementById('cpst-detalle-tombolina')?.classList.add('hidden');
   document.getElementById('cpst-detalle-brinco')?.classList.add('hidden');
+  
+  // Ocultar secciones genéricas que no aplican a Quini6 (ya mostramos todo en nuestra vista)
+  document.getElementById('cpst-tabla-comparacion')?.closest('.card')?.classList.add('hidden');
+  document.getElementById('cpst-ventas-agencia-card')?.classList.add('hidden');
+  
+  // Ocultar stats grids genéricos (Quini6 tiene los propios)
+  const statsGrids = document.querySelectorAll('#cpst-resultados > .stats-grid');
+  statsGrids.forEach(grid => grid.classList.add('hidden'));
 
   // Crear o mostrar contenedor para QUINI 6
   let quini6Container = document.getElementById('cpst-detalle-quini6');
@@ -7509,320 +7632,493 @@ function mostrarResultadosEscrutinioQuini6(resultado) {
   const ganadores = resultado.ganadores || {};
   const resumen = resultado.resumen || {};
 
+  // Función para calcular total de premios
+  const calcularTotalPremios = () => {
+    let total = 0;
+    ['6', '5', '4'].forEach(n => {
+      total += ganadores.tradicionalPrimera?.[n]?.premioTotal || 0;
+      total += ganadores.tradicionalSegunda?.[n]?.premioTotal || 0;
+    });
+    total += ganadores.revancha?.['6']?.premioTotal || 0;
+    total += ganadores.siempreSale?.premioTotal || 0;
+    total += ganadores.premioExtra?.['6']?.premioTotal || 0;
+    return total;
+  };
+
+  // Función para contar total de ganadores
+  const calcularTotalGanadores = () => {
+    let total = 0;
+    ['6', '5', '4'].forEach(n => {
+      total += ganadores.tradicionalPrimera?.[n]?.cantidad || 0;
+      total += ganadores.tradicionalSegunda?.[n]?.cantidad || 0;
+    });
+    total += ganadores.revancha?.['6']?.cantidad || 0;
+    total += ganadores.siempreSale?.cantidad || 0;
+    total += ganadores.premioExtra?.['6']?.cantidad || 0;
+    return total;
+  };
+
+  // Función para renderizar tickets ganadores
+  const renderTicketsGanadores = (registros, modalidad, color) => {
+    if (!registros || registros.length === 0) return '';
+    return `
+      <div style="margin-top: 1rem; padding: 1rem; background: rgba(255,255,255,0.03); border-radius: 8px; border-left: 4px solid ${color};">
+        <strong style="font-size: 0.9rem; display: block; margin-bottom: 0.75rem;">
+          <i class="fas fa-ticket-alt" style="margin-right: 0.5rem; color: ${color};"></i>
+          Tickets ganadores:
+        </strong>
+        <div style="overflow-x: auto;">
+          <table style="width: 100%; font-size: 0.9rem; border-collapse: collapse; table-layout: fixed;">
+            <thead>
+              <tr style="background: rgba(255,255,255,0.08);">
+                <th style="width: 18%; padding: 0.6rem 0.75rem; text-align: left; border-bottom: 2px solid rgba(255,255,255,0.15);">Ticket</th>
+                <th style="width: 15%; padding: 0.6rem 0.75rem; text-align: left; border-bottom: 2px solid rgba(255,255,255,0.15);">Agencia</th>
+                <th style="width: 42%; padding: 0.6rem 0.75rem; text-align: left; border-bottom: 2px solid rgba(255,255,255,0.15);">Números Jugados</th>
+                <th style="width: 12%; padding: 0.6rem 0.75rem; text-align: center; border-bottom: 2px solid rgba(255,255,255,0.15);">Aciertos</th>
+                <th style="width: 13%; padding: 0.6rem 0.75rem; text-align: right; border-bottom: 2px solid rgba(255,255,255,0.15);">Ganadores</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${registros.slice(0, 50).map(r => `
+                <tr style="border-bottom: 1px solid rgba(255,255,255,0.05);">
+                  <td style="padding: 0.6rem 0.75rem; font-family: monospace; font-size: 0.85rem;">${r.ticket || r.linea || '-'}</td>
+                  <td style="padding: 0.6rem 0.75rem; font-weight: 500;">${r.agencia || '-'}</td>
+                  <td style="padding: 0.6rem 0.75rem; font-family: monospace; color: ${color}; font-weight: 600; font-size: 0.95rem; letter-spacing: 0.5px;">
+                    ${(r.numerosJugados || []).map(n => n.toString().padStart(2, '0')).join(' - ')}
+                  </td>
+                  <td style="padding: 0.6rem 0.75rem; text-align: center; font-weight: bold; font-size: 1rem;">${r.aciertos}</td>
+                  <td style="padding: 0.6rem 0.75rem; text-align: right; font-weight: bold; font-size: 1rem; color: #10b981;">${r.ganadores}</td>
+                </tr>
+              `).join('')}
+              ${registros.length > 50 ? `<tr><td colspan="5" style="padding: 0.75rem; text-align: center; color: var(--text-muted);">... y ${registros.length - 50} tickets más</td></tr>` : ''}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    `;
+  };
+
   // Construir HTML de resultados
+  const porInstancia = resultado.porInstancia || {};
+  const recaudacionTotal = resumen.recaudacionTotal || 
+    Object.values(porInstancia).reduce((sum, inst) => sum + (inst.recaudacion || 0), 0);
+  
   let html = `
-    <div class="card-header">
-      <h3><i class="fas fa-trophy"></i> Resultados QUINI 6 - Sorteo ${resultado.sorteo || cpstNumeroSorteo}</h3>
+    <div class="card-header" style="background: linear-gradient(135deg, var(--primary) 0%, #6366f1 100%); padding: 1.25rem;">
+      <h3 style="margin: 0; display: flex; align-items: center; gap: 0.75rem;">
+        <i class="fas fa-trophy"></i> 
+        Escrutinio QUINI 6 - Sorteo ${resultado.sorteo || cpstNumeroSorteo}
+      </h3>
     </div>
-    <div class="card-body">
+    <div class="card-body" style="padding: 1.5rem;">
       
-      <!-- Extracto Oficial -->
-      <div class="alert" style="background: var(--bg-input); padding: 1rem; border-radius: 8px; margin-bottom: 1.5rem;">
-        <h4 style="margin-bottom: 1rem;"><i class="fas fa-info-circle"></i> Extracto Oficial</h4>
-        
-        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 1rem;">
-          <div>
-            <strong style="color: var(--primary);">Tradicional Primera:</strong><br>
-            <span style="font-family: monospace; font-size: 1.2rem; color: var(--primary);">
+      <!-- RESUMEN PRINCIPAL -->
+      <div style="display: grid; grid-template-columns: repeat(5, 1fr); gap: 1rem; margin-bottom: 2rem;">
+        <div style="background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%); padding: 1rem; border-radius: 12px; text-align: center;">
+          <div style="font-size: 1.75rem; font-weight: bold;">${formatNumber(resumen.registrosValidos || 0)}</div>
+          <div style="font-size: 0.8rem; opacity: 0.9;">Tickets Válidos</div>
+        </div>
+        <div style="background: linear-gradient(135deg, #8b5cf6 0%, #7c3aed 100%); padding: 1rem; border-radius: 12px; text-align: center;">
+          <div style="font-size: 1.75rem; font-weight: bold;">${formatNumber(resumen.totalApuestasSimples || 0)}</div>
+          <div style="font-size: 0.8rem; opacity: 0.9;">Apuestas Simples</div>
+        </div>
+        <div style="background: linear-gradient(135deg, #0891b2 0%, #0e7490 100%); padding: 1rem; border-radius: 12px; text-align: center;">
+          <div style="font-size: 1.5rem; font-weight: bold;">$${formatNumber(recaudacionTotal)}</div>
+          <div style="font-size: 0.8rem; opacity: 0.9;">Recaudación Total</div>
+        </div>
+        <div style="background: linear-gradient(135deg, #10b981 0%, #059669 100%); padding: 1rem; border-radius: 12px; text-align: center;">
+          <div style="font-size: 1.75rem; font-weight: bold;">${calcularTotalGanadores()}</div>
+          <div style="font-size: 0.8rem; opacity: 0.9;">Total Ganadores</div>
+        </div>
+        <div style="background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%); padding: 1rem; border-radius: 12px; text-align: center;">
+          <div style="font-size: 1.5rem; font-weight: bold;">$${formatNumber(calcularTotalPremios())}</div>
+          <div style="font-size: 0.8rem; opacity: 0.9;">Total Premios</div>
+        </div>
+      </div>
+
+      <!-- RECAUDACIÓN POR MODALIDAD -->
+      <div style="background: var(--bg-card); border: 1px solid var(--border); border-radius: 12px; padding: 1.25rem; margin-bottom: 2rem;">
+        <h4 style="margin: 0 0 1rem 0; display: flex; align-items: center; gap: 0.5rem;">
+          <i class="fas fa-coins" style="color: var(--warning);"></i> Recaudación por Modalidad
+        </h4>
+        <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 1rem;">
+          <div style="padding: 1rem; background: rgba(59, 130, 246, 0.1); border-radius: 8px; border-left: 4px solid #3b82f6;">
+            <div style="font-size: 0.8rem; color: var(--text-muted); margin-bottom: 0.5rem;">Tradicional (Inst. 1)</div>
+            <div style="display: flex; justify-content: space-between; margin-bottom: 0.25rem;">
+              <span>Registros:</span>
+              <span style="font-weight: 600;">${formatNumber(porInstancia['1']?.registros || 0)}</span>
+            </div>
+            <div style="display: flex; justify-content: space-between; margin-bottom: 0.25rem;">
+              <span>Apuestas:</span>
+              <span style="font-weight: 600;">${formatNumber(porInstancia['1']?.apuestas || porInstancia['1']?.registros || 0)}</span>
+            </div>
+            <div style="display: flex; justify-content: space-between;">
+              <span>Recaudación:</span>
+              <span style="font-weight: 600; color: #3b82f6;">$${formatNumber(porInstancia['1']?.recaudacion || 0)}</span>
+            </div>
+          </div>
+          <div style="padding: 1rem; background: rgba(245, 158, 11, 0.1); border-radius: 8px; border-left: 4px solid #f59e0b;">
+            <div style="font-size: 0.8rem; color: var(--text-muted); margin-bottom: 0.5rem;">Trad + Revancha (Inst. 2)</div>
+            <div style="display: flex; justify-content: space-between; margin-bottom: 0.25rem;">
+              <span>Registros:</span>
+              <span style="font-weight: 600;">${formatNumber(porInstancia['2']?.registros || 0)}</span>
+            </div>
+            <div style="display: flex; justify-content: space-between; margin-bottom: 0.25rem;">
+              <span>Apuestas:</span>
+              <span style="font-weight: 600;">${formatNumber(porInstancia['2']?.apuestas || (porInstancia['2']?.registros || 0) * 2)}</span>
+            </div>
+            <div style="display: flex; justify-content: space-between;">
+              <span>Recaudación:</span>
+              <span style="font-weight: 600; color: #f59e0b;">$${formatNumber(porInstancia['2']?.recaudacion || 0)}</span>
+            </div>
+          </div>
+          <div style="padding: 1rem; background: rgba(147, 51, 234, 0.1); border-radius: 8px; border-left: 4px solid #9333ea;">
+            <div style="font-size: 0.8rem; color: var(--text-muted); margin-bottom: 0.5rem;">Trad + Rev + SS (Inst. 3)</div>
+            <div style="display: flex; justify-content: space-between; margin-bottom: 0.25rem;">
+              <span>Registros:</span>
+              <span style="font-weight: 600;">${formatNumber(porInstancia['3']?.registros || 0)}</span>
+            </div>
+            <div style="display: flex; justify-content: space-between; margin-bottom: 0.25rem;">
+              <span>Apuestas:</span>
+              <span style="font-weight: 600;">${formatNumber(porInstancia['3']?.apuestas || (porInstancia['3']?.registros || 0) * 3)}</span>
+            </div>
+            <div style="display: flex; justify-content: space-between;">
+              <span>Recaudación:</span>
+              <span style="font-weight: 600; color: #9333ea;">$${formatNumber(porInstancia['3']?.recaudacion || 0)}</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- EXTRACTO OFICIAL -->
+      <div style="background: var(--bg-card); border: 1px solid var(--border); border-radius: 12px; padding: 1.25rem; margin-bottom: 2rem;">
+        <h4 style="margin: 0 0 1rem 0; display: flex; align-items: center; gap: 0.5rem;">
+          <i class="fas fa-dice" style="color: var(--primary);"></i> Extracto Oficial
+        </h4>
+        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1rem;">
+          <div style="padding: 0.75rem; background: rgba(59, 130, 246, 0.1); border-radius: 8px; border-left: 4px solid #3b82f6;">
+            <div style="font-size: 0.75rem; color: var(--text-muted); margin-bottom: 0.25rem;">Tradicional 1ª</div>
+            <div style="font-family: monospace; font-size: 1.1rem; color: #3b82f6; font-weight: 600;">
               ${(extracto.tradicional?.primera || []).map(n => n.toString().padStart(2, '0')).join(' - ')}
-            </span>
+            </div>
           </div>
-          <div>
-            <strong style="color: var(--success);">Tradicional Segunda:</strong><br>
-            <span style="font-family: monospace; font-size: 1.2rem; color: var(--success);">
+          <div style="padding: 0.75rem; background: rgba(16, 185, 129, 0.1); border-radius: 8px; border-left: 4px solid #10b981;">
+            <div style="font-size: 0.75rem; color: var(--text-muted); margin-bottom: 0.25rem;">Tradicional 2ª</div>
+            <div style="font-family: monospace; font-size: 1.1rem; color: #10b981; font-weight: 600;">
               ${(extracto.tradicional?.segunda || []).map(n => n.toString().padStart(2, '0')).join(' - ')}
-            </span>
+            </div>
           </div>
-          <div>
-            <strong style="color: var(--warning);">Revancha:</strong><br>
-            <span style="font-family: monospace; font-size: 1.2rem; color: var(--warning);">
+          <div style="padding: 0.75rem; background: rgba(245, 158, 11, 0.1); border-radius: 8px; border-left: 4px solid #f59e0b;">
+            <div style="font-size: 0.75rem; color: var(--text-muted); margin-bottom: 0.25rem;">Revancha</div>
+            <div style="font-family: monospace; font-size: 1.1rem; color: #f59e0b; font-weight: 600;">
               ${(extracto.revancha || []).map(n => n.toString().padStart(2, '0')).join(' - ')}
-            </span>
+            </div>
           </div>
-          <div>
-            <strong style="color: #9333ea;">Siempre Sale (${extracto.siempreSaleAciertosRequeridos || 6} aciertos):</strong><br>
-            <span style="font-family: monospace; font-size: 1.2rem; color: #9333ea;">
+          <div style="padding: 0.75rem; background: rgba(147, 51, 234, 0.1); border-radius: 8px; border-left: 4px solid #9333ea;">
+            <div style="font-size: 0.75rem; color: var(--text-muted); margin-bottom: 0.25rem;">Siempre Sale (${extracto.siempreSaleAciertosRequeridos || 6} aciertos)</div>
+            <div style="font-family: monospace; font-size: 1.1rem; color: #9333ea; font-weight: 600;">
               ${(extracto.siempreSale || []).map(n => n.toString().padStart(2, '0')).join(' - ')}
-            </span>
+            </div>
           </div>
-          ${(extracto.premioExtra && extracto.premioExtra.length > 0) ? `
-          <div>
-            <strong style="color: #ec4899;">Premio Extra:</strong><br>
-            <span style="font-family: monospace; font-size: 1.2rem; color: #ec4899;">
-              ${extracto.premioExtra.map(n => n.toString().padStart(2, '0')).join(' - ')}
-            </span>
-          </div>
-          ` : ''}
         </div>
       </div>
 
-      <!-- Resumen General -->
-      <div class="stats-grid" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 1rem; margin-bottom: 1.5rem;">
-        <div class="stat-card" style="text-align: center;">
-          <div class="stat-value" style="font-size: 1.8rem; color: var(--primary);">${formatNumber(resumen.registrosValidos || 0)}</div>
-          <div class="stat-label">Registros Válidos</div>
+      <!-- DESGLOSE POR MODALIDAD -->
+      <h4 style="margin: 0 0 1rem 0; display: flex; align-items: center; gap: 0.5rem;">
+        <i class="fas fa-list-ol" style="color: var(--accent);"></i> Desglose de Ganadores por Modalidad
+      </h4>
+
+      <!-- TRADICIONAL PRIMERA -->
+      <div style="background: var(--bg-card); border: 1px solid var(--border); border-radius: 12px; margin-bottom: 1.5rem; overflow: hidden;">
+        <div style="background: linear-gradient(90deg, rgba(59, 130, 246, 0.2) 0%, transparent 100%); padding: 1rem 1.25rem; border-left: 4px solid #3b82f6;">
+          <h5 style="margin: 0; display: flex; align-items: center; gap: 0.5rem; font-size: 1.1rem;">
+            <i class="fas fa-star" style="color: #3b82f6;"></i> Tradicional Primera
+          </h5>
         </div>
-        <div class="stat-card" style="text-align: center;">
-          <div class="stat-value" style="font-size: 1.8rem; color: var(--warning);">${formatNumber(resumen.registrosCancelados || 0)}</div>
-          <div class="stat-label">Cancelados</div>
-        </div>
-        <div class="stat-card" style="text-align: center;">
-          <div class="stat-value" style="font-size: 1.8rem; color: var(--success);">${formatNumber(resumen.totalApuestasSimples || 0)}</div>
-          <div class="stat-label">Apuestas Simples</div>
-        </div>
-        <div class="stat-card" style="text-align: center;">
-          <div class="stat-value" style="font-size: 1.8rem; color: var(--accent);">$${formatNumber(resumen.recaudacionTotal || 0)}</div>
-          <div class="stat-label">Recaudación</div>
+        <div style="padding: 1.25rem; overflow-x: auto;">
+          <table class="data-table" style="margin: 0; width: 100%; table-layout: fixed;">
+            <thead>
+              <tr>
+                <th style="width: 12%; padding: 0.75rem 1rem;">Premio</th>
+                <th style="width: 12%; padding: 0.75rem 1rem;">Aciertos</th>
+                <th style="width: 14%; text-align: center; padding: 0.75rem 1rem;">Ganadores<br>TXT</th>
+                <th style="width: 14%; text-align: center; padding: 0.75rem 1rem;">Ganadores<br>Extracto</th>
+                <th style="width: 12%; text-align: center; padding: 0.75rem 1rem;">Diferencia</th>
+                <th style="width: 18%; text-align: right; padding: 0.75rem 1rem;">Premio<br>Unitario</th>
+                <th style="width: 18%; text-align: right; padding: 0.75rem 1rem;">Premio<br>Total</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${['6', '5', '4'].map(nivel => {
+                const data = ganadores.tradicionalPrimera?.[nivel] || { cantidad: 0, premioUnitario: 0, premioTotal: 0, registros: [] };
+                const comp = resultado.comparacion?.tradicionalPrimera?.[nivel] || {};
+                const esGanador = data.cantidad > 0;
+                const dif = data.cantidad - (data.ganadoresExtracto || comp.extracto || 0);
+                return `
+                  <tr style="${esGanador ? 'background: rgba(16, 185, 129, 0.1);' : ''}">
+                    <td style="padding: 0.75rem 1rem;"><span style="display: inline-block; padding: 0.35rem 0.75rem; background: ${nivel === '6' ? '#fbbf24' : nivel === '5' ? '#a3a3a3' : '#cd7f32'}; color: #000; border-radius: 6px; font-weight: 600; font-size: 0.85rem;">${nivel === '6' ? '1° Premio' : nivel === '5' ? '2° Premio' : '3° Premio'}</span></td>
+                    <td style="padding: 0.75rem 1rem; font-size: 0.95rem;">${nivel} aciertos</td>
+                    <td style="text-align: center; padding: 0.75rem 1rem; font-weight: bold; font-size: 1.2rem; color: ${esGanador ? '#10b981' : 'inherit'};">${formatNumber(data.cantidad)}</td>
+                    <td style="text-align: center; padding: 0.75rem 1rem; font-size: 0.95rem;">${formatNumber(data.ganadoresExtracto || comp.extracto || 0)}</td>
+                    <td style="text-align: center; padding: 0.75rem 1rem;"><span style="display: inline-block; padding: 0.35rem 0.75rem; border-radius: 6px; background: ${dif === 0 ? 'rgba(16, 185, 129, 0.2)' : 'rgba(239, 68, 68, 0.2)'}; color: ${dif === 0 ? '#10b981' : '#ef4444'}; font-weight: 600;">${dif === 0 ? '✓ OK' : dif}</span></td>
+                    <td style="text-align: right; padding: 0.75rem 1rem; font-size: 0.95rem;">$${formatNumber(data.premioUnitario || 0)}</td>
+                    <td style="text-align: right; padding: 0.75rem 1rem; font-weight: bold; font-size: 1.1rem; color: ${esGanador ? '#10b981' : 'inherit'};">$${formatNumber(data.premioTotal || 0)}</td>
+                  </tr>
+                `;
+              }).join('')}
+            </tbody>
+          </table>
         </div>
       </div>
 
-      <!-- Tabla Tradicional Primera -->
-      <h4 style="margin-top: 1.5rem; margin-bottom: 0.5rem;"><i class="fas fa-star" style="color: var(--primary);"></i> Tradicional Primera</h4>
-      <table class="data-table" style="margin-bottom: 1rem;">
-        <thead>
-          <tr>
-            <th>Nivel</th>
-            <th>Aciertos</th>
-            <th>Ganadores TXT</th>
-            <th>Ganadores Extracto</th>
-            <th>Diferencia</th>
-            <th>Premio Unitario</th>
-            <th>Premio Total</th>
-          </tr>
-        </thead>
-        <tbody>
-          ${['6', '5', '4'].map(nivel => {
-            const data = ganadores.tradicionalPrimera?.[nivel] || { cantidad: 0, premioUnitario: 0, premioTotal: 0 };
-            const comp = resultado.comparacion?.tradicionalPrimera?.[nivel] || {};
-            const esGanador = data.cantidad > 0;
-            const difClass = (comp.diferencia || 0) === 0 ? 'text-success' : 'text-danger';
-            const difIcon = (comp.diferencia || 0) === 0 ? '✓' : '✗';
-            return `
-              <tr style="${esGanador ? 'background: rgba(16, 185, 129, 0.1);' : ''}">
-                <td>${nivel === '6' ? '1° Premio' : nivel === '5' ? '2° Premio' : '3° Premio'}</td>
-                <td>${nivel} aciertos</td>
-                <td style="font-weight: bold; color: ${esGanador ? 'var(--success)' : 'inherit'};">${formatNumber(data.cantidad)}</td>
-                <td>${formatNumber(data.ganadoresExtracto || comp.extracto || 0)}</td>
-                <td class="${difClass}">${difIcon} ${comp.diferencia || 0}</td>
-                <td>$${formatNumber(data.premioUnitario || 0)}</td>
-                <td style="font-weight: bold;">$${formatNumber(data.premioTotal || 0)}</td>
+      <!-- TRADICIONAL SEGUNDA -->
+      <div style="background: var(--bg-card); border: 1px solid var(--border); border-radius: 12px; margin-bottom: 1.5rem; overflow: hidden;">
+        <div style="background: linear-gradient(90deg, rgba(16, 185, 129, 0.2) 0%, transparent 100%); padding: 1rem 1.25rem; border-left: 4px solid #10b981;">
+          <h5 style="margin: 0; display: flex; align-items: center; gap: 0.5rem; font-size: 1.1rem;">
+            <i class="fas fa-star" style="color: #10b981;"></i> Tradicional Segunda
+          </h5>
+        </div>
+        <div style="padding: 1.25rem; overflow-x: auto;">
+          <table class="data-table" style="margin: 0; width: 100%; table-layout: fixed;">
+            <thead>
+              <tr>
+                <th style="width: 12%; padding: 0.75rem 1rem;">Premio</th>
+                <th style="width: 12%; padding: 0.75rem 1rem;">Aciertos</th>
+                <th style="width: 14%; text-align: center; padding: 0.75rem 1rem;">Ganadores<br>TXT</th>
+                <th style="width: 14%; text-align: center; padding: 0.75rem 1rem;">Ganadores<br>Extracto</th>
+                <th style="width: 12%; text-align: center; padding: 0.75rem 1rem;">Diferencia</th>
+                <th style="width: 18%; text-align: right; padding: 0.75rem 1rem;">Premio<br>Unitario</th>
+                <th style="width: 18%; text-align: right; padding: 0.75rem 1rem;">Premio<br>Total</th>
               </tr>
-            `;
-          }).join('')}
-        </tbody>
-      </table>
+            </thead>
+            <tbody>
+              ${['6', '5', '4'].map(nivel => {
+                const data = ganadores.tradicionalSegunda?.[nivel] || { cantidad: 0, premioUnitario: 0, premioTotal: 0, registros: [] };
+                const comp = resultado.comparacion?.tradicionalSegunda?.[nivel] || {};
+                const esGanador = data.cantidad > 0;
+                const dif = data.cantidad - (data.ganadoresExtracto || comp.extracto || 0);
+                return `
+                  <tr style="${esGanador ? 'background: rgba(16, 185, 129, 0.1);' : ''}">
+                    <td style="padding: 0.75rem 1rem;"><span style="display: inline-block; padding: 0.35rem 0.75rem; background: ${nivel === '6' ? '#fbbf24' : nivel === '5' ? '#a3a3a3' : '#cd7f32'}; color: #000; border-radius: 6px; font-weight: 600; font-size: 0.85rem;">${nivel === '6' ? '1° Premio' : nivel === '5' ? '2° Premio' : '3° Premio'}</span></td>
+                    <td style="padding: 0.75rem 1rem; font-size: 0.95rem;">${nivel} aciertos</td>
+                    <td style="text-align: center; padding: 0.75rem 1rem; font-weight: bold; font-size: 1.2rem; color: ${esGanador ? '#10b981' : 'inherit'};">${formatNumber(data.cantidad)}</td>
+                    <td style="text-align: center; padding: 0.75rem 1rem; font-size: 0.95rem;">${formatNumber(data.ganadoresExtracto || comp.extracto || 0)}</td>
+                    <td style="text-align: center; padding: 0.75rem 1rem;"><span style="display: inline-block; padding: 0.35rem 0.75rem; border-radius: 6px; background: ${dif === 0 ? 'rgba(16, 185, 129, 0.2)' : 'rgba(239, 68, 68, 0.2)'}; color: ${dif === 0 ? '#10b981' : '#ef4444'}; font-weight: 600;">${dif === 0 ? '✓ OK' : dif}</span></td>
+                    <td style="text-align: right; padding: 0.75rem 1rem; font-size: 0.95rem;">$${formatNumber(data.premioUnitario || 0)}</td>
+                    <td style="text-align: right; padding: 0.75rem 1rem; font-weight: bold; font-size: 1.1rem; color: ${esGanador ? '#10b981' : 'inherit'};">$${formatNumber(data.premioTotal || 0)}</td>
+                  </tr>
+                `;
+              }).join('')}
+            </tbody>
+          </table>
+        </div>
+      </div>
 
-      <!-- Tabla Tradicional Segunda -->
-      <h4 style="margin-top: 1.5rem; margin-bottom: 0.5rem;"><i class="fas fa-star" style="color: var(--success);"></i> Tradicional Segunda</h4>
-      <table class="data-table" style="margin-bottom: 1rem;">
-        <thead>
-          <tr>
-            <th>Nivel</th>
-            <th>Aciertos</th>
-            <th>Ganadores TXT</th>
-            <th>Ganadores Extracto</th>
-            <th>Diferencia</th>
-            <th>Premio Unitario</th>
-            <th>Premio Total</th>
-          </tr>
-        </thead>
-        <tbody>
-          ${['6', '5', '4'].map(nivel => {
-            const data = ganadores.tradicionalSegunda?.[nivel] || { cantidad: 0, premioUnitario: 0, premioTotal: 0 };
-            const comp = resultado.comparacion?.tradicionalSegunda?.[nivel] || {};
-            const esGanador = data.cantidad > 0;
-            const difClass = (comp.diferencia || 0) === 0 ? 'text-success' : 'text-danger';
-            const difIcon = (comp.diferencia || 0) === 0 ? '✓' : '✗';
-            return `
-              <tr style="${esGanador ? 'background: rgba(16, 185, 129, 0.1);' : ''}">
-                <td>${nivel === '6' ? '1° Premio' : nivel === '5' ? '2° Premio' : '3° Premio'}</td>
-                <td>${nivel} aciertos</td>
-                <td style="font-weight: bold; color: ${esGanador ? 'var(--success)' : 'inherit'};">${formatNumber(data.cantidad)}</td>
-                <td>${formatNumber(data.ganadoresExtracto || comp.extracto || 0)}</td>
-                <td class="${difClass}">${difIcon} ${comp.diferencia || 0}</td>
-                <td>$${formatNumber(data.premioUnitario || 0)}</td>
-                <td style="font-weight: bold;">$${formatNumber(data.premioTotal || 0)}</td>
-              </tr>
-            `;
-          }).join('')}
-        </tbody>
-      </table>
-
-      <!-- Tabla Revancha -->
-      <h4 style="margin-top: 1.5rem; margin-bottom: 0.5rem;"><i class="fas fa-redo" style="color: var(--warning);"></i> Revancha</h4>
-      <table class="data-table" style="margin-bottom: 1rem;">
-        <thead>
-          <tr>
-            <th>Nivel</th>
-            <th>Aciertos</th>
-            <th>Ganadores TXT</th>
-            <th>Ganadores Extracto</th>
-            <th>Diferencia</th>
-            <th>Premio Unitario</th>
-            <th>Premio Total</th>
-          </tr>
-        </thead>
-        <tbody>
+      <!-- REVANCHA -->
+      <div style="background: var(--bg-card); border: 1px solid var(--border); border-radius: 12px; margin-bottom: 1.5rem; overflow: hidden;">
+        <div style="background: linear-gradient(90deg, rgba(245, 158, 11, 0.2) 0%, transparent 100%); padding: 1rem 1.25rem; border-left: 4px solid #f59e0b;">
+          <h5 style="margin: 0; display: flex; align-items: center; gap: 0.5rem; font-size: 1.1rem;">
+            <i class="fas fa-redo" style="color: #f59e0b;"></i> Revancha
+          </h5>
+        </div>
+        <div style="padding: 1.25rem; overflow-x: auto;">
           ${(() => {
-            const data = ganadores.revancha?.['6'] || { cantidad: 0, premioUnitario: 0, premioTotal: 0 };
+            const data = ganadores.revancha?.['6'] || { cantidad: 0, premioUnitario: 0, premioTotal: 0, registros: [] };
             const comp = resultado.comparacion?.revancha?.['6'] || {};
             const esGanador = data.cantidad > 0;
-            const difClass = (comp.diferencia || 0) === 0 ? 'text-success' : 'text-danger';
-            const difIcon = (comp.diferencia || 0) === 0 ? '✓' : '✗';
+            const dif = data.cantidad - (data.ganadoresExtracto || comp.extracto || 0);
             return `
-              <tr style="${esGanador ? 'background: rgba(16, 185, 129, 0.1);' : ''}">
-                <td>Premio Revancha</td>
-                <td>6 aciertos</td>
-                <td style="font-weight: bold; color: ${esGanador ? 'var(--success)' : 'inherit'};">${formatNumber(data.cantidad)}</td>
-                <td>${formatNumber(data.ganadoresExtracto || comp.extracto || 0)}</td>
-                <td class="${difClass}">${difIcon} ${comp.diferencia || 0}</td>
-                <td>$${formatNumber(data.premioUnitario || 0)}</td>
-                <td style="font-weight: bold;">$${formatNumber(data.premioTotal || 0)}</td>
-              </tr>
+              <table class="data-table" style="margin: 0; width: 100%; table-layout: fixed;">
+                <thead>
+                  <tr>
+                    <th style="width: 12%; padding: 0.75rem 1rem;">Premio</th>
+                    <th style="width: 12%; padding: 0.75rem 1rem;">Aciertos</th>
+                    <th style="width: 14%; text-align: center; padding: 0.75rem 1rem;">Ganadores<br>TXT</th>
+                    <th style="width: 14%; text-align: center; padding: 0.75rem 1rem;">Ganadores<br>Extracto</th>
+                    <th style="width: 12%; text-align: center; padding: 0.75rem 1rem;">Diferencia</th>
+                    <th style="width: 18%; text-align: right; padding: 0.75rem 1rem;">Premio<br>Unitario</th>
+                    <th style="width: 18%; text-align: right; padding: 0.75rem 1rem;">Premio<br>Total</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr style="${esGanador ? 'background: rgba(16, 185, 129, 0.1);' : ''}">
+                    <td style="padding: 0.75rem 1rem;"><span style="display: inline-block; padding: 0.35rem 0.75rem; background: #f59e0b; color: #000; border-radius: 6px; font-weight: 600; font-size: 0.85rem;">Revancha</span></td>
+                    <td style="padding: 0.75rem 1rem; font-size: 0.95rem;">6 aciertos</td>
+                    <td style="text-align: center; padding: 0.75rem 1rem; font-weight: bold; font-size: 1.2rem; color: ${esGanador ? '#10b981' : 'inherit'};">${formatNumber(data.cantidad)}</td>
+                    <td style="text-align: center; padding: 0.75rem 1rem; font-size: 0.95rem;">${formatNumber(data.ganadoresExtracto || comp.extracto || 0)}</td>
+                    <td style="text-align: center; padding: 0.75rem 1rem;"><span style="display: inline-block; padding: 0.35rem 0.75rem; border-radius: 6px; background: ${dif === 0 ? 'rgba(16, 185, 129, 0.2)' : 'rgba(239, 68, 68, 0.2)'}; color: ${dif === 0 ? '#10b981' : '#ef4444'}; font-weight: 600;">${dif === 0 ? '✓ OK' : dif}</span></td>
+                    <td style="text-align: right; padding: 0.75rem 1rem; font-size: 0.95rem;">$${formatNumber(data.premioUnitario || 0)}</td>
+                    <td style="text-align: right; padding: 0.75rem 1rem; font-weight: bold; font-size: 1.1rem; color: ${esGanador ? '#10b981' : 'inherit'};">$${formatNumber(data.premioTotal || 0)}</td>
+                  </tr>
+                </tbody>
+              </table>
             `;
           })()}
-        </tbody>
-      </table>
+        </div>
+      </div>
 
-      <!-- Tabla Siempre Sale -->
-      <h4 style="margin-top: 1.5rem; margin-bottom: 0.5rem;"><i class="fas fa-check-double" style="color: #9333ea;"></i> Siempre Sale</h4>
-      <table class="data-table" style="margin-bottom: 1rem;">
-        <thead>
-          <tr>
-            <th>Nivel</th>
-            <th>Aciertos Requeridos</th>
-            <th>Ganadores TXT</th>
-            <th>Ganadores Extracto</th>
-            <th>Diferencia</th>
-            <th>Premio Unitario</th>
-            <th>Premio Total</th>
-          </tr>
-        </thead>
-        <tbody>
+      <!-- SIEMPRE SALE -->
+      <div style="background: var(--bg-card); border: 1px solid var(--border); border-radius: 12px; margin-bottom: 1.5rem; overflow: hidden;">
+        <div style="background: linear-gradient(90deg, rgba(147, 51, 234, 0.2) 0%, transparent 100%); padding: 1rem 1.25rem; border-left: 4px solid #9333ea;">
+          <h5 style="margin: 0; display: flex; align-items: center; gap: 0.5rem; font-size: 1.1rem;">
+            <i class="fas fa-check-double" style="color: #9333ea;"></i> Siempre Sale
+          </h5>
+        </div>
+        <div style="padding: 1.25rem; overflow-x: auto;">
           ${(() => {
-            const data = ganadores.siempreSale || { cantidad: 0, aciertosRequeridos: 6, premioUnitario: 0, premioTotal: 0 };
+            const data = ganadores.siempreSale || { cantidad: 0, aciertosRequeridos: 6, premioUnitario: 0, premioTotal: 0, registros: [] };
             const comp = resultado.comparacion?.siempreSale || {};
             const esGanador = data.cantidad > 0;
-            const difClass = (comp.diferencia || 0) === 0 ? 'text-success' : 'text-danger';
-            const difIcon = (comp.diferencia || 0) === 0 ? '✓' : '✗';
+            const dif = data.cantidad - (data.ganadoresExtracto || comp.extracto || 0);
             return `
-              <tr style="${esGanador ? 'background: rgba(16, 185, 129, 0.1);' : ''}">
-                <td>Premio Siempre Sale</td>
-                <td>${data.aciertosRequeridos} aciertos</td>
-                <td style="font-weight: bold; color: ${esGanador ? 'var(--success)' : 'inherit'};">${formatNumber(data.cantidad)}</td>
-                <td>${formatNumber(data.ganadoresExtracto || comp.extracto || 0)}</td>
-                <td class="${difClass}">${difIcon} ${comp.diferencia || 0}</td>
-                <td>$${formatNumber(data.premioUnitario || 0)}</td>
-                <td style="font-weight: bold;">$${formatNumber(data.premioTotal || 0)}</td>
-              </tr>
+              <table class="data-table" style="margin: 0; width: 100%; table-layout: fixed;">
+                <thead>
+                  <tr>
+                    <th style="width: 12%; padding: 0.75rem 1rem;">Premio</th>
+                    <th style="width: 12%; padding: 0.75rem 1rem;">Aciertos<br>Requeridos</th>
+                    <th style="width: 14%; text-align: center; padding: 0.75rem 1rem;">Ganadores<br>TXT</th>
+                    <th style="width: 14%; text-align: center; padding: 0.75rem 1rem;">Ganadores<br>Extracto</th>
+                    <th style="width: 12%; text-align: center; padding: 0.75rem 1rem;">Diferencia</th>
+                    <th style="width: 18%; text-align: right; padding: 0.75rem 1rem;">Premio<br>Unitario</th>
+                    <th style="width: 18%; text-align: right; padding: 0.75rem 1rem;">Premio<br>Total</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr style="${esGanador ? 'background: rgba(16, 185, 129, 0.1);' : ''}">
+                    <td style="padding: 0.75rem 1rem;"><span style="display: inline-block; padding: 0.35rem 0.75rem; background: #9333ea; color: #fff; border-radius: 6px; font-weight: 600; font-size: 0.85rem;">Siempre Sale</span></td>
+                    <td style="padding: 0.75rem 1rem; font-weight: bold; color: #9333ea; font-size: 1rem;">${data.aciertosRequeridos} aciertos</td>
+                    <td style="text-align: center; padding: 0.75rem 1rem; font-weight: bold; font-size: 1.2rem; color: ${esGanador ? '#10b981' : 'inherit'};">${formatNumber(data.cantidad)}</td>
+                    <td style="text-align: center; padding: 0.75rem 1rem; font-size: 0.95rem;">${formatNumber(data.ganadoresExtracto || comp.extracto || 0)}</td>
+                    <td style="text-align: center; padding: 0.75rem 1rem;"><span style="display: inline-block; padding: 0.35rem 0.75rem; border-radius: 6px; background: ${dif === 0 ? 'rgba(16, 185, 129, 0.2)' : 'rgba(239, 68, 68, 0.2)'}; color: ${dif === 0 ? '#10b981' : '#ef4444'}; font-weight: 600;">${dif === 0 ? '✓ OK' : dif}</span></td>
+                    <td style="text-align: right; padding: 0.75rem 1rem; font-size: 0.95rem;">$${formatNumber(data.premioUnitario || 0)}</td>
+                    <td style="text-align: right; padding: 0.75rem 1rem; font-weight: bold; font-size: 1.1rem; color: ${esGanador ? '#10b981' : 'inherit'};">$${formatNumber(data.premioTotal || 0)}</td>
+                  </tr>
+                </tbody>
+              </table>
             `;
           })()}
-        </tbody>
-      </table>
+        </div>
+      </div>
 
-      <!-- Tabla Premio Extra (si aplica) -->
+      <!-- PREMIO EXTRA -->
       ${(extracto.premioExtra && extracto.premioExtra.length > 0) ? `
-      <h4 style="margin-top: 1.5rem; margin-bottom: 0.5rem;"><i class="fas fa-gift" style="color: #ec4899;"></i> Premio Extra</h4>
-      <table class="data-table" style="margin-bottom: 1rem;">
-        <thead>
-          <tr>
-            <th>Nivel</th>
-            <th>Aciertos</th>
-            <th>Ganadores TXT</th>
-            <th>Ganadores Extracto</th>
-            <th>Diferencia</th>
-            <th>Premio Unitario</th>
-            <th>Premio Total</th>
-          </tr>
-        </thead>
-        <tbody>
+      <div style="background: var(--bg-card); border: 1px solid var(--border); border-radius: 12px; margin-bottom: 1.5rem; overflow: hidden;">
+        <div style="background: linear-gradient(90deg, rgba(236, 72, 153, 0.2) 0%, transparent 100%); padding: 1rem 1.25rem; border-left: 4px solid #ec4899;">
+          <h5 style="margin: 0; display: flex; align-items: center; gap: 0.5rem; font-size: 1.1rem;">
+            <i class="fas fa-gift" style="color: #ec4899;"></i> Premio Extra
+          </h5>
+        </div>
+        <div style="padding: 1.25rem; overflow-x: auto;">
           ${(() => {
-            const data = ganadores.premioExtra?.['6'] || { cantidad: 0, premioUnitario: 0, premioTotal: 0 };
+            const data = ganadores.premioExtra?.['6'] || { cantidad: 0, premioUnitario: 0, premioTotal: 0, registros: [] };
             const comp = resultado.comparacion?.premioExtra?.['6'] || {};
             const esGanador = data.cantidad > 0;
-            const difClass = (comp.diferencia || 0) === 0 ? 'text-success' : 'text-danger';
-            const difIcon = (comp.diferencia || 0) === 0 ? '✓' : '✗';
+            const dif = data.cantidad - (data.ganadoresExtracto || comp.extracto || 0);
             return `
-              <tr style="${esGanador ? 'background: rgba(16, 185, 129, 0.1);' : ''}">
-                <td>Premio Extra</td>
-                <td>6 aciertos</td>
-                <td style="font-weight: bold; color: ${esGanador ? 'var(--success)' : 'inherit'};">${formatNumber(data.cantidad)}</td>
-                <td>${formatNumber(data.ganadoresExtracto || comp.extracto || 0)}</td>
-                <td class="${difClass}">${difIcon} ${comp.diferencia || 0}</td>
-                <td>$${formatNumber(data.premioUnitario || 0)}</td>
-                <td style="font-weight: bold;">$${formatNumber(data.premioTotal || 0)}</td>
-              </tr>
+              <table class="data-table" style="margin: 0; width: 100%; table-layout: fixed;">
+                <thead>
+                  <tr>
+                    <th style="width: 12%; padding: 0.75rem 1rem;">Premio</th>
+                    <th style="width: 12%; padding: 0.75rem 1rem;">Aciertos</th>
+                    <th style="width: 14%; text-align: center; padding: 0.75rem 1rem;">Ganadores<br>TXT</th>
+                    <th style="width: 14%; text-align: center; padding: 0.75rem 1rem;">Ganadores<br>Extracto</th>
+                    <th style="width: 12%; text-align: center; padding: 0.75rem 1rem;">Diferencia</th>
+                    <th style="width: 18%; text-align: right; padding: 0.75rem 1rem;">Premio<br>Unitario</th>
+                    <th style="width: 18%; text-align: right; padding: 0.75rem 1rem;">Premio<br>Total</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr style="${esGanador ? 'background: rgba(16, 185, 129, 0.1);' : ''}">
+                    <td style="padding: 0.75rem 1rem;"><span style="display: inline-block; padding: 0.35rem 0.75rem; background: #ec4899; color: #fff; border-radius: 6px; font-weight: 600; font-size: 0.85rem;">Premio Extra</span></td>
+                    <td style="padding: 0.75rem 1rem; font-size: 0.95rem;">6 aciertos</td>
+                    <td style="text-align: center; padding: 0.75rem 1rem; font-weight: bold; font-size: 1.2rem; color: ${esGanador ? '#10b981' : 'inherit'};">${formatNumber(data.cantidad)}</td>
+                    <td style="text-align: center; padding: 0.75rem 1rem; font-size: 0.95rem;">${formatNumber(data.ganadoresExtracto || comp.extracto || 0)}</td>
+                    <td style="text-align: center; padding: 0.75rem 1rem;"><span style="display: inline-block; padding: 0.35rem 0.75rem; border-radius: 6px; background: ${dif === 0 ? 'rgba(16, 185, 129, 0.2)' : 'rgba(239, 68, 68, 0.2)'}; color: ${dif === 0 ? '#10b981' : '#ef4444'}; font-weight: 600;">${dif === 0 ? '✓ OK' : dif}</span></td>
+                    <td style="text-align: right; padding: 0.75rem 1rem; font-size: 0.95rem;">$${formatNumber(data.premioUnitario || 0)}</td>
+                    <td style="text-align: right; padding: 0.75rem 1rem; font-weight: bold; font-size: 1.1rem; color: ${esGanador ? '#10b981' : 'inherit'};">$${formatNumber(data.premioTotal || 0)}</td>
+                  </tr>
+                </tbody>
+              </table>
             `;
           })()}
-        </tbody>
-      </table>
+        </div>
+      </div>
       ` : ''}
 
-      <!-- Estadísticas por Instancia -->
-      <h4 style="margin-top: 1.5rem; margin-bottom: 0.5rem;"><i class="fas fa-chart-pie"></i> Estadísticas por Instancia</h4>
-      <table class="data-table" style="margin-bottom: 1rem;">
-        <thead>
-          <tr>
-            <th>Instancia</th>
-            <th>Registros</th>
-            <th>Recaudación</th>
-            <th>Ganadores</th>
-          </tr>
-        </thead>
-        <tbody>
-          ${Object.entries(resultado.porInstancia || {}).map(([inst, data]) => {
-            const nombreInstancia = inst === '1' ? 'Tradicional' : 
-                                    inst === '2' ? 'Tradicional + Revancha' : 
-                                    'Trad + Rev + Siempre Sale';
-            return `
-              <tr>
-                <td>${nombreInstancia}</td>
-                <td>${formatNumber(data.registros || 0)}</td>
-                <td>$${formatNumber(data.recaudacion || 0)}</td>
-                <td style="color: ${data.ganadores > 0 ? 'var(--success)' : 'inherit'};">${formatNumber(data.ganadores || 0)}</td>
+      <!-- RESUMEN CONSOLIDADO: TODOS LOS GANADORES CON 6 ACIERTOS -->
+      ${(() => {
+        // Recopilar todos los registros con 6 aciertos de todas las modalidades
+        const todosGanadores6 = [];
+        
+        // Tradicional Primera 6 aciertos
+        (ganadores.tradicionalPrimera?.['6']?.registros || []).forEach(r => {
+          todosGanadores6.push({ ...r, modalidad: 'Trad. 1ª', color: '#3b82f6' });
+        });
+        
+        // Tradicional Segunda 6 aciertos
+        (ganadores.tradicionalSegunda?.['6']?.registros || []).forEach(r => {
+          todosGanadores6.push({ ...r, modalidad: 'Trad. 2ª', color: '#10b981' });
+        });
+        
+        // Revancha 6 aciertos
+        (ganadores.revancha?.['6']?.registros || []).forEach(r => {
+          todosGanadores6.push({ ...r, modalidad: 'Revancha', color: '#f59e0b' });
+        });
+        
+        // Siempre Sale (cualquier acierto ganador)
+        (ganadores.siempreSale?.registros || []).forEach(r => {
+          todosGanadores6.push({ ...r, modalidad: 'Siempre Sale', color: '#9333ea' });
+        });
+        
+        // Premio Extra 6 aciertos
+        (ganadores.premioExtra?.['6']?.registros || []).forEach(r => {
+          todosGanadores6.push({ ...r, modalidad: 'Premio Extra', color: '#ec4899' });
+        });
+        
+        if (todosGanadores6.length === 0) return '';
+        
+        return `
+      <div style="background: var(--bg-card); border: 2px solid #22c55e; border-radius: 12px; padding: 1.25rem; margin-top: 2rem;">
+        <h4 style="margin: 0 0 1rem 0; display: flex; align-items: center; gap: 0.5rem; color: #22c55e;">
+          <i class="fas fa-trophy"></i> RESUMEN: Todos los Tickets Ganadores (${todosGanadores6.length} registros)
+        </h4>
+        <div style="overflow-x: auto;">
+          <table style="width: 100%; font-size: 0.9rem; border-collapse: collapse;">
+            <thead>
+              <tr style="background: rgba(34, 197, 94, 0.15);">
+                <th style="padding: 0.75rem; text-align: left; border-bottom: 2px solid #22c55e;">Modalidad</th>
+                <th style="padding: 0.75rem; text-align: left; border-bottom: 2px solid #22c55e;">Ticket</th>
+                <th style="padding: 0.75rem; text-align: left; border-bottom: 2px solid #22c55e;">Agencia</th>
+                <th style="padding: 0.75rem; text-align: left; border-bottom: 2px solid #22c55e;">Números Jugados</th>
+                <th style="padding: 0.75rem; text-align: center; border-bottom: 2px solid #22c55e;">Aciertos</th>
+                <th style="padding: 0.75rem; text-align: right; border-bottom: 2px solid #22c55e;">Ganadores</th>
               </tr>
-            `;
-          }).join('')}
-        </tbody>
-      </table>
+            </thead>
+            <tbody>
+              ${todosGanadores6.slice(0, 100).map(r => `
+                <tr style="border-bottom: 1px solid rgba(255,255,255,0.05);">
+                  <td style="padding: 0.6rem 0.75rem;"><span style="display: inline-block; padding: 0.25rem 0.5rem; background: ${r.color}; color: #fff; border-radius: 4px; font-size: 0.8rem; font-weight: 600;">${r.modalidad}</span></td>
+                  <td style="padding: 0.6rem 0.75rem; font-family: monospace;">${r.ticket || r.linea || '-'}</td>
+                  <td style="padding: 0.6rem 0.75rem; font-weight: 500;">${r.agencia || '-'}</td>
+                  <td style="padding: 0.6rem 0.75rem; font-family: monospace; color: ${r.color}; font-weight: 600;">
+                    ${(r.numerosJugados || []).map(n => n.toString().padStart(2, '0')).join(' - ')}
+                  </td>
+                  <td style="padding: 0.6rem 0.75rem; text-align: center; font-weight: bold;">${r.aciertos}</td>
+                  <td style="padding: 0.6rem 0.75rem; text-align: right; font-weight: bold; color: #22c55e;">${r.ganadores}</td>
+                </tr>
+              `).join('')}
+              ${todosGanadores6.length > 100 ? `<tr><td colspan="6" style="padding: 0.75rem; text-align: center; color: var(--text-muted);">... y ${todosGanadores6.length - 100} tickets más</td></tr>` : ''}
+            </tbody>
+          </table>
+        </div>
+      </div>
+        `;
+      })()}
 
     </div>
   `;
 
   quini6Container.innerHTML = html;
-
-  // Mostrar extracto en panel lateral
-  const detTipos = document.getElementById('cpst-detalle-tipos');
-  if (detTipos && cpstExtractoQuini6) {
-    detTipos.innerHTML = `
-      <div class="alert" style="background: var(--bg-input); padding: 1rem; border-radius: 8px; margin-bottom: 1rem;">
-        <h4 style="margin-bottom: 0.5rem;"><i class="fas fa-info-circle"></i> Extracto QUINI 6</h4>
-        <div style="margin-bottom: 0.5rem;">
-          <strong style="color: var(--primary);">Tradicional 1ª:</strong>
-          <span style="font-family: monospace; color: var(--primary); margin-left: 0.5rem;">
-            ${(cpstExtractoQuini6.tradicional?.primera || []).map(n => n.toString().padStart(2, '0')).join(' - ')}
-          </span>
-        </div>
-        <div style="margin-bottom: 0.5rem;">
-          <strong style="color: var(--success);">Tradicional 2ª:</strong>
-          <span style="font-family: monospace; color: var(--success); margin-left: 0.5rem;">
-            ${(cpstExtractoQuini6.tradicional?.segunda || []).map(n => n.toString().padStart(2, '0')).join(' - ')}
-          </span>
-        </div>
-        <div style="margin-bottom: 0.5rem;">
-          <strong style="color: var(--warning);">Revancha:</strong>
-          <span style="font-family: monospace; color: var(--warning); margin-left: 0.5rem;">
-            ${(cpstExtractoQuini6.revancha || []).map(n => n.toString().padStart(2, '0')).join(' - ')}
-          </span>
-        </div>
-        <div>
-          <strong style="color: #9333ea;">Siempre Sale:</strong>
-          <span style="font-family: monospace; color: #9333ea; margin-left: 0.5rem;">
-            ${(cpstExtractoQuini6.siempreSale || []).map(n => n.toString().padStart(2, '0')).join(' - ')}
-          </span>
-        </div>
-      </div>`;
-  }
 }
 
 // ============= FIN QUINI 6 ESCRUTINIO =============
@@ -7845,35 +8141,76 @@ function cargarExtractoQuini6DesdeJSON(data) {
   let extracto = {
     tradicional: {
       primera: [],
-      segunda: []
+      segunda: [],
+      premiosPrimera: {},
+      premiosSegunda: {},
+      estimuloPrimera: 0,
+      estimuloSegunda: 0
     },
     revancha: [],
+    revanchaPremios: {},
+    revanchaEstimulo: 0,
     siempreSale: [],
     siempreSaleAciertos: 6,
-    premioExtra: []
+    siempreSalePremios: {},
+    siempreSaleEstimulo: 0,
+    premioExtra: [],
+    premioExtraPremios: {}
   };
 
   if (data.quini6 || data.tradicional?.primer) {
     // Formato OCR
     const q6 = data.quini6 || data;
+    
+    // Números
     extracto.tradicional.primera = (q6.tradicional?.primer?.numbers || q6.tradicional?.primera || []).map(n => parseInt(n));
     extracto.tradicional.segunda = (q6.tradicional?.segunda?.numbers || q6.tradicional?.segunda || []).map(n => parseInt(n));
     extracto.revancha = (q6.revancha?.numbers || q6.revancha || []).map(n => parseInt(n));
     extracto.siempreSale = (q6.siempre_sale?.numbers || q6.siempreSale || []).map(n => parseInt(n));
     extracto.siempreSaleAciertos = parseInt(q6.siempre_sale?.winning_hits || q6.siempreSaleAciertos || 6);
     extracto.premioExtra = (q6.premio_extra?.numbers || q6.premioExtra || []).map(n => parseInt(n));
-    extracto.sorteo = data.sorteo?.numero || data.sorteo;
+    extracto.sorteo = data.sorteo?.numero || data.sorteo || q6.drawNumber;
+    
+    // PREMIOS del extracto OCR (CRÍTICO para escrutinio)
+    // Guardar la estructura de premios completa para cada modalidad
+    extracto.tradicional.premiosPrimera = q6.tradicional?.primer?.prizes || {};
+    extracto.tradicional.premiosSegunda = q6.tradicional?.segunda?.prizes || {};
+    extracto.revanchaPremios = q6.revancha?.prizes || {};
+    extracto.siempreSalePremios = q6.siempre_sale?.prizes || {};
+    
+    // Premio Extra: la estructura del OCR es diferente (directamente en premio_extra)
+    // Convertir a formato compatible con el backend
+    if (q6.premio_extra) {
+      extracto.premioExtraPremios = {
+        '1': {
+          pot: q6.premio_extra.pot || 0,
+          winners: q6.premio_extra.winners || 0,
+          premio_por_ganador: q6.premio_extra.premio_por_ganador || 0
+        }
+      };
+    }
+    
+    // Log de debug para verificar premios cargados
+    console.log('[Quini6] Premios Tradicional Primera:', extracto.tradicional.premiosPrimera);
+    console.log('[Quini6] Premios Siempre Sale:', extracto.siempreSalePremios);
+    console.log('[Quini6] Premios Premio Extra:', extracto.premioExtraPremios);
+    
   } else if (data.tradicional?.primera) {
     // Formato interno
     extracto = {
       tradicional: {
         primera: (data.tradicional.primera || []).map(n => parseInt(n)),
-        segunda: (data.tradicional.segunda || []).map(n => parseInt(n))
+        segunda: (data.tradicional.segunda || []).map(n => parseInt(n)),
+        premiosPrimera: data.tradicional.premiosPrimera || {},
+        premiosSegunda: data.tradicional.premiosSegunda || {}
       },
       revancha: (data.revancha || []).map(n => parseInt(n)),
+      revanchaPremios: data.revanchaPremios || {},
       siempreSale: (data.siempreSale || []).map(n => parseInt(n)),
       siempreSaleAciertos: parseInt(data.siempreSaleAciertos || 6),
+      siempreSalePremios: data.siempreSalePremios || {},
       premioExtra: (data.premioExtra || []).map(n => parseInt(n)),
+      premioExtraPremios: data.premioExtraPremios || {},
       sorteo: data.sorteo
     };
   }
@@ -7885,6 +8222,11 @@ function cargarExtractoQuini6DesdeJSON(data) {
   }
 
   cpstExtractoQuini6 = extracto;
+  
+  // Log para debug
+  console.log('[Quini6] Extracto cargado:', extracto);
+  console.log('[Quini6] Siempre Sale Aciertos:', extracto.siempreSaleAciertos);
+  console.log('[Quini6] Siempre Sale Premios:', extracto.siempreSalePremios);
 
   // Mostrar preview
   mostrarPreviewExtractoQuini6();
@@ -7904,6 +8246,7 @@ function mostrarPreviewExtractoQuini6() {
   const t2 = cpstExtractoQuini6.tradicional?.segunda || [];
   const rev = cpstExtractoQuini6.revancha || [];
   const ss = cpstExtractoQuini6.siempreSale || [];
+  const ssAciertos = cpstExtractoQuini6.siempreSaleAciertos || 6;
 
   preview.innerHTML = `
     <div style="padding: 1rem; background: var(--bg-input); border-radius: 8px; margin-top: 1rem;">
@@ -7931,7 +8274,7 @@ function mostrarPreviewExtractoQuini6() {
       ` : ''}
       ${ss.length === 6 ? `
       <div>
-        <strong><i class="fas fa-check-double" style="color: #9333ea;"></i> Siempre Sale:</strong>
+        <strong><i class="fas fa-check-double" style="color: #9333ea;"></i> Siempre Sale (${ssAciertos} aciertos):</strong>
         <span style="font-family: monospace; font-size: 1rem; color: #9333ea; margin-left: 0.5rem;">
           ${ss.map(n => n.toString().padStart(2, '0')).join(' - ')}
         </span>
@@ -7960,8 +8303,8 @@ function cargarExtractoQuini6Manual() {
       return false;
     }
     const num = parseInt(input.value);
-    if (isNaN(num) || num < 1 || num > 45) {
-      showToast(`Tradicional Primera - Número ${i} debe estar entre 1 y 45`, 'warning');
+    if (isNaN(num) || num < 0 || num > 45) {
+      showToast(`Tradicional Primera - Número ${i} debe estar entre 0 y 45`, 'warning');
       return false;
     }
     extracto.tradicional.primera.push(num);
@@ -7974,8 +8317,8 @@ function cargarExtractoQuini6Manual() {
     if (input && input.value !== '') {
       trad2Vacio = false;
       const num = parseInt(input.value);
-      if (isNaN(num) || num < 1 || num > 45) {
-        showToast(`Tradicional Segunda - Número ${i} debe estar entre 1 y 45`, 'warning');
+      if (isNaN(num) || num < 0 || num > 45) {
+        showToast(`Tradicional Segunda - Número ${i} debe estar entre 0 y 45`, 'warning');
         return false;
       }
       extracto.tradicional.segunda.push(num);
@@ -7989,12 +8332,12 @@ function cargarExtractoQuini6Manual() {
   // Leer Revancha (opcional)
   let revanchaVacia = true;
   for (let i = 1; i <= 6; i++) {
-    const input = document.getElementById(`cpst-quini6-revancha-${i}`);
+    const input = document.getElementById(`cpst-quini6-rev-${i}`);
     if (input && input.value !== '') {
       revanchaVacia = false;
       const num = parseInt(input.value);
-      if (isNaN(num) || num < 1 || num > 45) {
-        showToast(`Revancha - Número ${i} debe estar entre 1 y 45`, 'warning');
+      if (isNaN(num) || num < 0 || num > 45) {
+        showToast(`Revancha - Número ${i} debe estar entre 0 y 45`, 'warning');
         return false;
       }
       extracto.revancha.push(num);
@@ -8012,8 +8355,8 @@ function cargarExtractoQuini6Manual() {
     if (input && input.value !== '') {
       ssVacio = false;
       const num = parseInt(input.value);
-      if (isNaN(num) || num < 1 || num > 45) {
-        showToast(`Siempre Sale - Número ${i} debe estar entre 1 y 45`, 'warning');
+      if (isNaN(num) || num < 0 || num > 45) {
+        showToast(`Siempre Sale - Número ${i} debe estar entre 0 y 45`, 'warning');
         return false;
       }
       extracto.siempreSale.push(num);
@@ -8044,12 +8387,337 @@ async function cargarExtractoQuini6DesdeArchivo(file) {
   try {
     const text = await file.text();
     const data = JSON.parse(text);
-    return cargarExtractoQuini6DesdeJSON(data);
+    const result = cargarExtractoQuini6DesdeJSON(data);
+    if (result) {
+      // Mostrar info del archivo cargado
+      document.getElementById('cpst-quini6-json-info')?.classList.remove('hidden');
+      document.getElementById('cpst-quini6-json-filename').textContent = file.name;
+    }
+    return result;
   } catch (error) {
     console.error('Error cargando JSON QUINI 6:', error);
     showToast('Error al cargar archivo JSON de QUINI 6', 'error');
     return false;
   }
+}
+
+/**
+ * Limpiar extracto QUINI 6
+ */
+function limpiarExtractoQuini6() {
+  cpstExtractoQuini6 = null;
+  
+  // Limpiar todos los inputs
+  for (let i = 1; i <= 6; i++) {
+    const trad1 = document.getElementById(`cpst-quini6-trad1-${i}`);
+    const trad2 = document.getElementById(`cpst-quini6-trad2-${i}`);
+    const rev = document.getElementById(`cpst-quini6-rev-${i}`);
+    const ss = document.getElementById(`cpst-quini6-ss-${i}`);
+    if (trad1) trad1.value = '';
+    if (trad2) trad2.value = '';
+    if (rev) rev.value = '';
+    if (ss) ss.value = '';
+  }
+  
+  // Ocultar info de archivo JSON
+  document.getElementById('cpst-quini6-json-info')?.classList.add('hidden');
+  
+  // Limpiar preview
+  const preview = document.getElementById('cpst-quini6-preview');
+  if (preview) preview.innerHTML = '';
+  
+  // Limpiar input de archivo
+  const fileInput = document.getElementById('cpst-quini6-file-input');
+  if (fileInput) fileInput.value = '';
+  
+  // Ocultar status OCR
+  document.getElementById('cpst-quini6-ocr-status')?.classList.add('hidden');
+  document.getElementById('cpst-quini6-file-info')?.classList.add('hidden');
+  
+  showToast('Extracto QUINI 6 limpiado', 'info');
+}
+
+/**
+ * Limpiar extracto BRINCO
+ */
+function limpiarExtractoBrinco() {
+  cpstExtractoBrinco = null;
+  
+  // Limpiar todos los inputs
+  for (let i = 1; i <= 6; i++) {
+    const trad = document.getElementById(`cpst-brinco-trad-${i}`);
+    const junior = document.getElementById(`cpst-brinco-junior-${i}`);
+    if (trad) trad.value = '';
+    if (junior) junior.value = '';
+  }
+  
+  // Ocultar info de archivo
+  document.getElementById('cpst-brinco-file-info')?.classList.add('hidden');
+  document.getElementById('cpst-brinco-ocr-status')?.classList.add('hidden');
+  
+  // Limpiar preview
+  const preview = document.getElementById('cpst-brinco-preview');
+  if (preview) preview.innerHTML = '';
+  
+  // Limpiar input de archivo
+  const fileInput = document.getElementById('cpst-brinco-file-input');
+  if (fileInput) fileInput.value = '';
+  
+  showToast('Extracto BRINCO limpiado', 'info');
+}
+
+/**
+ * Procesar imagen/PDF de extracto QUINI 6 con OCR
+ */
+async function procesarExtractoQuini6OCR(file) {
+  if (!file) return;
+  
+  const status = document.getElementById('cpst-quini6-ocr-status');
+  const mensaje = document.getElementById('cpst-quini6-ocr-mensaje');
+  const progress = document.getElementById('cpst-quini6-ocr-progress');
+  const fileInfo = document.getElementById('cpst-quini6-file-info');
+  const filename = document.getElementById('cpst-quini6-filename');
+  
+  // Si es JSON, cargar directamente
+  if (file.name.toLowerCase().endsWith('.json')) {
+    try {
+      const text = await file.text();
+      const data = JSON.parse(text);
+      if (cargarExtractoQuini6DesdeJSON(data)) {
+        fileInfo?.classList.remove('hidden');
+        if (filename) filename.textContent = file.name;
+      }
+    } catch (error) {
+      console.error('Error cargando JSON:', error);
+      showToast('Error al cargar archivo JSON', 'error');
+    }
+    return;
+  }
+  
+  // Mostrar status OCR
+  status?.classList.remove('hidden');
+  fileInfo?.classList.add('hidden');
+  if (mensaje) mensaje.textContent = 'Procesando archivo con OCR...';
+  if (progress) progress.querySelector('div').style.width = '10%';
+  
+  try {
+    // Verificar si OCRExtractos está disponible, reinicializar si es necesario
+    if (!window.OCRExtractos) {
+      throw new Error('Módulo OCR no cargado. Recargue la página.');
+    }
+    
+    // Si no tiene API Key, intentar reinicializar
+    if (!OCRExtractos.hasApiKey()) {
+      OCRExtractos.init();
+    }
+    
+    // Si aún no tiene API Key, mostrar error
+    if (!OCRExtractos.hasApiKey()) {
+      throw new Error('OCR no configurado. Configure la API Key de Groq en Configuración.');
+    }
+    
+    if (progress) progress.querySelector('div').style.width = '20%';
+    
+    let base64, mimeType;
+    
+    // Detectar si es PDF y convertir
+    if (file.type === 'application/pdf' || file.name.toLowerCase().endsWith('.pdf')) {
+      if (mensaje) mensaje.textContent = 'Convirtiendo PDF a imagen...';
+      const pdfResult = await OCRExtractos.pdfToImage(file);
+      base64 = pdfResult.base64;
+      mimeType = pdfResult.mimeType;
+    } else {
+      if (mensaje) mensaje.textContent = 'Procesando imagen...';
+      const imgResult = await OCRExtractos.imageToBase64(file);
+      base64 = imgResult.base64;
+      mimeType = imgResult.mimeType;
+    }
+    
+    if (progress) progress.querySelector('div').style.width = '50%';
+    if (mensaje) mensaje.textContent = 'Extrayendo datos con IA...';
+    
+    // Procesar con OCR específico de Quini6
+    const result = await OCRExtractos.procesarImagenQuini6(base64, mimeType);
+    
+    if (progress) progress.querySelector('div').style.width = '90%';
+    
+    if (result.success && result.data) {
+      // Cargar los datos extraídos
+      if (cargarExtractoQuini6DesdeJSON(result.data)) {
+        if (progress) progress.querySelector('div').style.width = '100%';
+        
+        // Llenar también los inputs manuales
+        llenarInputsQuini6DesdeOCR(result.data);
+        
+        setTimeout(() => {
+          status?.classList.add('hidden');
+          fileInfo?.classList.remove('hidden');
+          if (filename) filename.textContent = file.name;
+        }, 500);
+        
+        showToast('Extracto QUINI 6 procesado correctamente con OCR', 'success');
+      }
+    } else {
+      throw new Error(result.error || 'No se pudieron extraer los datos');
+    }
+  } catch (error) {
+    console.error('Error OCR Quini6:', error);
+    status?.classList.add('hidden');
+    showToast(`Error OCR: ${error.message}`, 'error');
+  }
+}
+
+/**
+ * Llenar los inputs manuales de Quini6 desde los datos OCR
+ */
+function llenarInputsQuini6DesdeOCR(data) {
+  // Tradicional Primera
+  const trad1 = data.tradicional?.primer?.numbers || data.tradicional?.primera || [];
+  trad1.forEach((num, i) => {
+    const input = document.getElementById(`cpst-quini6-trad1-${i + 1}`);
+    if (input) input.value = parseInt(num);
+  });
+  
+  // Tradicional Segunda
+  const trad2 = data.tradicional?.segunda?.numbers || data.tradicional?.segunda || [];
+  trad2.forEach((num, i) => {
+    const input = document.getElementById(`cpst-quini6-trad2-${i + 1}`);
+    if (input) input.value = parseInt(num);
+  });
+  
+  // Revancha
+  const revancha = data.revancha?.numbers || data.revancha || [];
+  revancha.forEach((num, i) => {
+    const input = document.getElementById(`cpst-quini6-rev-${i + 1}`);
+    if (input) input.value = parseInt(num);
+  });
+  
+  // Siempre Sale
+  const siempreSale = data.siempre_sale?.numbers || data.siempreSale || [];
+  siempreSale.forEach((num, i) => {
+    const input = document.getElementById(`cpst-quini6-ss-${i + 1}`);
+    if (input) input.value = parseInt(num);
+  });
+}
+
+/**
+ * Procesar imagen/PDF de extracto BRINCO con OCR
+ */
+async function procesarExtractoBrincoOCR(file) {
+  if (!file) return;
+  
+  const status = document.getElementById('cpst-brinco-ocr-status');
+  const mensaje = document.getElementById('cpst-brinco-ocr-mensaje');
+  const progress = document.getElementById('cpst-brinco-ocr-progress');
+  const fileInfo = document.getElementById('cpst-brinco-file-info');
+  const filename = document.getElementById('cpst-brinco-filename');
+  
+  // Si es JSON, cargar directamente
+  if (file.name.toLowerCase().endsWith('.json')) {
+    try {
+      const text = await file.text();
+      const data = JSON.parse(text);
+      if (cargarExtractoBrincoDesdeJSON(data)) {
+        fileInfo?.classList.remove('hidden');
+        if (filename) filename.textContent = file.name;
+      }
+    } catch (error) {
+      console.error('Error cargando JSON:', error);
+      showToast('Error al cargar archivo JSON', 'error');
+    }
+    return;
+  }
+  
+  // Mostrar status OCR
+  status?.classList.remove('hidden');
+  fileInfo?.classList.add('hidden');
+  if (mensaje) mensaje.textContent = 'Procesando archivo con OCR...';
+  if (progress) progress.querySelector('div').style.width = '10%';
+  
+  try {
+    // Verificar si OCRExtractos está disponible, reinicializar si es necesario
+    if (!window.OCRExtractos) {
+      throw new Error('Módulo OCR no cargado. Recargue la página.');
+    }
+    
+    // Si no tiene API Key, intentar reinicializar
+    if (!OCRExtractos.hasApiKey()) {
+      OCRExtractos.init();
+    }
+    
+    // Si aún no tiene API Key, mostrar error
+    if (!OCRExtractos.hasApiKey()) {
+      throw new Error('OCR no configurado. Configure la API Key de Groq en Configuración.');
+    }
+    
+    if (progress) progress.querySelector('div').style.width = '20%';
+    
+    let base64, mimeType;
+    
+    // Detectar si es PDF y convertir
+    if (file.type === 'application/pdf' || file.name.toLowerCase().endsWith('.pdf')) {
+      if (mensaje) mensaje.textContent = 'Convirtiendo PDF a imagen...';
+      const pdfResult = await OCRExtractos.pdfToImage(file);
+      base64 = pdfResult.base64;
+      mimeType = pdfResult.mimeType;
+    } else {
+      if (mensaje) mensaje.textContent = 'Procesando imagen...';
+      const imgResult = await OCRExtractos.imageToBase64(file);
+      base64 = imgResult.base64;
+      mimeType = imgResult.mimeType;
+    }
+    
+    if (progress) progress.querySelector('div').style.width = '50%';
+    if (mensaje) mensaje.textContent = 'Extrayendo datos con IA...';
+    
+    // Procesar con OCR específico de Brinco
+    const result = await OCRExtractos.procesarImagenBrinco(base64, mimeType);
+    
+    if (progress) progress.querySelector('div').style.width = '90%';
+    
+    if (result.success && result.data) {
+      // Cargar los datos extraídos
+      if (cargarExtractoBrincoDesdeJSON(result.data)) {
+        if (progress) progress.querySelector('div').style.width = '100%';
+        
+        // Llenar también los inputs manuales
+        llenarInputsBrincoDesdeOCR(result.data);
+        
+        setTimeout(() => {
+          status?.classList.add('hidden');
+          fileInfo?.classList.remove('hidden');
+          if (filename) filename.textContent = file.name;
+        }, 500);
+        
+        showToast('Extracto BRINCO procesado correctamente con OCR', 'success');
+      }
+    } else {
+      throw new Error(result.error || 'No se pudieron extraer los datos');
+    }
+  } catch (error) {
+    console.error('Error OCR Brinco:', error);
+    status?.classList.add('hidden');
+    showToast(`Error OCR: ${error.message}`, 'error');
+  }
+}
+
+/**
+ * Llenar los inputs manuales de Brinco desde los datos OCR
+ */
+function llenarInputsBrincoDesdeOCR(data) {
+  // Brinco Tradicional
+  const numsTrad = data.brinco?.numbers || data.tradicional?.numeros || [];
+  numsTrad.forEach((num, i) => {
+    const input = document.getElementById(`cpst-brinco-trad-${i + 1}`);
+    if (input) input.value = parseInt(num);
+  });
+  
+  // Brinco Junior
+  const numsJunior = data.brinco_junior?.numbers || data.junior?.numeros || [];
+  numsJunior.forEach((num, i) => {
+    const input = document.getElementById(`cpst-brinco-junior-${i + 1}`);
+    if (input) input.value = parseInt(num);
+  });
 }
 
 // ============= FIN QUINI 6 EXTRACTO FUNCTIONS =============

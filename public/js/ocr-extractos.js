@@ -1,28 +1,50 @@
 // ============================================
 // MÓDULO OCR EXTRACTOS - SIMBA V2
-// Extracción de datos de extractos con IA (Groq API)
+// Extracción de datos de extractos con IA (Groq/Mistral/OpenAI)
+// Sistema de fallback automático entre proveedores
 // ============================================
 
 const OCRExtractos = {
-  // Configuración
+  // Configuración principal (Groq por defecto, compatible con versión anterior)
   CONFIG: {
     API_URL: 'https://api.groq.com/openai/v1/chat/completions',
-    API_KEY: '', // Se configura desde config.js o UI
+    API_KEY: '',
     MODEL: 'meta-llama/llama-4-maverick-17b-128e-instruct'
   },
 
+  // Lista de proveedores para fallback
+  PROVIDERS: [],
+
   // Inicializar con config global o localStorage
   init() {
-    // 1. Intentar desde config.js (SIMBA_CONFIG)
-    if (window.SIMBA_CONFIG && window.SIMBA_CONFIG.GROQ) {
+    // 1. Cargar proveedores desde config.js
+    if (window.SIMBA_CONFIG && window.SIMBA_CONFIG.OCR_PROVIDERS) {
+      this.PROVIDERS = window.SIMBA_CONFIG.OCR_PROVIDERS.filter(p => p.enabled && p.API_KEY);
+      console.log('[OCR] Proveedores configurados:', this.PROVIDERS.map(p => p.name).join(' → '));
+    }
+
+    // 2. Fallback a configuración legacy (solo Groq)
+    if (this.PROVIDERS.length === 0 && window.SIMBA_CONFIG && window.SIMBA_CONFIG.GROQ) {
       this.CONFIG.API_URL = window.SIMBA_CONFIG.GROQ.API_URL || this.CONFIG.API_URL;
       this.CONFIG.API_KEY = window.SIMBA_CONFIG.GROQ.API_KEY || this.CONFIG.API_KEY;
       this.CONFIG.MODEL = window.SIMBA_CONFIG.GROQ.MODEL || this.CONFIG.MODEL;
+      this.PROVIDERS = [{
+        name: 'GROQ',
+        enabled: true,
+        API_KEY: this.CONFIG.API_KEY,
+        API_URL: this.CONFIG.API_URL,
+        MODEL: this.CONFIG.MODEL
+      }];
     }
 
-    // 2. Sobrescribir con localStorage si existe (preferencia del usuario)
+    // 3. Sobrescribir con localStorage si existe (preferencia del usuario)
     const savedKey = localStorage.getItem('groq_api_key');
-    if (savedKey) {
+    if (savedKey && this.PROVIDERS.length > 0) {
+      // Actualizar la key de Groq si existe en providers
+      const groqProvider = this.PROVIDERS.find(p => p.name === 'GROQ');
+      if (groqProvider) {
+        groqProvider.API_KEY = savedKey;
+      }
       this.CONFIG.API_KEY = savedKey;
     }
 
@@ -32,7 +54,7 @@ const OCRExtractos = {
     }
   },
 
-  // Guardar API key
+  // Guardar API key (legacy)
   setApiKey(key) {
     this.CONFIG.API_KEY = key;
     localStorage.setItem('groq_api_key', key);
@@ -40,7 +62,7 @@ const OCRExtractos = {
 
   // Verificar si hay API key configurada
   hasApiKey() {
-    return !!this.CONFIG.API_KEY;
+    return this.PROVIDERS.length > 0 || !!this.CONFIG.API_KEY;
   },
 
   /**
@@ -83,18 +105,60 @@ Responde SOLO con este JSON (INCLUIR SIEMPRE EL CAMPO "letras"):
     return await this.llamarAPI(imageBase64, mimeType, prompt);
   },
 
-  // Llamar a la API de Groq
+  // Llamar a la API con sistema de fallback (Groq → Mistral → OpenAI)
   async llamarAPI(imageBase64, mimeType, prompt) {
-    if (!this.CONFIG.API_KEY) {
-      throw new Error('No hay API key de Groq configurada. Configurá tu clave en el panel.');
+    if (this.PROVIDERS.length === 0 && !this.CONFIG.API_KEY) {
+      throw new Error('No hay API keys configuradas. Configurá al menos una clave en config.js');
     }
 
-    const dataUrlPrefix = mimeType === 'image/png'
-      ? 'data:image/png;base64,'
-      : 'data:image/jpeg;base64,';
+    // Limpiar base64 (remover saltos de línea, espacios, y prefijo si ya existe)
+    let cleanBase64 = imageBase64.replace(/[\r\n\s]/g, '');
+    if (cleanBase64.includes(',')) {
+      cleanBase64 = cleanBase64.split(',')[1] || cleanBase64;
+    }
 
+    // Asegurar mimeType válido
+    let validMimeType = mimeType;
+    if (!mimeType || (!mimeType.includes('png') && !mimeType.includes('jpeg') && !mimeType.includes('jpg') && !mimeType.includes('webp') && !mimeType.includes('gif'))) {
+      validMimeType = 'image/jpeg';
+    }
+
+    const dataUrl = `data:${validMimeType};base64,${cleanBase64}`;
+    
+    console.log('[OCR] MimeType:', validMimeType);
+    console.log('[OCR] Base64 length:', cleanBase64.length);
+
+    // Intentar con cada proveedor en orden
+    const providers = this.PROVIDERS.length > 0 ? this.PROVIDERS : [{
+      name: 'GROQ',
+      API_KEY: this.CONFIG.API_KEY,
+      API_URL: this.CONFIG.API_URL,
+      MODEL: this.CONFIG.MODEL
+    }];
+
+    let lastError = null;
+
+    for (const provider of providers) {
+      try {
+        console.log(`[OCR] Intentando con ${provider.name}...`);
+        const result = await this.llamarProviderAPI(provider, dataUrl, prompt);
+        console.log(`[OCR] ✓ ${provider.name} respondió correctamente`);
+        return result;
+      } catch (error) {
+        console.warn(`[OCR] ✗ ${provider.name} falló:`, error.message);
+        lastError = error;
+        // Continuar con el siguiente proveedor
+      }
+    }
+
+    // Si todos los proveedores fallaron
+    throw new Error(`Todos los proveedores OCR fallaron. Último error: ${lastError?.message || 'desconocido'}`);
+  },
+
+  // Llamar a un proveedor específico
+  async llamarProviderAPI(provider, dataUrl, prompt) {
     const requestBody = {
-      model: this.CONFIG.MODEL,
+      model: provider.MODEL,
       messages: [
         {
           role: "user",
@@ -102,7 +166,7 @@ Responde SOLO con este JSON (INCLUIR SIEMPRE EL CAMPO "letras"):
             { type: "text", text: prompt },
             {
               type: "image_url",
-              image_url: { url: dataUrlPrefix + imageBase64 }
+              image_url: { url: dataUrl }
             }
           ]
         }
@@ -112,35 +176,33 @@ Responde SOLO con este JSON (INCLUIR SIEMPRE EL CAMPO "letras"):
       stream: false
     };
 
-    try {
-      const response = await fetch(this.CONFIG.API_URL, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': 'Bearer ' + this.CONFIG.API_KEY
-        },
-        body: JSON.stringify(requestBody)
-      });
+    const response = await fetch(provider.API_URL, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': 'Bearer ' + provider.API_KEY
+      },
+      body: JSON.stringify(requestBody)
+    });
 
-      if (!response.ok) {
-        const errorText = await response.text();
-        if (response.status === 401) {
-          throw new Error('API key inválida. Verificá tu clave de Groq.');
-        }
-        throw new Error(`Error HTTP ${response.status}: ${errorText}`);
+    if (!response.ok) {
+      const errorText = await response.text();
+      if (response.status === 401) {
+        throw new Error(`API key inválida para ${provider.name}`);
       }
-
-      const data = await response.json();
-
-      if (data.choices && data.choices[0] && data.choices[0].message) {
-        const content = data.choices[0].message.content;
-        return this.procesarRespuesta(content);
-      } else {
-        throw new Error('Respuesta inesperada de la API');
+      if (response.status === 429) {
+        throw new Error(`Límite de rate excedido en ${provider.name}`);
       }
-    } catch (error) {
-      console.error('Error en OCR:', error);
-      throw error;
+      throw new Error(`${provider.name} error HTTP ${response.status}: ${errorText}`);
+    }
+
+    const data = await response.json();
+
+    if (data.choices && data.choices[0] && data.choices[0].message) {
+      const content = data.choices[0].message.content;
+      return this.procesarRespuesta(content);
+    } else {
+      throw new Error(`Respuesta inesperada de ${provider.name}`);
     }
   },
 
@@ -217,31 +279,34 @@ Analizá esta imagen de extracto de BRINCO y devolvé SOLO un objeto JSON válid
 REGLAS DE EXTRACCIÓN BRINCO:
 
 1. BRINCO tiene dos modalidades:
-   - BRINCO Tradicional: 6 números del 1 al 41
-   - BRINCO Junior Siempre Sale: 6 números del 1 al 41
+   - BRINCO Tradicional: 6 números del 00 al 40 (rango 0-40)
+   - BRINCO Junior Siempre Sale: 6 números del 00 al 40
 
 2. Para cada modalidad extraer:
-   - Los 6 números sorteados (formato "XX" con dos dígitos, ej: "05", "28", "36")
+   - Los 6 números sorteados (formato "XX" con dos dígitos, ej: "00", "05", "28", "36")
+   - IMPORTANTE: El número cero se escribe "00"
    - Cantidad de ganadores por categoría
    - Premio por ganador (monto en pesos)
 
 3. BRINCO TRADICIONAL tiene 4 niveles de premios:
-   - 6 aciertos (Primer Premio)
-   - 5 aciertos (Segundo Premio)  
-   - 4 aciertos (Tercer Premio)
-   - 3 aciertos (Cuarto Premio)
-   - Estímulo agenciero
+   - 6 aciertos (Primer Premio) - nivel "1"
+   - 5 aciertos (Segundo Premio) - nivel "2"
+   - 4 aciertos (Tercer Premio) - nivel "3"
+   - 3 aciertos (Cuarto Premio) - nivel "4"
+   - Estímulo agenciero (para agencia que vendió primer premio)
 
 4. BRINCO JUNIOR (Siempre Sale) tiene:
-   - Premio por 5 o 6 aciertos (el que salga primero)
+   - Premio por 5 o 6 aciertos (normalmente 5, usar el que aparece)
    - Siempre hay ganadores
    - Estímulo agenciero
 
-5. MONTOS: Convertí de formato argentino "999.999.999,99" a número decimal con punto (ej: 1696937067.00)
+5. MONTOS: Convertí de formato argentino "999.999.999,99" a número decimal con punto (ej: 150000000.00)
 
 6. NÚMERO DE SORTEO: Extraer el número de sorteo del encabezado
 
 7. FECHA: Extraer la fecha del sorteo en formato "YYYY-MM-DD"
+
+8. VACANTE: Si dice "VACANTE" o "SIN GANADOR", el premio está vacante (winners: 0)
 
 Responde ÚNICAMENTE con este JSON:
 {
@@ -252,12 +317,12 @@ Responde ÚNICAMENTE con este JSON:
   "brinco": {
     "numbers": ["XX", "XX", "XX", "XX", "XX", "XX"],
     "prizes": {
-      "1": { "winners": N, "premio_por_ganador": MONTO, "vacante": BOOL },
+      "1": { "winners": N, "premio_por_ganador": MONTO, "vacante": false },
       "2": { "winners": N, "premio_por_ganador": MONTO },
       "3": { "winners": N, "premio_por_ganador": MONTO },
       "4": { "winners": N, "premio_por_ganador": MONTO }
     },
-    "estimulo": { "monto": MONTO, "vacante": BOOL }
+    "estimulo": { "monto": MONTO, "vacante": false }
   },
   "brinco_junior": {
     "numbers": ["XX", "XX", "XX", "XX", "XX", "XX"],
@@ -277,81 +342,86 @@ Responde ÚNICAMENTE con este JSON:
    * Extrae los datos de un extracto de QUINI 6
    */
   async procesarImagenQuini6(imageBase64, mimeType) {
-    const prompt = `Actuás como un extractor especializado de resultados de lotería para Argentina.
+    const prompt = `Actuás como un extractor especializado de resultados de lotería QUINI 6 de Argentina.
 
-Analizá esta imagen de extracto de QUINI 6 y devolvé SOLO un objeto JSON válido.
+Analizá esta imagen de extracto oficial y devolvé SOLO un objeto JSON válido.
 
-REGLAS DE EXTRACCIÓN QUINI 6:
+REGLAS DE EXTRACCIÓN CRÍTICAS:
 
-1. QUINI 6 tiene múltiples modalidades:
-   - TRADICIONAL PRIMER SORTEO
-   - TRADICIONAL LA SEGUNDA DEL QUINI  
-   - REVANCHA
-   - SIEMPRE SALE
-   - PREMIO EXTRA
+1. NÚMEROS SORTEADOS: Extraer los 6 números grandes de cada modalidad (formato "XX" con 2 dígitos)
 
-2. Para cada modalidad de números:
-   - Extraer los 6 números sorteados (formato "XX" con dos dígitos)
-   - Buscar SOLO los 6 números grandes debajo de cada título
-   - IGNORAR montos de dinero y números de ganadores
+2. PREMIOS - LEER MUY CUIDADOSAMENTE:
+   Para cada nivel de premio buscar estos datos en el extracto:
+   - POZO $: Es el monto acumulado del pozo
+   - APUESTAS GANADORAS: Cantidad de ganadores (puede decir "VACANTE" = 0 ganadores)
+   - PREMIO POR APUESTA $: Lo que cobra CADA ganador individual
 
-3. ESTRUCTURA DE PREMIOS por modalidad:
-   - TRADICIONAL (Primer y Segunda): 1° (6 aciertos), 2° (5 aciertos), 3° (4 aciertos)
-   - REVANCHA: Solo 1° premio
-   - SIEMPRE SALE: Puede ser por 5 o 6 aciertos
+3. TRADICIONAL PRIMER SORTEO y SEGUNDA:
+   - 1° Premio = 6 aciertos
+   - 2° Premio = 5 aciertos  
+   - 3° Premio = 4 aciertos
+   - Estímulo = premio al agenciero si hay ganador de 6 aciertos en su agencia
 
-4. PREMIO EXTRA:
-   - Lee los números desde la sección "PREMIO EXTRA"
-   - Son muchos números de 2 dígitos (algunos pueden repetirse)
-   - Conservar duplicados y orden de aparición
+4. SIEMPRE SALE - MUY IMPORTANTE:
+   - Buscar "ACIERTOS" = número de aciertos requeridos (puede ser 5 o 6)
+   - Este número indica con cuántos aciertos se gana (winning_hits)
+   - APUESTAS GANADORAS = cantidad de ganadores
+   - PREMIO POR APUESTA = lo que cobra cada ganador
 
-5. MONTOS: Convertí de formato argentino "999.999.999,99" a número decimal
+5. PREMIO EXTRA:
+   - Leer TODOS los números de 2 dígitos (pueden repetirse)
+   - winners = cantidad de ganadores
+   - premio_por_ganador = lo que cobra cada uno
 
-6. NÚMERO DE SORTEO (drawNumber): Extraer del encabezado
+6. MONTOS: Convertir "999.999.999,99" argentino a número decimal (ej: 9418648.85)
 
-Responde ÚNICAMENTE con este JSON:
+7. NÚMERO DE SORTEO: Buscar "CONCURSO N°" o "SORTEO" en el encabezado
+
+JSON de respuesta:
 {
   "game": "QUINI_6",
-  "scope": "nacional",
   "drawNumber": "XXXX",
   "date": "YYYY-MM-DD",
-  "currency": "ARS",
   "tradicional": {
     "primer": {
       "numbers": ["XX","XX","XX","XX","XX","XX"],
       "prizes": { 
-        "1": { "pot": MONTO, "winners": N, "premio_por_ganador": MONTO, "pagado_total": MONTO, "vacante": BOOL },
-        "2": { "pot": MONTO, "winners": N, "premio_por_ganador": MONTO, "pagado_total": MONTO },
-        "3": { "pot": MONTO, "winners": N, "premio_por_ganador": MONTO, "pagado_total": MONTO },
-        "estimulo": { "monto": MONTO }
+        "1": { "pot": MONTO_POZO, "winners": CANTIDAD, "premio_por_ganador": MONTO_POR_APUESTA, "vacante": true/false },
+        "2": { "pot": MONTO_POZO, "winners": CANTIDAD, "premio_por_ganador": MONTO_POR_APUESTA },
+        "3": { "pot": MONTO_POZO, "winners": CANTIDAD, "premio_por_ganador": MONTO_POR_APUESTA },
+        "estimulo": { "monto": MONTO, "winners": CANTIDAD }
       }
     },
     "segunda": {
       "numbers": ["XX","XX","XX","XX","XX","XX"],
-      "prizes": { ... mismo formato ... }
+      "prizes": {
+        "1": { "pot": MONTO, "winners": CANTIDAD, "premio_por_ganador": MONTO },
+        "2": { "pot": MONTO, "winners": CANTIDAD, "premio_por_ganador": MONTO },
+        "3": { "pot": MONTO, "winners": CANTIDAD, "premio_por_ganador": MONTO },
+        "estimulo": { "monto": MONTO, "winners": CANTIDAD }
+      }
     }
   },
   "revancha": {
     "numbers": ["XX","XX","XX","XX","XX","XX"],
     "prizes": {
-      "1": { "pot": MONTO, "winners": N, "premio_por_ganador": MONTO, "vacante": BOOL },
+      "1": { "pot": MONTO, "winners": CANTIDAD, "premio_por_ganador": MONTO, "vacante": true/false },
       "estimulo": { "monto": MONTO }
     }
   },
   "siempre_sale": {
     "numbers": ["XX","XX","XX","XX","XX","XX"],
-    "winning_hits": N,
+    "winning_hits": 5,
     "prizes": {
-      "1": { "pot": MONTO, "winners": N, "premio_por_ganador": MONTO, "pagado_total": MONTO },
-      "estimulo": { "monto": MONTO, "winners": N, "pagado_total": MONTO }
+      "1": { "pot": MONTO, "winners": 39, "premio_por_ganador": 9418648.85 },
+      "estimulo": { "monto": MONTO, "winners": CANTIDAD }
     }
   },
   "premio_extra": {
-    "numbers": ["XX", "XX", ...lista de números...],
-    "pot": MONTO,
-    "winners": N,
-    "premio_por_ganador": MONTO,
-    "pagado_total": MONTO
+    "numbers": ["07","08","08","09","10","14","14","15","16","30","32","33","38","41","41","44","45","45"],
+    "pot": 155000000,
+    "winners": 175,
+    "premio_por_ganador": 885714.29
   }
 }`;
 
@@ -411,14 +481,14 @@ Responde SOLO con la palabra del tipo de juego, sin explicaciones.`;
     if (!data) return null;
 
     if (data.game === 'BRINCO' && data.sorteo_number) {
-      return \`extracto_brinco_\${data.sorteo_number}.json\`;
+      return `extracto_brinco_${data.sorteo_number}.json`;
     } else if (data.game === 'QUINI_6' && data.drawNumber) {
-      return \`extracto_quini6_\${data.drawNumber}.json\`;
+      return `extracto_quini6_${data.drawNumber}.json`;
     } else if (data.sorteo) {
-      return \`extracto_quiniela_\${data.sorteo}.json\`;
+      return `extracto_quiniela_${data.sorteo}.json`;
     }
 
-    return \`extracto_\${Date.now()}.json\`;
+    return `extracto_${Date.now()}.json`;
   },
 
   /**

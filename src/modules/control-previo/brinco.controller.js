@@ -114,8 +114,8 @@ function calcularCombinaciones(n, r) {
 }
 
 /**
- * Decodifica la secuencia de 25 caracteres de BRINCO a un array de números (1-41 en BRINCO)
- * Igual que Poceada pero los números van de 1 a 41 (no 0-99)
+ * Decodifica la secuencia de 25 caracteres de BRINCO a un array de números (0-40 en BRINCO)
+ * Los números van de 0 a 40 según formato LOTBA (00, 01, ..., 40)
  */
 function decodificarNumerosBrinco(secuencia25) {
   const numeros = [];
@@ -125,9 +125,9 @@ function decodificarNumerosBrinco(secuencia25) {
     for (let j = 0; j < 4; j++) {
       if (binario[j] === '1') {
         const numero = i * 4 + j;
-        // BRINCO usa números del 1 al 41 (el bit 0 corresponde al número 1)
+        // BRINCO usa números del 0 al 40 (41 números posibles)
         if (numero >= 0 && numero <= 40) {
-          numeros.push(numero + 1); // +1 porque BRINCO es 1-indexed
+          numeros.push(numero); // NO +1, números van de 0 a 40
         }
       }
     }

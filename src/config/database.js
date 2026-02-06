@@ -150,4 +150,10 @@ async function transaction(callback) {
   }
 }
 
-module.exports = { pool, query, transaction, testConnection };
+// Exportar getPool() como pool para compatibilidad con código existente
+module.exports = { 
+  get pool() { return getPool(); },
+  query, 
+  transaction, 
+  testConnection 
+};

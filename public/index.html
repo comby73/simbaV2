@@ -1498,6 +1498,203 @@
           </div>
         </div>
 
+        <!-- Extracto Quini 6 -->
+        <div class="card hidden" id="cpst-extracto-quini6-card">
+          <div class="card-header">
+            <h3><i class="fas fa-star"></i> 2. Extracto Quini 6 (Tradicional, Segunda, Revancha, Sale o Sale)</h3>
+          </div>
+
+          <!-- Zona de Drop para Imagen/PDF -->
+          <div id="cpst-quini6-dropzone" class="file-drop-zone" 
+               style="margin-bottom: 1rem; padding: 1.5rem; border: 2px dashed var(--warning); border-radius: 8px; text-align: center; cursor: pointer; background: rgba(245, 158, 11, 0.05);"
+               ondragover="event.preventDefault(); this.classList.add('drag-over');"
+               ondragleave="this.classList.remove('drag-over');"
+               ondrop="event.preventDefault(); this.classList.remove('drag-over'); procesarExtractoQuini6OCR(event.dataTransfer.files[0]);"
+               onclick="document.getElementById('cpst-quini6-file-input').click();">
+            <i class="fas fa-image fa-2x text-warning mb-2"></i>
+            <p style="margin: 0.5rem 0;"><strong>Arrastrá la imagen o PDF del extracto aquí</strong></p>
+            <p class="text-muted" style="font-size: 0.85rem; margin: 0;">o hacé click para seleccionar (se procesará con OCR automático)</p>
+            <input type="file" id="cpst-quini6-file-input" accept="image/*,.pdf,.json" style="display: none;" onchange="procesarExtractoQuini6OCR(this.files[0]);">
+          </div>
+          
+          <!-- Status OCR -->
+          <div id="cpst-quini6-ocr-status" class="hidden" style="margin-bottom: 1rem; padding: 1rem; background: var(--bg-input); border-radius: 8px;">
+            <div style="display: flex; align-items: center; gap: 0.5rem;">
+              <div class="spinner" style="width: 20px; height: 20px;"></div>
+              <span id="cpst-quini6-ocr-mensaje">Procesando imagen con OCR...</span>
+            </div>
+            <div id="cpst-quini6-ocr-progress" style="margin-top: 0.5rem; height: 4px; background: var(--border-color); border-radius: 2px; overflow: hidden;">
+              <div style="width: 0%; height: 100%; background: var(--primary); transition: width 0.3s;"></div>
+            </div>
+          </div>
+          
+          <div id="cpst-quini6-file-info" class="hidden" style="margin-bottom: 1rem; padding: 0.75rem; background: var(--success-bg); border-radius: 8px; border-left: 4px solid var(--success);">
+            <div style="display: flex; justify-content: space-between; align-items: center;">
+              <span><i class="fas fa-check-circle text-success"></i> <strong id="cpst-quini6-filename">extracto</strong> procesado</span>
+              <button class="btn btn-sm btn-outline" onclick="limpiarExtractoQuini6()"><i class="fas fa-times"></i></button>
+            </div>
+          </div>
+
+          <div style="text-align: center; margin: 0.5rem 0; color: var(--text-muted);">
+            <small>─── o ingresá los números manualmente ───</small>
+          </div>
+
+          <!-- Tradicional Primera vuelta -->
+          <div style="margin-top: 1rem; padding: 0.75rem; border: 1px solid var(--border-color); border-radius: 8px; border-left: 4px solid var(--primary);">
+            <label style="margin-bottom: 0.5rem; display: block;">
+              <strong><span class="badge badge-primary">Tradicional 1ª Vuelta</span></strong> 6 Números (0-45)
+            </label>
+            <div style="display: grid; grid-template-columns: repeat(6, 1fr); gap: 0.5rem; max-width: 450px;">
+              <div class="form-group" style="margin: 0;"><label style="font-size: 0.75rem; text-align: center; display: block;">1°</label><input type="number" id="cpst-quini6-trad1-1" min="0" max="45" class="form-control text-center" placeholder="00"></div>
+              <div class="form-group" style="margin: 0;"><label style="font-size: 0.75rem; text-align: center; display: block;">2°</label><input type="number" id="cpst-quini6-trad1-2" min="0" max="45" class="form-control text-center" placeholder="00"></div>
+              <div class="form-group" style="margin: 0;"><label style="font-size: 0.75rem; text-align: center; display: block;">3°</label><input type="number" id="cpst-quini6-trad1-3" min="0" max="45" class="form-control text-center" placeholder="00"></div>
+              <div class="form-group" style="margin: 0;"><label style="font-size: 0.75rem; text-align: center; display: block;">4°</label><input type="number" id="cpst-quini6-trad1-4" min="0" max="45" class="form-control text-center" placeholder="00"></div>
+              <div class="form-group" style="margin: 0;"><label style="font-size: 0.75rem; text-align: center; display: block;">5°</label><input type="number" id="cpst-quini6-trad1-5" min="0" max="45" class="form-control text-center" placeholder="00"></div>
+              <div class="form-group" style="margin: 0;"><label style="font-size: 0.75rem; text-align: center; display: block;">6°</label><input type="number" id="cpst-quini6-trad1-6" min="0" max="45" class="form-control text-center" placeholder="00"></div>
+            </div>
+          </div>
+
+          <!-- Tradicional Segunda vuelta -->
+          <div style="margin-top: 0.75rem; padding: 0.75rem; border: 1px solid var(--border-color); border-radius: 8px; border-left: 4px solid var(--success);">
+            <label style="margin-bottom: 0.5rem; display: block;">
+              <strong><span class="badge badge-success">Tradicional 2ª Vuelta</span></strong> 6 Números (0-45)
+            </label>
+            <div style="display: grid; grid-template-columns: repeat(6, 1fr); gap: 0.5rem; max-width: 450px;">
+              <div class="form-group" style="margin: 0;"><label style="font-size: 0.75rem; text-align: center; display: block;">1°</label><input type="number" id="cpst-quini6-trad2-1" min="0" max="45" class="form-control text-center" placeholder="00"></div>
+              <div class="form-group" style="margin: 0;"><label style="font-size: 0.75rem; text-align: center; display: block;">2°</label><input type="number" id="cpst-quini6-trad2-2" min="0" max="45" class="form-control text-center" placeholder="00"></div>
+              <div class="form-group" style="margin: 0;"><label style="font-size: 0.75rem; text-align: center; display: block;">3°</label><input type="number" id="cpst-quini6-trad2-3" min="0" max="45" class="form-control text-center" placeholder="00"></div>
+              <div class="form-group" style="margin: 0;"><label style="font-size: 0.75rem; text-align: center; display: block;">4°</label><input type="number" id="cpst-quini6-trad2-4" min="0" max="45" class="form-control text-center" placeholder="00"></div>
+              <div class="form-group" style="margin: 0;"><label style="font-size: 0.75rem; text-align: center; display: block;">5°</label><input type="number" id="cpst-quini6-trad2-5" min="0" max="45" class="form-control text-center" placeholder="00"></div>
+              <div class="form-group" style="margin: 0;"><label style="font-size: 0.75rem; text-align: center; display: block;">6°</label><input type="number" id="cpst-quini6-trad2-6" min="0" max="45" class="form-control text-center" placeholder="00"></div>
+            </div>
+          </div>
+
+          <!-- Revancha -->
+          <div style="margin-top: 0.75rem; padding: 0.75rem; border: 1px solid var(--border-color); border-radius: 8px; border-left: 4px solid var(--warning);">
+            <label style="margin-bottom: 0.5rem; display: block;">
+              <strong><span class="badge badge-warning">Revancha</span></strong> 6 Números (0-45)
+            </label>
+            <div style="display: grid; grid-template-columns: repeat(6, 1fr); gap: 0.5rem; max-width: 450px;">
+              <div class="form-group" style="margin: 0;"><label style="font-size: 0.75rem; text-align: center; display: block;">1°</label><input type="number" id="cpst-quini6-rev-1" min="0" max="45" class="form-control text-center" placeholder="00"></div>
+              <div class="form-group" style="margin: 0;"><label style="font-size: 0.75rem; text-align: center; display: block;">2°</label><input type="number" id="cpst-quini6-rev-2" min="0" max="45" class="form-control text-center" placeholder="00"></div>
+              <div class="form-group" style="margin: 0;"><label style="font-size: 0.75rem; text-align: center; display: block;">3°</label><input type="number" id="cpst-quini6-rev-3" min="0" max="45" class="form-control text-center" placeholder="00"></div>
+              <div class="form-group" style="margin: 0;"><label style="font-size: 0.75rem; text-align: center; display: block;">4°</label><input type="number" id="cpst-quini6-rev-4" min="0" max="45" class="form-control text-center" placeholder="00"></div>
+              <div class="form-group" style="margin: 0;"><label style="font-size: 0.75rem; text-align: center; display: block;">5°</label><input type="number" id="cpst-quini6-rev-5" min="0" max="45" class="form-control text-center" placeholder="00"></div>
+              <div class="form-group" style="margin: 0;"><label style="font-size: 0.75rem; text-align: center; display: block;">6°</label><input type="number" id="cpst-quini6-rev-6" min="0" max="45" class="form-control text-center" placeholder="00"></div>
+            </div>
+          </div>
+
+          <!-- Siempre Sale -->
+          <div style="margin-top: 0.75rem; padding: 0.75rem; border: 1px solid var(--border-color); border-radius: 8px; border-left: 4px solid #9333ea;">
+            <label style="margin-bottom: 0.5rem; display: block;">
+              <strong><span class="badge" style="background: #9333ea;">Siempre Sale</span></strong> 6 Números (0-45)
+            </label>
+            <div style="display: grid; grid-template-columns: repeat(6, 1fr); gap: 0.5rem; max-width: 450px;">
+              <div class="form-group" style="margin: 0;"><label style="font-size: 0.75rem; text-align: center; display: block;">1°</label><input type="number" id="cpst-quini6-ss-1" min="0" max="45" class="form-control text-center" placeholder="00"></div>
+              <div class="form-group" style="margin: 0;"><label style="font-size: 0.75rem; text-align: center; display: block;">2°</label><input type="number" id="cpst-quini6-ss-2" min="0" max="45" class="form-control text-center" placeholder="00"></div>
+              <div class="form-group" style="margin: 0;"><label style="font-size: 0.75rem; text-align: center; display: block;">3°</label><input type="number" id="cpst-quini6-ss-3" min="0" max="45" class="form-control text-center" placeholder="00"></div>
+              <div class="form-group" style="margin: 0;"><label style="font-size: 0.75rem; text-align: center; display: block;">4°</label><input type="number" id="cpst-quini6-ss-4" min="0" max="45" class="form-control text-center" placeholder="00"></div>
+              <div class="form-group" style="margin: 0;"><label style="font-size: 0.75rem; text-align: center; display: block;">5°</label><input type="number" id="cpst-quini6-ss-5" min="0" max="45" class="form-control text-center" placeholder="00"></div>
+              <div class="form-group" style="margin: 0;"><label style="font-size: 0.75rem; text-align: center; display: block;">6°</label><input type="number" id="cpst-quini6-ss-6" min="0" max="45" class="form-control text-center" placeholder="00"></div>
+            </div>
+          </div>
+
+          <div id="cpst-quini6-preview"></div>
+
+          <div style="margin-top: 1.5rem; display: flex; gap: 1rem;">
+            <button class="btn btn-primary" onclick="cargarExtractoQuini6Manual();">
+              <i class="fas fa-check"></i> Confirmar Extracto
+            </button>
+            <button class="btn btn-secondary" onclick="limpiarExtractoQuini6();">
+              <i class="fas fa-eraser"></i> Limpiar
+            </button>
+          </div>
+        </div>
+
+        <!-- Extracto Brinco -->
+        <div class="card hidden" id="cpst-extracto-brinco-card">
+          <div class="card-header">
+            <h3><i class="fas fa-gem"></i> 2. Extracto Brinco (Tradicional y Junior)</h3>
+          </div>
+
+          <!-- Zona de Drop para Imagen/PDF -->
+          <div id="cpst-brinco-dropzone" class="file-drop-zone" 
+               style="margin-bottom: 1rem; padding: 1.5rem; border: 2px dashed var(--warning); border-radius: 8px; text-align: center; cursor: pointer; background: rgba(245, 158, 11, 0.05);"
+               ondragover="event.preventDefault(); this.classList.add('drag-over');"
+               ondragleave="this.classList.remove('drag-over');"
+               ondrop="event.preventDefault(); this.classList.remove('drag-over'); procesarExtractoBrincoOCR(event.dataTransfer.files[0]);"
+               onclick="document.getElementById('cpst-brinco-file-input').click();">
+            <i class="fas fa-image fa-2x text-warning mb-2"></i>
+            <p style="margin: 0.5rem 0;"><strong>Arrastrá la imagen o PDF del extracto aquí</strong></p>
+            <p class="text-muted" style="font-size: 0.85rem; margin: 0;">o hacé click para seleccionar (se procesará con OCR automático)</p>
+            <input type="file" id="cpst-brinco-file-input" accept="image/*,.pdf,.json" style="display: none;" onchange="procesarExtractoBrincoOCR(this.files[0]);">
+          </div>
+          
+          <!-- Status OCR -->
+          <div id="cpst-brinco-ocr-status" class="hidden" style="margin-bottom: 1rem; padding: 1rem; background: var(--bg-input); border-radius: 8px;">
+            <div style="display: flex; align-items: center; gap: 0.5rem;">
+              <div class="spinner" style="width: 20px; height: 20px;"></div>
+              <span id="cpst-brinco-ocr-mensaje">Procesando imagen con OCR...</span>
+            </div>
+            <div id="cpst-brinco-ocr-progress" style="margin-top: 0.5rem; height: 4px; background: var(--border-color); border-radius: 2px; overflow: hidden;">
+              <div style="width: 0%; height: 100%; background: var(--primary); transition: width 0.3s;"></div>
+            </div>
+          </div>
+          
+          <div id="cpst-brinco-file-info" class="hidden" style="margin-bottom: 1rem; padding: 0.75rem; background: var(--success-bg); border-radius: 8px; border-left: 4px solid var(--success);">
+            <div style="display: flex; justify-content: space-between; align-items: center;">
+              <span><i class="fas fa-check-circle text-success"></i> <strong id="cpst-brinco-filename">extracto</strong> procesado</span>
+              <button class="btn btn-sm btn-outline" onclick="limpiarExtractoBrinco()"><i class="fas fa-times"></i></button>
+            </div>
+          </div>
+
+          <div style="text-align: center; margin: 0.5rem 0; color: var(--text-muted);">
+            <small>─── o ingresá los números manualmente ───</small>
+          </div>
+
+          <!-- Brinco Tradicional -->
+          <div style="margin-top: 1rem; padding: 0.75rem; border: 1px solid var(--border-color); border-radius: 8px; border-left: 4px solid var(--primary);">
+            <label style="margin-bottom: 0.5rem; display: block;">
+              <strong><span class="badge badge-primary">BRINCO Tradicional</span></strong> 6 Números (0-40)
+            </label>
+            <div style="display: grid; grid-template-columns: repeat(6, 1fr); gap: 0.5rem; max-width: 450px;">
+              <div class="form-group" style="margin: 0;"><label style="font-size: 0.75rem; text-align: center; display: block;">1°</label><input type="number" id="cpst-brinco-trad-1" min="0" max="40" class="form-control text-center" placeholder="00"></div>
+              <div class="form-group" style="margin: 0;"><label style="font-size: 0.75rem; text-align: center; display: block;">2°</label><input type="number" id="cpst-brinco-trad-2" min="0" max="40" class="form-control text-center" placeholder="00"></div>
+              <div class="form-group" style="margin: 0;"><label style="font-size: 0.75rem; text-align: center; display: block;">3°</label><input type="number" id="cpst-brinco-trad-3" min="0" max="40" class="form-control text-center" placeholder="00"></div>
+              <div class="form-group" style="margin: 0;"><label style="font-size: 0.75rem; text-align: center; display: block;">4°</label><input type="number" id="cpst-brinco-trad-4" min="0" max="40" class="form-control text-center" placeholder="00"></div>
+              <div class="form-group" style="margin: 0;"><label style="font-size: 0.75rem; text-align: center; display: block;">5°</label><input type="number" id="cpst-brinco-trad-5" min="0" max="40" class="form-control text-center" placeholder="00"></div>
+              <div class="form-group" style="margin: 0;"><label style="font-size: 0.75rem; text-align: center; display: block;">6°</label><input type="number" id="cpst-brinco-trad-6" min="0" max="40" class="form-control text-center" placeholder="00"></div>
+            </div>
+          </div>
+
+          <!-- Brinco Junior -->
+          <div style="margin-top: 0.75rem; padding: 0.75rem; border: 1px solid var(--border-color); border-radius: 8px; border-left: 4px solid var(--success);">
+            <label style="margin-bottom: 0.5rem; display: block;">
+              <strong><span class="badge badge-success">BRINCO Junior</span></strong> 6 Números (0-40)
+              <small class="text-muted" style="font-weight: normal;">(dejar vacío si usa los mismos que Tradicional)</small>
+            </label>
+            <div style="display: grid; grid-template-columns: repeat(6, 1fr); gap: 0.5rem; max-width: 450px;">
+              <div class="form-group" style="margin: 0;"><label style="font-size: 0.75rem; text-align: center; display: block;">1°</label><input type="number" id="cpst-brinco-junior-1" min="0" max="40" class="form-control text-center" placeholder="00"></div>
+              <div class="form-group" style="margin: 0;"><label style="font-size: 0.75rem; text-align: center; display: block;">2°</label><input type="number" id="cpst-brinco-junior-2" min="0" max="40" class="form-control text-center" placeholder="00"></div>
+              <div class="form-group" style="margin: 0;"><label style="font-size: 0.75rem; text-align: center; display: block;">3°</label><input type="number" id="cpst-brinco-junior-3" min="0" max="40" class="form-control text-center" placeholder="00"></div>
+              <div class="form-group" style="margin: 0;"><label style="font-size: 0.75rem; text-align: center; display: block;">4°</label><input type="number" id="cpst-brinco-junior-4" min="0" max="40" class="form-control text-center" placeholder="00"></div>
+              <div class="form-group" style="margin: 0;"><label style="font-size: 0.75rem; text-align: center; display: block;">5°</label><input type="number" id="cpst-brinco-junior-5" min="0" max="40" class="form-control text-center" placeholder="00"></div>
+              <div class="form-group" style="margin: 0;"><label style="font-size: 0.75rem; text-align: center; display: block;">6°</label><input type="number" id="cpst-brinco-junior-6" min="0" max="40" class="form-control text-center" placeholder="00"></div>
+            </div>
+          </div>
+
+          <div id="cpst-brinco-preview"></div>
+
+          <div style="margin-top: 1.5rem; display: flex; gap: 1rem;">
+            <button class="btn btn-primary" onclick="cargarExtractoBrincoManual();">
+              <i class="fas fa-check"></i> Confirmar Extracto
+            </button>
+            <button class="btn btn-secondary" onclick="limpiarExtractoBrinco();">
+              <i class="fas fa-eraser"></i> Limpiar
+            </button>
+          </div>
+        </div>
+
         <!-- Paso 3: Ejecutar Escrutinio -->
         <div class="card">
           <div class="card-header">
@@ -3078,9 +3275,12 @@
   <!-- Toast Container -->
   <div id="toast-container"></div>
 
-  <script src="js/api.js?v=20260205i"></script>
-  <script src="js/ocr-extractos.js?v=20260205i"></script>
-  <script src="js/app.js?v=20260205i"></script>
+  <!-- Config local (API keys) - debe cargarse primero, no se sube a git -->
+  <script src="js/config.local.js" onerror="console.warn('config.local.js no encontrado - usando config por defecto')"></script>
+  <script src="js/config.js?v=20260206g"></script>
+  <script src="js/api.js?v=20260206a"></script>
+  <script src="js/ocr-extractos.js?v=20260206g"></script>
+  <script src="js/app.js?v=20260206i"></script>
 </body>
 
 </html>

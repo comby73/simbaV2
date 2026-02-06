@@ -1243,6 +1243,102 @@ const obtenerDatosDashboard = async (req, res) => {
         resultados = resultados.concat(lotoData);
       }
 
+      // LOTO 5
+      if (!juego || juego === 'loto5') {
+        const paramsL5 = [];
+        let whereL5 = '';
+        if (fechaDesde) { whereL5 += ' AND cp.created_at >= ?'; paramsL5.push(fechaDesde); }
+        if (fechaHasta) { whereL5 += ' AND cp.created_at <= ?'; paramsL5.push(fechaHasta + ' 23:59:59'); }
+        if (sorteoDesde) { whereL5 += ' AND cp.numero_sorteo >= ?'; paramsL5.push(sorteoDesde); }
+        if (sorteoHasta) { whereL5 += ' AND cp.numero_sorteo <= ?'; paramsL5.push(sorteoHasta); }
+
+        const sqlL5 = `
+          SELECT
+            cp.id, DATE(cp.created_at) as fecha, cp.numero_sorteo as sorteo, 'U' as modalidad,
+            cp.registros_validos as total_registros,
+            (cp.registros_validos + cp.registros_anulados) as total_tickets,
+            cp.apuestas_total as total_apuestas,
+            cp.registros_anulados as total_anulados,
+            cp.recaudacion as recaudacion_total,
+            COALESCE(el5.total_premios, 0) as total_premios,
+            COALESCE(el5.total_ganadores, 0) as total_ganadores,
+            NULL as usuario_nombre,
+            cp.created_at,
+            'loto5' as juego
+          FROM control_previo_loto5 cp
+          LEFT JOIN escrutinio_loto5 el5 ON cp.numero_sorteo = el5.numero_sorteo
+          WHERE 1=1 ${whereL5}
+          ORDER BY cp.created_at DESC
+          LIMIT ${maxLimit} OFFSET ${offsetNum}
+        `;
+        const loto5Data = await query(sqlL5, paramsL5);
+        resultados = resultados.concat(loto5Data);
+      }
+
+      // QUINI 6
+      if (!juego || juego === 'quini6') {
+        const paramsQ6 = [];
+        let whereQ6 = '';
+        if (fechaDesde) { whereQ6 += ' AND cp.fecha >= ?'; paramsQ6.push(fechaDesde); }
+        if (fechaHasta) { whereQ6 += ' AND cp.fecha <= ?'; paramsQ6.push(fechaHasta); }
+        if (sorteoDesde) { whereQ6 += ' AND cp.numero_sorteo >= ?'; paramsQ6.push(sorteoDesde); }
+        if (sorteoHasta) { whereQ6 += ' AND cp.numero_sorteo <= ?'; paramsQ6.push(sorteoHasta); }
+
+        const sqlQ6 = `
+          SELECT
+            cp.id, cp.fecha, cp.numero_sorteo as sorteo, 'U' as modalidad,
+            cp.registros_validos as total_registros,
+            (cp.registros_validos + cp.registros_anulados) as total_tickets,
+            cp.apuestas_total as total_apuestas,
+            cp.registros_anulados as total_anulados,
+            cp.recaudacion as recaudacion_total,
+            COALESCE(eq6.total_premios, 0) as total_premios,
+            COALESCE(eq6.total_ganadores, 0) as total_ganadores,
+            NULL as usuario_nombre,
+            cp.created_at,
+            'quini6' as juego
+          FROM control_previo_quini6 cp
+          LEFT JOIN escrutinio_quini6 eq6 ON cp.numero_sorteo = eq6.numero_sorteo
+          WHERE 1=1 ${whereQ6}
+          ORDER BY cp.fecha DESC, cp.numero_sorteo DESC
+          LIMIT ${maxLimit} OFFSET ${offsetNum}
+        `;
+        const quini6Data = await query(sqlQ6, paramsQ6);
+        resultados = resultados.concat(quini6Data);
+      }
+
+      // BRINCO
+      if (!juego || juego === 'brinco') {
+        const paramsB = [];
+        let whereB = '';
+        if (fechaDesde) { whereB += ' AND cp.fecha >= ?'; paramsB.push(fechaDesde); }
+        if (fechaHasta) { whereB += ' AND cp.fecha <= ?'; paramsB.push(fechaHasta); }
+        if (sorteoDesde) { whereB += ' AND cp.numero_sorteo >= ?'; paramsB.push(sorteoDesde); }
+        if (sorteoHasta) { whereB += ' AND cp.numero_sorteo <= ?'; paramsB.push(sorteoHasta); }
+
+        const sqlB = `
+          SELECT
+            cp.id, cp.fecha, cp.numero_sorteo as sorteo, 'U' as modalidad,
+            cp.registros_validos as total_registros,
+            (cp.registros_validos + cp.registros_anulados) as total_tickets,
+            cp.apuestas_total as total_apuestas,
+            cp.registros_anulados as total_anulados,
+            cp.recaudacion as recaudacion_total,
+            COALESCE(eb.total_premios, 0) as total_premios,
+            COALESCE(eb.total_ganadores, 0) as total_ganadores,
+            NULL as usuario_nombre,
+            cp.created_at,
+            'brinco' as juego
+          FROM control_previo_brinco cp
+          LEFT JOIN escrutinio_brinco eb ON cp.numero_sorteo = eb.numero_sorteo
+          WHERE 1=1 ${whereB}
+          ORDER BY cp.fecha DESC, cp.numero_sorteo DESC
+          LIMIT ${maxLimit} OFFSET ${offsetNum}
+        `;
+        const brincoData = await query(sqlB, paramsB);
+        resultados = resultados.concat(brincoData);
+      }
+
       // Hipicas (desde facturacion_turfito)
       if (!juego || juego === 'hipicas') {
         let whereH = '';

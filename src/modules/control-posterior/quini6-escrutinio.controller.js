@@ -120,9 +120,9 @@ async function runScrutiny(registros, extracto) {
     
     // Estadísticas por instancia
     porInstancia: {
-      '1': { registros: 0, recaudacion: 0, ganadores: 0 },
-      '2': { registros: 0, recaudacion: 0, ganadores: 0 },
-      '3': { registros: 0, recaudacion: 0, ganadores: 0 }
+      '1': { registros: 0, apuestas: 0, recaudacion: 0, ganadores: 0 },
+      '2': { registros: 0, apuestas: 0, recaudacion: 0, ganadores: 0 },
+      '3': { registros: 0, apuestas: 0, recaudacion: 0, ganadores: 0 }
     }
   };
   
@@ -134,6 +134,17 @@ async function runScrutiny(registros, extracto) {
   const numsPremioExtra = resultados.extracto.premioExtra;
   const ssAciertosRequeridos = resultados.extracto.siempreSaleAciertosRequeridos;
   
+  // Log de configuración inicial
+  console.log('[QUINI6 ESCRUTINIO] ====================================');
+  console.log('[QUINI6 ESCRUTINIO] Números del extracto:');
+  console.log('  - Tradicional Primera:', numsTradPrimera);
+  console.log('  - Tradicional Segunda:', numsTradSegunda);
+  console.log('  - Revancha:', numsRevancha);
+  console.log('  - Siempre Sale:', numsSiempreSale, '(requiere', ssAciertosRequeridos, 'aciertos)');
+  console.log('  - Premio Extra:', numsPremioExtra, '(' + numsPremioExtra.length + ' números en pool)');
+  console.log('[QUINI6 ESCRUTINIO] Total registros:', registros.length);
+  console.log('[QUINI6 ESCRUTINIO] ====================================');
+  
   // Procesar cada registro
   for (const registro of registros) {
     resultados.resumen.totalRegistros++;
@@ -144,7 +155,6 @@ async function runScrutiny(registros, extracto) {
     }
     
     resultados.resumen.registrosValidos++;
-    resultados.resumen.totalApuestasSimples += registro.apuestasSimples || 1;
     resultados.resumen.recaudacionTotal += registro.valorRealApuesta || 0;
     
     const numerosJugados = registro.numerosJugados || [];
@@ -153,9 +163,19 @@ async function runScrutiny(registros, extracto) {
     const agenciaKey = registro.ctaCte || `${registro.provincia}-${registro.agencia}`;
     
     // Estadísticas por instancia
+    // Cada instancia representa cuántas modalidades juega:
+    // Instancia 1 = Tradicional (1 apuesta)
+    // Instancia 2 = Tradicional + Revancha (2 apuestas)
+    // Instancia 3 = Tradicional + Revancha + Siempre Sale (3 apuestas)
+    const apuestasPorInstancia = parseInt(instancia) || 1;
+    
+    // Sumar apuestas al total (instancia determina cuántas modalidades)
+    resultados.resumen.totalApuestasSimples += apuestasPorInstancia;
+    
     if (resultados.porInstancia[instancia]) {
       resultados.porInstancia[instancia].registros++;
       resultados.porInstancia[instancia].recaudacion += registro.valorRealApuesta || 0;
+      resultados.porInstancia[instancia].apuestas = (resultados.porInstancia[instancia].apuestas || 0) + apuestasPorInstancia;
     }
     
     // Inicializar agencia si no existe
@@ -186,6 +206,11 @@ async function runScrutiny(registros, extracto) {
     if (numsTradPrimera.length === 6) {
       const aciertos = contarAciertos(numerosJugados, numsTradPrimera);
       
+      // Debug para Tradicional Primera
+      if (aciertos >= 4) {
+        console.log(`[TP] Línea ${registro.linea}: jugados=[${numerosJugados}] (${cantidadNumeros}nums), aciertos=${aciertos}`);
+      }
+      
       for (const nivel of [6, 5, 4]) {
         if (aciertos >= nivel) {
           let cantidadGanadores;
@@ -199,6 +224,7 @@ async function runScrutiny(registros, extracto) {
           }
           
           if (cantidadGanadores > 0) {
+            console.log(`[TP GANADOR] Línea ${registro.linea}: nivel=${nivel}, aciertos=${aciertos}, ganadores=${cantidadGanadores}`);
             resultados.ganadores.tradicionalPrimera[nivel.toString()].cantidad += cantidadGanadores;
             resultados.ganadores.tradicionalPrimera[nivel.toString()].registros.push({
               linea: registro.linea,
@@ -288,6 +314,9 @@ async function runScrutiny(registros, extracto) {
     if (instancia === '3' && numsSiempreSale.length === 6) {
       const aciertos = contarAciertos(numerosJugados, numsSiempreSale);
       
+      // Debug log para TODOS los registros de instancia 3
+      console.log(`[SS] Línea ${registro.linea}: jugados=[${numerosJugados}] (${cantidadNumeros}nums), aciertos=${aciertos}, requeridos=${ssAciertosRequeridos}`);
+      
       if (aciertos >= ssAciertosRequeridos) {
         let cantidadGanadores;
         
@@ -295,7 +324,10 @@ async function runScrutiny(registros, extracto) {
           cantidadGanadores = 1;
         } else {
           cantidadGanadores = calcularGanadoresMultiples(cantidadNumeros, aciertos, ssAciertosRequeridos);
+          console.log(`[SS MULTIPLE] Cálculo: C(${aciertos},${ssAciertosRequeridos}) * C(${cantidadNumeros - aciertos},${6 - ssAciertosRequeridos}) = ${cantidadGanadores}`);
         }
+        
+        console.log(`[SS GANADOR] Línea ${registro.linea}: aciertos=${aciertos}, cantidadNums=${cantidadNumeros}, ganadores=${cantidadGanadores}`);
         
         if (cantidadGanadores > 0) {
           resultados.ganadores.siempreSale.cantidad += cantidadGanadores;
@@ -315,19 +347,31 @@ async function runScrutiny(registros, extracto) {
     }
     
     // ===========================================
-    // PREMIO EXTRA (todas las instancias si aplica)
+    // PREMIO EXTRA (todas las instancias)
+    // Premio Extra tiene un pool de ~18 números. Ganas si tus 6 números están en ese pool.
+    // Para múltiples: C(matches, 6) combinaciones ganadoras
     // ===========================================
-    if (numsPremioExtra.length === 6) {
+    if (numsPremioExtra.length > 0) {
       const aciertos = contarAciertos(numerosJugados, numsPremioExtra);
       
-      if (aciertos === 6) {
+      // Debug log para Premio Extra
+      if (aciertos >= 5) {
+        console.log(`[PE] Línea ${registro.linea}: jugados=[${numerosJugados}] (${cantidadNumeros}nums), aciertos=${aciertos} de pool=${numsPremioExtra.length}`);
+      }
+      
+      // Para ganar Premio Extra, necesitas que 6 de tus números estén en el pool
+      if (aciertos >= 6) {
         let cantidadGanadores;
         
         if (cantidadNumeros === 6) {
+          // Apuesta simple: si los 6 están en el pool, 1 ganador
           cantidadGanadores = 1;
         } else {
-          cantidadGanadores = calcularGanadoresMultiples(cantidadNumeros, aciertos, 6);
+          // Apuesta múltiple: C(aciertos, 6) combinaciones donde los 6 están en el pool
+          cantidadGanadores = calcularCombinaciones(aciertos, 6);
         }
+        
+        console.log(`[PE GANADOR] Línea ${registro.linea}: aciertos=${aciertos}, cantidadNums=${cantidadNumeros}, ganadores=${cantidadGanadores}`);
         
         if (cantidadGanadores > 0) {
           resultados.ganadores.premioExtra['6'].cantidad += cantidadGanadores;
@@ -567,18 +611,28 @@ async function ejecutar(req, res) {
       tradicional: {
         primera: tradicionalPrimera.map(n => parseInt(n)),
         segunda: tradicionalSegunda.map(n => parseInt(n)),
-        // Premios del extracto
-        premiosPrimera: extracto.tradicional?.primer?.prizes || extracto.tradicional?.primera?.prizes || {},
-        premiosSegunda: extracto.tradicional?.segunda?.prizes || {}
+        // Premios del extracto - buscar en múltiples posibles ubicaciones
+        premiosPrimera: extracto.tradicional?.premiosPrimera || extracto.tradicional?.primer?.prizes || {},
+        premiosSegunda: extracto.tradicional?.premiosSegunda || extracto.tradicional?.segunda?.prizes || {}
       },
       revancha: revancha.map(n => parseInt(n)),
-      revanchaPremios: extracto.revancha?.prizes || {},
+      revanchaPremios: extracto.revanchaPremios || extracto.revancha?.prizes || {},
       siempreSale: siempreSale.map(n => parseInt(n)),
       siempreSaleAciertos: parseInt(ssAciertos),
-      siempreSalePremios: extracto.siempreSale?.prizes || extracto.siempre_sale?.prizes || {},
+      siempreSalePremios: extracto.siempreSalePremios || extracto.siempre_sale?.prizes || {},
       premioExtra: premioExtra.map(n => parseInt(n)),
-      premioExtraPremios: extracto.premioExtra?.prizes || extracto.premio_extra?.prizes || {}
+      premioExtraPremios: extracto.premioExtraPremios || extracto.premio_extra?.prizes || {}
     };
+    
+    // Log para debug
+    console.log('[QUINI6] Extracto normalizado:');
+    console.log('  - Premio Extra pool:', extractoNormalizado.premioExtra.length, 'números:', extractoNormalizado.premioExtra);
+    console.log('[QUINI6] Premios recibidos:', {
+      premiosPrimera: extractoNormalizado.tradicional.premiosPrimera,
+      premiosSegunda: extractoNormalizado.tradicional.premiosSegunda,
+      siempreSalePremios: extractoNormalizado.siempreSalePremios,
+      premioExtraPremios: extractoNormalizado.premioExtraPremios
+    });
     
     // Ejecutar escrutinio
     const resultados = await runScrutiny(registros, extractoNormalizado);

@@ -63,7 +63,8 @@ function combinaciones(n, k) {
 }
 
 /**
- * Decodifica la secuencia de 25 caracteres de BRINCO a un array de números (1-41)
+ * Decodifica la secuencia de 25 caracteres de BRINCO a un array de números (0-40)
+ * Los números van de 0 a 40 según formato LOTBA
  */
 function decodificarNumerosBrinco(secuencia25) {
   const numeros = [];
@@ -73,9 +74,9 @@ function decodificarNumerosBrinco(secuencia25) {
     for (let j = 0; j < 4; j++) {
       if (binario[j] === '1') {
         const numero = i * 4 + j;
-        // BRINCO usa números del 1 al 41
+        // BRINCO usa números del 0 al 40 (41 números posibles)
         if (numero >= 0 && numero <= 40) {
-          numeros.push(numero + 1);
+          numeros.push(numero); // NO +1, números van de 0 a 40
         }
       }
     }
@@ -175,8 +176,8 @@ function runScrutiny(registrosNTF, extracto, datosControlPrevio, registrosAnulad
   };
   
   const porNivelJunior = {
-    6: { ganadores: 0, premioUnitario: 0, totalPremios: 0 },
-    5: { ganadores: 0, premioUnitario: 0, totalPremios: 0 }
+    6: { ganadores: 0, premioUnitario: 0, totalPremios: 0, agenciasGanadoras: [] },
+    5: { ganadores: 0, premioUnitario: 0, totalPremios: 0, agenciasGanadoras: [] }
   };
   
   // Estadísticas por cantidad de números jugados
@@ -340,6 +341,17 @@ function runScrutiny(registrosNTF, extracto, datosControlPrevio, registrosAnulad
           numerosJugados: numerosJugados.slice()
         });
         
+        // Agregar a agenciasGanadoras de Junior (5+ aciertos)
+        porNivelJunior[nivelJunior].agenciasGanadoras.push({
+          agencia: registro.agencia || '',
+          provincia: codProv,
+          ctaCte: `${codProv}-${codAgencia}`,
+          ticket: registro.ticket || registro.numeroTicket || '',
+          importe: importe,
+          aciertos: aciertosJunior,
+          numerosJugados: numerosJugados.slice()
+        });
+        
         if (porCantidadNumeros[cantNum]) {
           porCantidadNumeros[cantNum].ganadoresJunior[nivelJunior]++;
         }
@@ -351,6 +363,19 @@ function runScrutiny(registrosNTF, extracto, datosControlPrevio, registrosAnulad
       for (const nivel of [6, 5]) {
         if (ganadoresMultiplesJunior[nivel] > 0 && nivel >= aciertosRequeridosJunior) {
           porNivelJunior[nivel].ganadores += ganadoresMultiplesJunior[nivel];
+          
+          // Agregar a agenciasGanadoras de Junior (apuesta múltiple)
+          porNivelJunior[nivel].agenciasGanadoras.push({
+            agencia: registro.agencia || '',
+            provincia: codProv,
+            ctaCte: `${codProv}-${codAgencia}`,
+            ticket: registro.ticket || registro.numeroTicket || '',
+            importe: importe,
+            aciertos: nivel,
+            cantidadCombinaciones: ganadoresMultiplesJunior[nivel],
+            esMultiple: true,
+            numerosJugados: numerosJugados.slice()
+          });
           
           for (let k = 0; k < ganadoresMultiplesJunior[nivel]; k++) {
             ganadoresDetalle.push({
@@ -378,18 +403,25 @@ function runScrutiny(registrosNTF, extracto, datosControlPrevio, registrosAnulad
   const premiosTradicional = extracto.tradicional.premios || {};
   const premiosJunior = extracto.junior?.premios || {};
   
+  // Mapeo de nivel de aciertos a key del JSON
+  // JSON usa: "1" = 6 aciertos, "2" = 5 aciertos, "3" = 4 aciertos, "4" = 3 aciertos
+  const nivelToKey = { 6: '1', 5: '2', 4: '3', 3: '4' };
+  
   // Asignar premios unitarios del extracto a cada nivel
   for (const nivel of [6, 5, 4, 3]) {
-    const premioInfo = premiosTradicional[nivel] || premiosTradicional[nivel.toString()] || {};
+    const key = nivelToKey[nivel];
+    // Buscar por key de nivel de premio ("1", "2", etc.) o por número de aciertos (6, 5, etc.)
+    const premioInfo = premiosTradicional[key] || premiosTradicional[nivel] || premiosTradicional[nivel.toString()] || {};
     porNivelTradicional[nivel].premioUnitario = parseFloat(premioInfo.premio_por_ganador || premioInfo.premioUnitario || 0);
     porNivelTradicional[nivel].ganadores_extracto = parseInt(premioInfo.winners || premioInfo.ganadores || 0);
     porNivelTradicional[nivel].totalPremios = porNivelTradicional[nivel].ganadores * porNivelTradicional[nivel].premioUnitario;
     porNivelTradicional[nivel].ganadoresTexto = numeroALetras(porNivelTradicional[nivel].ganadores);
   }
   
-  // Premios Junior
+  // Premios Junior - usualmente solo hay un nivel (key "1")
   for (const nivel of [6, 5]) {
-    const premioInfo = premiosJunior[nivel] || premiosJunior[nivel.toString()] || premiosJunior['1'] || {};
+    // Junior usa "1" como único key para su premio
+    const premioInfo = premiosJunior['1'] || premiosJunior[nivel] || premiosJunior[nivel.toString()] || {};
     porNivelJunior[nivel].premioUnitario = parseFloat(premioInfo.premio_por_ganador || premioInfo.premioUnitario || 0);
     porNivelJunior[nivel].ganadores_extracto = parseInt(premioInfo.winners || premioInfo.ganadores || 0);
     porNivelJunior[nivel].totalPremios = porNivelJunior[nivel].ganadores * porNivelJunior[nivel].premioUnitario;
@@ -498,6 +530,16 @@ function runScrutiny(registrosNTF, extracto, datosControlPrevio, registrosAnulad
           diferencia: porNivelJunior[5].ganadores - (porNivelJunior[5].ganadores_extracto || 0)
         }
       }
+    },
+    
+    // Datos del control previo para mostrar en frontend
+    datosControlPrevio: {
+      totalApuestas: totalApuestas,
+      totalRecaudacion: totalRecaudacion,
+      registros: totalRegistrosValidos,
+      anulados: registrosAnulados,
+      recaudacion: totalRecaudacion,
+      totalAnulados: registrosAnulados
     }
   };
 }

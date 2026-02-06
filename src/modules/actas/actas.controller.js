@@ -2076,6 +2076,513 @@ const generarActaControlPosterior = async (req, res) => {
       doc.text(formatearMoneda(resData.totalPremios || 0), 180, y + 22);
       y += 45;
 
+    } else if (tipoJuego === 'Quini 6' || tipoJuego === 'QUINI 6' || tipoJuego === 'Quini6') {
+      // ══════════════════════════════════════════════════════════════
+      // QUINI 6 - Escrutinio completo
+      // ══════════════════════════════════════════════════════════════
+      const ganadores = resData.ganadores || {};
+      const extractoQ6 = resData.extracto || datos.extractoQuini6 || {};
+      const porInstancia = resData.porInstancia || {};
+      
+      // ========== RESUMEN GENERAL ==========
+      doc.rect(50, y, 495, 22).fill('#1e3a5f');
+      doc.fillColor('#ffffff').fontSize(10).font('Helvetica-Bold')
+         .text('RESUMEN GENERAL', 60, y + 6);
+      y += 28;
+      
+      // Cajas de estadísticas
+      const recaudacion = (porInstancia['1']?.recaudacion || 0) + (porInstancia['2']?.recaudacion || 0) + (porInstancia['3']?.recaudacion || 0);
+      const totalApuestas = (porInstancia['1']?.apuestas || (porInstancia['1']?.registros || 0)) + 
+                           (porInstancia['2']?.apuestas || (porInstancia['2']?.registros || 0) * 2) + 
+                           (porInstancia['3']?.apuestas || (porInstancia['3']?.registros || 0) * 3);
+      let totalGanadoresQ6 = 0;
+      let totalPremiosQ6 = 0;
+      
+      // Sumar ganadores y premios de todas las modalidades
+      for (const nivel of ['6', '5', '4']) {
+        totalGanadoresQ6 += (ganadores.tradicionalPrimera?.[nivel]?.cantidad || 0);
+        totalGanadoresQ6 += (ganadores.tradicionalSegunda?.[nivel]?.cantidad || 0);
+        totalPremiosQ6 += (ganadores.tradicionalPrimera?.[nivel]?.premioTotal || 0);
+        totalPremiosQ6 += (ganadores.tradicionalSegunda?.[nivel]?.premioTotal || 0);
+      }
+      totalGanadoresQ6 += (ganadores.revancha?.['6']?.cantidad || 0);
+      totalGanadoresQ6 += (ganadores.siempreSale?.cantidad || 0);
+      totalGanadoresQ6 += (ganadores.premioExtra?.['6']?.cantidad || 0);
+      totalPremiosQ6 += (ganadores.revancha?.['6']?.premioTotal || 0);
+      totalPremiosQ6 += (ganadores.siempreSale?.premioTotal || 0);
+      totalPremiosQ6 += (ganadores.premioExtra?.['6']?.premioTotal || 0);
+      
+      // Caja 1: Total Registros
+      doc.rect(50, y, 95, 45).fill('#f0f9ff').stroke('#3b82f6');
+      doc.fillColor('#1e40af').fontSize(7).text('TICKETS', 55, y + 8);
+      doc.fontSize(12).font('Helvetica-Bold').text(formatearNumero(resData.resumen?.registrosValidos || 0), 55, y + 22);
+      
+      // Caja 2: Total Apuestas
+      doc.rect(150, y, 95, 45).fill('#ede9fe').stroke('#8b5cf6');
+      doc.fillColor('#6b21a8').fontSize(7).font('Helvetica').text('APUESTAS', 155, y + 8);
+      doc.fontSize(12).font('Helvetica-Bold').text(formatearNumero(totalApuestas), 155, y + 22);
+      
+      // Caja 3: Total Ganadores
+      doc.rect(250, y, 95, 45).fill('#f0fdf4').stroke('#22c55e');
+      doc.fillColor('#166534').fontSize(7).font('Helvetica').text('GANADORES', 255, y + 8);
+      doc.fontSize(12).font('Helvetica-Bold').text(formatearNumero(totalGanadoresQ6), 255, y + 22);
+      
+      // Caja 4: Recaudación
+      doc.rect(350, y, 95, 45).fill('#fef3c7').stroke('#f59e0b');
+      doc.fillColor('#92400e').fontSize(7).font('Helvetica').text('RECAUDACIÓN', 355, y + 8);
+      doc.fontSize(10).font('Helvetica-Bold').text(formatearMoneda(recaudacion), 355, y + 22);
+      
+      // Caja 5: Total Premios
+      doc.rect(450, y, 95, 45).fill('#dbeafe').stroke('#3b82f6');
+      doc.fillColor('#1e40af').fontSize(7).font('Helvetica').text('PREMIOS', 455, y + 8);
+      doc.fontSize(10).font('Helvetica-Bold').text(formatearMoneda(totalPremiosQ6), 455, y + 22);
+      
+      y += 55;
+
+      // ========== EXTRACTO OFICIAL ==========
+      doc.rect(50, y, 495, 22).fill('#7c3aed');
+      doc.fillColor('#ffffff').fontSize(10).font('Helvetica-Bold')
+         .text('EXTRACTO OFICIAL', 60, y + 6);
+      y += 28;
+      
+      const modalidadesQ6 = [
+        { key: 'tradicional.primera', nombre: 'Tradicional 1ª', nums: extractoQ6.tradicional?.primera || [], color: '#3b82f6' },
+        { key: 'tradicional.segunda', nombre: 'Tradicional 2ª', nums: extractoQ6.tradicional?.segunda || [], color: '#10b981' },
+        { key: 'revancha', nombre: 'Revancha', nums: extractoQ6.revancha || [], color: '#f59e0b' },
+        { key: 'siempreSale', nombre: 'Siempre Sale', nums: extractoQ6.siempreSale || [], color: '#9333ea' }
+      ];
+      
+      doc.fontSize(9);
+      for (const mod of modalidadesQ6) {
+        doc.fillColor(mod.color).font('Helvetica-Bold').text(`${mod.nombre}: `, 60, y, { continued: true });
+        doc.fillColor('#333').font('Helvetica').text(mod.nums.length > 0 ? mod.nums.map(n => String(n).padStart(2, '0')).join(' - ') : '-');
+        y += 14;
+      }
+      y += 10;
+
+      // ========== RECAUDACIÓN POR MODALIDAD ==========
+      doc.rect(50, y, 495, 18).fill('#334155');
+      doc.fillColor('#ffffff').fontSize(9).font('Helvetica-Bold')
+         .text('RECAUDACIÓN POR INSTANCIA', 60, y + 4);
+      y += 22;
+      
+      const instancias = [
+        { id: '1', nombre: 'Tradicional', color: '#3b82f6', multiplicador: 1 },
+        { id: '2', nombre: 'Trad + Revancha', color: '#f59e0b', multiplicador: 2 },
+        { id: '3', nombre: 'Trad + Rev + SS', color: '#9333ea', multiplicador: 3 }
+      ];
+      
+      doc.rect(50, y, 495, 14).fill('#f1f5f9');
+      doc.fontSize(7).fillColor('#475569').font('Helvetica-Bold');
+      doc.text('INSTANCIA', 60, y + 3);
+      doc.text('REGISTROS', 170, y + 3);
+      doc.text('APUESTAS', 260, y + 3);
+      doc.text('RECAUDACIÓN', 380, y + 3);
+      y += 16;
+      
+      doc.font('Helvetica').fillColor('#333').fontSize(8);
+      for (const inst of instancias) {
+        const data = porInstancia[inst.id] || { registros: 0, apuestas: 0, recaudacion: 0 };
+        const apuestas = data.apuestas || (data.registros * inst.multiplicador);
+        doc.fillColor(inst.color).font('Helvetica-Bold').text(inst.nombre, 60, y);
+        doc.fillColor('#333').font('Helvetica');
+        doc.text(formatearNumero(data.registros), 170, y);
+        doc.text(formatearNumero(apuestas), 260, y);
+        doc.text(formatearMoneda(data.recaudacion), 380, y);
+        y += 14;
+      }
+      y += 10;
+
+      // ========== DESGLOSE DE GANADORES ==========
+      doc.rect(50, y, 495, 18).fill('#1e3a5f');
+      doc.fillColor('#ffffff').fontSize(9).font('Helvetica-Bold')
+         .text('DESGLOSE DE GANADORES POR MODALIDAD', 60, y + 4);
+      y += 22;
+      
+      // Cabecera
+      doc.rect(50, y, 495, 14).fill('#f1f5f9');
+      doc.fontSize(7).fillColor('#475569').font('Helvetica-Bold');
+      doc.text('MODALIDAD', 60, y + 3);
+      doc.text('NIVEL', 160, y + 3);
+      doc.text('GANADORES', 230, y + 3);
+      doc.text('PREMIO UNIT.', 320, y + 3);
+      doc.text('TOTAL PREMIOS', 430, y + 3);
+      y += 16;
+      
+      doc.font('Helvetica').fillColor('#333').fontSize(8);
+      
+      // Tradicional Primera
+      for (const nivel of ['6', '5', '4']) {
+        const data = ganadores.tradicionalPrimera?.[nivel] || { cantidad: 0, premioUnitario: 0, premioTotal: 0 };
+        if (data.cantidad > 0 || nivel === '6') {
+          doc.fillColor('#3b82f6').font('Helvetica-Bold').text('Tradicional 1ª', 60, y);
+          doc.fillColor('#333').font('Helvetica');
+          doc.text(`${nivel} aciertos`, 160, y);
+          doc.text(formatearNumero(data.cantidad), 230, y);
+          doc.text(formatearMoneda(data.premioUnitario), 320, y);
+          doc.fillColor(data.cantidad > 0 ? '#10b981' : '#333').font(data.cantidad > 0 ? 'Helvetica-Bold' : 'Helvetica');
+          doc.text(formatearMoneda(data.premioTotal), 430, y);
+          doc.font('Helvetica').fillColor('#333');
+          y += 12;
+        }
+      }
+      
+      // Tradicional Segunda
+      for (const nivel of ['6', '5', '4']) {
+        const data = ganadores.tradicionalSegunda?.[nivel] || { cantidad: 0, premioUnitario: 0, premioTotal: 0 };
+        if (data.cantidad > 0 || nivel === '6') {
+          doc.fillColor('#10b981').font('Helvetica-Bold').text('Tradicional 2ª', 60, y);
+          doc.fillColor('#333').font('Helvetica');
+          doc.text(`${nivel} aciertos`, 160, y);
+          doc.text(formatearNumero(data.cantidad), 230, y);
+          doc.text(formatearMoneda(data.premioUnitario), 320, y);
+          doc.fillColor(data.cantidad > 0 ? '#10b981' : '#333').font(data.cantidad > 0 ? 'Helvetica-Bold' : 'Helvetica');
+          doc.text(formatearMoneda(data.premioTotal), 430, y);
+          doc.font('Helvetica').fillColor('#333');
+          y += 12;
+        }
+      }
+      
+      // Revancha
+      const revData = ganadores.revancha?.['6'] || { cantidad: 0, premioUnitario: 0, premioTotal: 0 };
+      doc.fillColor('#f59e0b').font('Helvetica-Bold').text('Revancha', 60, y);
+      doc.fillColor('#333').font('Helvetica');
+      doc.text('6 aciertos', 160, y);
+      doc.text(formatearNumero(revData.cantidad), 230, y);
+      doc.text(formatearMoneda(revData.premioUnitario), 320, y);
+      doc.fillColor(revData.cantidad > 0 ? '#10b981' : '#333').font(revData.cantidad > 0 ? 'Helvetica-Bold' : 'Helvetica');
+      doc.text(formatearMoneda(revData.premioTotal), 430, y);
+      y += 12;
+      
+      // Siempre Sale
+      const ssData = ganadores.siempreSale || { cantidad: 0, premioUnitario: 0, premioTotal: 0, aciertosRequeridos: 6 };
+      doc.fillColor('#9333ea').font('Helvetica-Bold').text('Siempre Sale', 60, y);
+      doc.fillColor('#333').font('Helvetica');
+      doc.text(`${ssData.aciertosRequeridos || 6} aciertos`, 160, y);
+      doc.text(formatearNumero(ssData.cantidad), 230, y);
+      doc.text(formatearMoneda(ssData.premioUnitario), 320, y);
+      doc.fillColor(ssData.cantidad > 0 ? '#10b981' : '#333').font(ssData.cantidad > 0 ? 'Helvetica-Bold' : 'Helvetica');
+      doc.text(formatearMoneda(ssData.premioTotal), 430, y);
+      y += 12;
+      
+      // Premio Extra
+      const peData = ganadores.premioExtra?.['6'] || { cantidad: 0, premioUnitario: 0, premioTotal: 0 };
+      doc.fillColor('#ec4899').font('Helvetica-Bold').text('Premio Extra', 60, y);
+      doc.fillColor('#333').font('Helvetica');
+      doc.text('6 aciertos', 160, y);
+      doc.text(formatearNumero(peData.cantidad), 230, y);
+      doc.text(formatearMoneda(peData.premioUnitario), 320, y);
+      doc.fillColor(peData.cantidad > 0 ? '#10b981' : '#333').font(peData.cantidad > 0 ? 'Helvetica-Bold' : 'Helvetica');
+      doc.text(formatearMoneda(peData.premioTotal), 430, y);
+      y += 20;
+
+      // ========== RESUMEN FINAL ==========
+      doc.rect(50, y, 495, 36).fill('#f0fdf4').stroke('#22c55e');
+      doc.fontSize(9).fillColor('#166534').font('Helvetica-Bold');
+      doc.text('TOTAL GANADORES:', 60, y + 8);
+      doc.text(formatearNumero(totalGanadoresQ6), 180, y + 8);
+      doc.text('TOTAL PREMIOS PAGADOS:', 60, y + 22);
+      doc.text(formatearMoneda(totalPremiosQ6), 180, y + 22);
+      y += 45;
+
+    } else if (tipoJuego === 'Brinco' || tipoJuego === 'BRINCO') {
+      // ══════════════════════════════════════════════════════════════
+      // BRINCO - Escrutinio completo
+      // ══════════════════════════════════════════════════════════════
+      const tradicional = resData.tradicional || {};
+      const junior = resData.junior || {};
+      const extractoBrinco = resData.extracto || datos.extractoBrinco || {};
+      
+      // ========== RESUMEN GENERAL ==========
+      doc.rect(50, y, 495, 22).fill('#1e3a5f');
+      doc.fillColor('#ffffff').fontSize(10).font('Helvetica-Bold')
+         .text('RESUMEN GENERAL', 60, y + 6);
+      y += 28;
+      
+      // Cajas de estadísticas
+      const totalGanadoresBrinco = (tradicional.totalGanadores || 0) + (junior.totalGanadores || 0);
+      const totalPremiosBrinco = (tradicional.totalPremios || 0) + (junior.totalPremios || 0);
+      const recaudacion = resData.resumen?.recaudacion || 0;
+      const totalApuestas = resData.resumen?.apuestasTotal || resData.resumen?.registrosValidos || 0;
+      
+      // Caja 1: Total Registros
+      doc.rect(50, y, 95, 45).fill('#f0f9ff').stroke('#3b82f6');
+      doc.fillColor('#1e40af').fontSize(7).text('TICKETS', 55, y + 8);
+      doc.fontSize(12).font('Helvetica-Bold').text(formatearNumero(resData.resumen?.registrosValidos || 0), 55, y + 22);
+      
+      // Caja 2: Total Apuestas
+      doc.rect(150, y, 95, 45).fill('#ede9fe').stroke('#8b5cf6');
+      doc.fillColor('#6b21a8').fontSize(7).font('Helvetica').text('APUESTAS', 155, y + 8);
+      doc.fontSize(12).font('Helvetica-Bold').text(formatearNumero(totalApuestas), 155, y + 22);
+      
+      // Caja 3: Total Ganadores
+      doc.rect(250, y, 95, 45).fill('#f0fdf4').stroke('#22c55e');
+      doc.fillColor('#166534').fontSize(7).font('Helvetica').text('GANADORES', 255, y + 8);
+      doc.fontSize(12).font('Helvetica-Bold').text(formatearNumero(totalGanadoresBrinco), 255, y + 22);
+      
+      // Caja 4: Recaudación
+      doc.rect(350, y, 95, 45).fill('#fef3c7').stroke('#f59e0b');
+      doc.fillColor('#92400e').fontSize(7).font('Helvetica').text('RECAUDACIÓN', 355, y + 8);
+      doc.fontSize(10).font('Helvetica-Bold').text(formatearMoneda(recaudacion), 355, y + 22);
+      
+      // Caja 5: Total Premios
+      doc.rect(450, y, 95, 45).fill('#dbeafe').stroke('#3b82f6');
+      doc.fillColor('#1e40af').fontSize(7).font('Helvetica').text('PREMIOS', 455, y + 8);
+      doc.fontSize(10).font('Helvetica-Bold').text(formatearMoneda(totalPremiosBrinco), 455, y + 22);
+      
+      y += 55;
+
+      // ========== EXTRACTO OFICIAL ==========
+      doc.rect(50, y, 495, 22).fill('#f59e0b');
+      doc.fillColor('#ffffff').fontSize(10).font('Helvetica-Bold')
+         .text('EXTRACTO OFICIAL', 60, y + 6);
+      y += 28;
+      
+      const numsTrad = extractoBrinco.tradicional?.numeros || [];
+      const numsJunior = extractoBrinco.junior?.numeros || numsTrad;
+      
+      doc.fontSize(9);
+      doc.fillColor('#3b82f6').font('Helvetica-Bold').text('BRINCO Tradicional: ', 60, y, { continued: true });
+      doc.fillColor('#333').font('Helvetica').text(numsTrad.length > 0 ? numsTrad.map(n => String(n).padStart(2, '0')).join(' - ') : '-');
+      y += 16;
+      doc.fillColor('#22c55e').font('Helvetica-Bold').text('BRINCO Junior: ', 60, y, { continued: true });
+      doc.fillColor('#333').font('Helvetica').text(numsJunior.length > 0 ? numsJunior.map(n => String(n).padStart(2, '0')).join(' - ') : '-');
+      y += 20;
+
+      // ========== BRINCO TRADICIONAL ==========
+      doc.rect(50, y, 495, 18).fill('#3b82f6');
+      doc.fillColor('#ffffff').fontSize(9).font('Helvetica-Bold')
+         .text('BRINCO TRADICIONAL', 60, y + 4);
+      y += 22;
+      
+      // Cabecera
+      doc.rect(50, y, 495, 14).fill('#f1f5f9');
+      doc.fontSize(7).fillColor('#475569').font('Helvetica-Bold');
+      doc.text('NIVEL', 60, y + 3);
+      doc.text('ACIERTOS', 140, y + 3);
+      doc.text('GANADORES TXT', 220, y + 3);
+      doc.text('EXTRACTO', 320, y + 3);
+      doc.text('PREMIO UNIT.', 395, y + 3);
+      doc.text('TOTAL', 480, y + 3);
+      y += 16;
+      
+      const porNivelTrad = tradicional.porNivel || {};
+      const nivelLabelsTrad = { 6: '1° Premio', 5: '2° Premio', 4: '3° Premio', 3: '4° Premio' };
+      
+      doc.font('Helvetica').fillColor('#333').fontSize(8);
+      for (const nivel of [6, 5, 4, 3]) {
+        const data = porNivelTrad[nivel] || { ganadores: 0, premioUnitario: 0, totalPremios: 0, ganadores_extracto: 0 };
+        const coincide = data.ganadores === (data.ganadores_extracto || 0);
+        
+        doc.fillColor(nivel === 6 ? '#3b82f6' : '#333').font(nivel === 6 ? 'Helvetica-Bold' : 'Helvetica');
+        doc.text(nivelLabelsTrad[nivel], 60, y);
+        doc.fillColor('#333').font('Helvetica');
+        doc.text(`${nivel} aciertos`, 140, y);
+        doc.text(formatearNumero(data.ganadores), 220, y);
+        doc.fillColor(coincide ? '#22c55e' : '#ef4444');
+        doc.text(formatearNumero(data.ganadores_extracto || 0), 320, y);
+        doc.fillColor('#333');
+        doc.text(formatearMoneda(data.premioUnitario), 395, y);
+        doc.fillColor(data.totalPremios > 0 ? '#10b981' : '#333');
+        doc.text(formatearMoneda(data.totalPremios), 480, y);
+        y += 14;
+      }
+      y += 8;
+
+      // ========== BRINCO JUNIOR ==========
+      doc.rect(50, y, 495, 18).fill('#22c55e');
+      doc.fillColor('#ffffff').fontSize(9).font('Helvetica-Bold')
+         .text('BRINCO JUNIOR (SIEMPRE SALE)', 60, y + 4);
+      y += 22;
+      
+      // Cabecera
+      doc.rect(50, y, 495, 14).fill('#f0fdf4');
+      doc.fontSize(7).fillColor('#166534').font('Helvetica-Bold');
+      doc.text('NIVEL', 60, y + 3);
+      doc.text('ACIERTOS', 140, y + 3);
+      doc.text('GANADORES TXT', 220, y + 3);
+      doc.text('EXTRACTO', 320, y + 3);
+      doc.text('PREMIO UNIT.', 395, y + 3);
+      doc.text('TOTAL', 480, y + 3);
+      y += 16;
+      
+      const porNivelJunior = junior.porNivel || {};
+      const aciertosJunior = junior.aciertosRequeridos || 5;
+      
+      doc.font('Helvetica').fillColor('#333').fontSize(8);
+      for (const nivel of [6, 5]) {
+        const data = porNivelJunior[nivel] || { ganadores: 0, premioUnitario: 0, totalPremios: 0, ganadores_extracto: 0 };
+        if (nivel < aciertosJunior && data.ganadores === 0) continue;
+        
+        const coincide = data.ganadores === (data.ganadores_extracto || 0);
+        
+        doc.fillColor('#166534').font('Helvetica-Bold');
+        doc.text(nivel === 6 ? 'Pozo' : 'Siempre Sale', 60, y);
+        doc.fillColor('#333').font('Helvetica');
+        doc.text(`${nivel} aciertos`, 140, y);
+        doc.text(formatearNumero(data.ganadores), 220, y);
+        doc.fillColor(coincide ? '#22c55e' : '#ef4444');
+        doc.text(formatearNumero(data.ganadores_extracto || 0), 320, y);
+        doc.fillColor('#333');
+        doc.text(formatearMoneda(data.premioUnitario), 395, y);
+        doc.fillColor(data.totalPremios > 0 ? '#10b981' : '#333');
+        doc.text(formatearMoneda(data.totalPremios), 480, y);
+        y += 14;
+      }
+      y += 10;
+
+      // ========== COMPARACIÓN ==========
+      const comp = resData.comparacion || {};
+      if (comp.tradicional || comp.junior) {
+        doc.rect(50, y, 495, 18).fill('#334155');
+        doc.fillColor('#ffffff').fontSize(9).font('Helvetica-Bold')
+           .text('COMPARACIÓN TXT vs EXTRACTO', 60, y + 4);
+        y += 22;
+        
+        let hayDiferencias = false;
+        
+        // Verificar diferencias en tradicional
+        if (comp.tradicional) {
+          for (const nivel of [6, 5, 4, 3]) {
+            if (comp.tradicional[nivel]?.diferencia !== 0) {
+              hayDiferencias = true;
+              doc.fillColor('#ef4444').fontSize(8);
+              doc.text(`DIFERENCIA Tradicional ${nivel} aciertos: ${comp.tradicional[nivel].diferencia > 0 ? '+' : ''}${comp.tradicional[nivel].diferencia}`, 60, y);
+              y += 14;
+            }
+          }
+        }
+        
+        // Verificar diferencias en junior
+        if (comp.junior) {
+          for (const nivel of [6, 5]) {
+            if (comp.junior[nivel]?.diferencia !== 0) {
+              hayDiferencias = true;
+              doc.fillColor('#ef4444').fontSize(8);
+              doc.text(`DIFERENCIA Junior ${nivel} aciertos: ${comp.junior[nivel].diferencia > 0 ? '+' : ''}${comp.junior[nivel].diferencia}`, 60, y);
+              y += 14;
+            }
+          }
+        }
+        
+        if (!hayDiferencias) {
+          doc.fillColor('#22c55e').fontSize(9);
+          doc.text('✓ TODOS LOS NIVELES COINCIDEN CON EXTRACTO', 60, y);
+          y += 14;
+        }
+        y += 10;
+      }
+
+      // ========== TICKETS GANADORES TRADICIONAL 6 ACIERTOS ==========
+      const ganadoresTrad6 = tradicional.porNivel?.[6]?.agenciasGanadoras || [];
+      if (ganadoresTrad6.length > 0) {
+        // Nueva página si no hay espacio
+        if (y > 650) {
+          doc.addPage();
+          y = 50;
+        }
+        
+        doc.rect(50, y, 495, 18).fill('#3b82f6');
+        doc.fillColor('#ffffff').fontSize(9).font('Helvetica-Bold')
+           .text(`TICKETS GANADORES - TRADICIONAL 6 ACIERTOS (${ganadoresTrad6.length})`, 60, y + 4);
+        y += 22;
+        
+        // Números ganadores
+        const numsTrad = extractoBrinco.tradicional?.numeros || [];
+        doc.fillColor('#333').fontSize(8).font('Helvetica');
+        doc.text('Números Ganadores: ', 60, y, { continued: true });
+        doc.font('Helvetica-Bold').fillColor('#3b82f6');
+        doc.text(numsTrad.map(n => String(n).padStart(2, '0')).join(' - '));
+        y += 14;
+        
+        // Cabecera tabla
+        doc.rect(50, y, 495, 12).fill('#f1f5f9');
+        doc.fontSize(7).fillColor('#475569').font('Helvetica-Bold');
+        doc.text('TICKET', 55, y + 2);
+        doc.text('AGENCIA', 140, y + 2);
+        doc.text('NÚMEROS JUGADOS', 230, y + 2);
+        doc.text('IMPORTE', 450, y + 2);
+        y += 14;
+        
+        doc.font('Helvetica').fillColor('#333').fontSize(7);
+        for (const g of ganadoresTrad6.slice(0, 10)) { // Limitar a 10 para espacio
+          doc.text(g.ticket || '-', 55, y);
+          doc.text(g.ctaCte || g.agencia || '-', 140, y);
+          const nums = (g.numerosJugados || []).map(n => String(n).padStart(2, '0')).join('-');
+          doc.text(nums + (g.esMultiple ? ` (×${g.cantidad || g.cantidadCombinaciones})` : ''), 230, y);
+          doc.text(formatearMoneda(g.importe || 0), 450, y);
+          y += 12;
+        }
+        if (ganadoresTrad6.length > 10) {
+          doc.fontSize(7).fillColor('#666');
+          doc.text(`... y ${ganadoresTrad6.length - 10} ganadores más`, 55, y);
+          y += 12;
+        }
+        y += 10;
+      }
+
+      // ========== TICKETS GANADORES JUNIOR 5+ ACIERTOS ==========
+      const ganadoresJunior5 = junior.porNivel?.[5]?.agenciasGanadoras || [];
+      const ganadoresJunior6 = junior.porNivel?.[6]?.agenciasGanadoras || [];
+      const todosGanadoresJunior = [...ganadoresJunior6, ...ganadoresJunior5];
+      
+      if (todosGanadoresJunior.length > 0) {
+        // Nueva página si no hay espacio
+        if (y > 650) {
+          doc.addPage();
+          y = 50;
+        }
+        
+        doc.rect(50, y, 495, 18).fill('#22c55e');
+        doc.fillColor('#ffffff').fontSize(9).font('Helvetica-Bold')
+           .text(`TICKETS GANADORES - JUNIOR SIEMPRE SALE (${todosGanadoresJunior.length})`, 60, y + 4);
+        y += 22;
+        
+        // Números ganadores
+        const numsJunior = extractoBrinco.junior?.numeros || extractoBrinco.tradicional?.numeros || [];
+        doc.fillColor('#333').fontSize(8).font('Helvetica');
+        doc.text('Números Ganadores: ', 60, y, { continued: true });
+        doc.font('Helvetica-Bold').fillColor('#22c55e');
+        doc.text(numsJunior.map(n => String(n).padStart(2, '0')).join(' - '));
+        y += 14;
+        
+        // Cabecera tabla
+        doc.rect(50, y, 495, 12).fill('#f0fdf4');
+        doc.fontSize(7).fillColor('#166534').font('Helvetica-Bold');
+        doc.text('TICKET', 55, y + 2);
+        doc.text('AGENCIA', 130, y + 2);
+        doc.text('ACIERTOS', 200, y + 2);
+        doc.text('NÚMEROS JUGADOS', 260, y + 2);
+        doc.text('IMPORTE', 450, y + 2);
+        y += 14;
+        
+        doc.font('Helvetica').fillColor('#333').fontSize(7);
+        for (const g of todosGanadoresJunior.slice(0, 10)) { // Limitar a 10
+          doc.text(g.ticket || '-', 55, y);
+          doc.text(g.ctaCte || g.agencia || '-', 130, y);
+          doc.text(String(g.aciertos || 5), 200, y);
+          const nums = (g.numerosJugados || []).map(n => String(n).padStart(2, '0')).join('-');
+          doc.text(nums + (g.esMultiple ? ` (×${g.cantidadCombinaciones})` : ''), 260, y);
+          doc.text(formatearMoneda(g.importe || 0), 450, y);
+          y += 12;
+        }
+        if (todosGanadoresJunior.length > 10) {
+          doc.fontSize(7).fillColor('#666');
+          doc.text(`... y ${todosGanadoresJunior.length - 10} ganadores más`, 55, y);
+          y += 12;
+        }
+        y += 10;
+      }
+
+      // ========== RESUMEN FINAL ==========
+      doc.rect(50, y, 495, 36).fill('#f0fdf4').stroke('#22c55e');
+      doc.fontSize(9).fillColor('#166534').font('Helvetica-Bold');
+      doc.text('TOTAL GANADORES:', 60, y + 8);
+      doc.text(formatearNumero(totalGanadoresBrinco), 180, y + 8);
+      doc.text('TOTAL PREMIOS PAGADOS:', 60, y + 22);
+      doc.text(formatearMoneda(totalPremiosBrinco), 180, y + 22);
+      y += 45;
+
     } else {
       // ══════════════════════════════════════════════════════════════
       // POCEADA / TOMBOLINA - Código existente
