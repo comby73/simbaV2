@@ -428,6 +428,25 @@ function runScrutiny(registrosNTF, extracto, datosControlPrevio, registrosAnulad
     porNivelJunior[nivel].ganadoresTexto = numeroALetras(porNivelJunior[nivel].ganadores);
   }
   
+  // Agregar premio a cada ganador en agenciasGanadoras
+  for (const nivel of [6, 5, 4, 3]) {
+    const premioUnitario = porNivelTradicional[nivel].premioUnitario;
+    porNivelTradicional[nivel].agenciasGanadoras.forEach(g => {
+      const cantPremios = g.esMultiple ? (g.cantidad || g.cantidadCombinaciones || 1) : 1;
+      g.premioUnitario = premioUnitario;
+      g.premio = premioUnitario * cantPremios;
+    });
+  }
+  
+  for (const nivel of [6, 5]) {
+    const premioUnitario = porNivelJunior[nivel].premioUnitario;
+    porNivelJunior[nivel].agenciasGanadoras.forEach(g => {
+      const cantPremios = g.esMultiple ? (g.cantidadCombinaciones || 1) : 1;
+      g.premioUnitario = premioUnitario;
+      g.premio = premioUnitario * cantPremios;
+    });
+  }
+  
   // Calcular totales
   const totalGanadoresTradicional = porNivelTradicional[6].ganadores + porNivelTradicional[5].ganadores + 
                                      porNivelTradicional[4].ganadores + porNivelTradicional[3].ganadores;

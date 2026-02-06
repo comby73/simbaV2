@@ -354,9 +354,10 @@ async function runScrutiny(registros, extracto) {
     if (numsPremioExtra.length > 0) {
       const aciertos = contarAciertos(numerosJugados, numsPremioExtra);
       
-      // Debug log para Premio Extra
+      // Debug log para Premio Extra con 5+ aciertos
       if (aciertos >= 5) {
-        console.log(`[PE] Línea ${registro.linea}: jugados=[${numerosJugados}] (${cantidadNumeros}nums), aciertos=${aciertos} de pool=${numsPremioExtra.length}`);
+        const numerosEnPool = numerosJugados.filter(n => numsPremioExtra.includes(n));
+        console.log(`[PE] Línea ${registro.linea}: jugados=[${numerosJugados.join(',')}] (${cantidadNumeros}nums), enPool=[${numerosEnPool.join(',')}], aciertos=${aciertos}/${numsPremioExtra.length}`);
       }
       
       // Para ganar Premio Extra, necesitas que 6 de tus números estén en el pool
@@ -371,7 +372,8 @@ async function runScrutiny(registros, extracto) {
           cantidadGanadores = calcularCombinaciones(aciertos, 6);
         }
         
-        console.log(`[PE GANADOR] Línea ${registro.linea}: aciertos=${aciertos}, cantidadNums=${cantidadNumeros}, ganadores=${cantidadGanadores}`);
+        const totalPEActual = resultados.ganadores.premioExtra['6'].cantidad + cantidadGanadores;
+        console.log(`[PE GANADOR #${resultados.ganadores.premioExtra['6'].registros.length + 1}] Línea ${registro.linea}, Ticket ${registro.ticket}: aciertos=${aciertos}, totalNums=${cantidadNumeros}, ganadores=${cantidadGanadores}, totalAcum=${totalPEActual}`);
         
         if (cantidadGanadores > 0) {
           resultados.ganadores.premioExtra['6'].cantidad += cantidadGanadores;
@@ -564,6 +566,19 @@ async function runScrutiny(registros, extracto) {
     premioUnitario: extraData.premioUnitario,
     premioTotal: extraData.premioTotal
   };
+  
+  // Log de resumen del Premio Extra para auditoría
+  console.log(`\n========== RESUMEN PREMIO EXTRA ==========`);
+  console.log(`Pool Premio Extra: [${resultados.extracto.premioExtra.join(', ')}] (${resultados.extracto.premioExtra.length} números)`);
+  console.log(`Total tickets ganadores: ${extraData.registros.length}`);
+  console.log(`Total premios (considerando múltiples): ${extraData.cantidad}`);
+  if (extraData.registros.length > 0) {
+    console.log(`Detalle de ganadores Premio Extra:`);
+    extraData.registros.forEach((r, idx) => {
+      console.log(`  ${idx + 1}. Ticket ${r.ticket}, Línea ${r.linea}, Ag ${r.agencia}: [${r.numerosJugados.join(',')}] → ${r.aciertos} aciertos = ${r.ganadores} premios`);
+    });
+  }
+  console.log(`============================================\n`);
   
   // Convertir porAgencia a array ordenado por recaudación
   resultados.porAgencia = Object.entries(resultados.porAgencia)

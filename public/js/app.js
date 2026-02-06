@@ -7300,11 +7300,13 @@ function mostrarResultadosEscrutinioBrinco(resultado) {
   const ganadoresTrad6 = resultado.tradicional?.porNivel?.[6]?.agenciasGanadoras || [];
   if (ganadoresTrad6.length > 0) {
     const numsTrad = cpstExtractoBrinco?.tradicional?.numeros || [];
+    const premioUnitTrad6 = resultado.tradicional?.porNivel?.[6]?.premioUnitario || 0;
     html += `
       <div style="margin-top: 2rem;">
         <h4 style="margin-bottom: 0.75rem; color: var(--primary);"><i class="fas fa-trophy"></i> Tickets Ganadores - BRINCO Tradicional 6 Aciertos (${ganadoresTrad6.length})</h4>
         <div style="margin-bottom: 0.5rem; padding: 0.5rem; background: var(--bg-input); border-radius: 6px;">
           <strong>Números Ganadores:</strong> <span style="font-family: monospace; color: var(--primary);">${numsTrad.map(n => n.toString().padStart(2, '0')).join(' - ')}</span>
+          <span style="margin-left: 1rem;"><strong>Premio Unitario:</strong> <span style="color: var(--success);">$${formatNumber(premioUnitTrad6)}</span></span>
         </div>
         <table class="table table-compact">
           <thead>
@@ -7312,17 +7314,19 @@ function mostrarResultadosEscrutinioBrinco(resultado) {
               <th>Ticket</th>
               <th>Agencia</th>
               <th>Números Jugados</th>
-              <th>Importe</th>
+              <th>Premio</th>
             </tr>
           </thead>
           <tbody>`;
     ganadoresTrad6.forEach(g => {
+      const cantPremios = g.esMultiple ? (g.cantidad || g.cantidadCombinaciones || 1) : 1;
+      const premioTotal = g.premio || (premioUnitTrad6 * cantPremios);
       html += `
             <tr>
               <td><code>${g.ticket || '-'}</code></td>
               <td><strong>${g.ctaCte || g.agencia || '-'}</strong></td>
-              <td style="font-family: monospace;">${(g.numerosJugados || []).map(n => n.toString().padStart(2, '0')).join(' - ')}${g.esMultiple ? ` <span class="badge badge-warning">×${g.cantidad || g.cantidadCombinaciones}</span>` : ''}</td>
-              <td>$${formatNumber(g.importe || 0)}</td>
+              <td style="font-family: monospace;">${(g.numerosJugados || []).map(n => n.toString().padStart(2, '0')).join(' - ')}${g.esMultiple ? ` <span class="badge badge-warning">×${cantPremios}</span>` : ''}</td>
+              <td style="color: var(--success); font-weight: bold;">$${formatNumber(premioTotal)}</td>
             </tr>`;
     });
     html += `
@@ -7338,6 +7342,8 @@ function mostrarResultadosEscrutinioBrinco(resultado) {
   
   if (todosGanadoresJunior.length > 0) {
     const numsJunior = cpstExtractoBrinco?.junior?.numeros || cpstExtractoBrinco?.tradicional?.numeros || [];
+    const premioUnit5 = resultado.junior?.porNivel?.[5]?.premioUnitario || 0;
+    const premioUnit6 = resultado.junior?.porNivel?.[6]?.premioUnitario || 0;
     html += `
       <div style="margin-top: 2rem;">
         <h4 style="margin-bottom: 0.75rem; color: var(--success);"><i class="fas fa-star"></i> Tickets Ganadores - BRINCO Junior Siempre Sale (${todosGanadoresJunior.length})</h4>
@@ -7351,18 +7357,21 @@ function mostrarResultadosEscrutinioBrinco(resultado) {
               <th>Agencia</th>
               <th>Aciertos</th>
               <th>Números Jugados</th>
-              <th>Importe</th>
+              <th>Premio</th>
             </tr>
           </thead>
           <tbody>`;
     todosGanadoresJunior.forEach(g => {
+      const cantPremios = g.esMultiple ? (g.cantidadCombinaciones || 1) : 1;
+      const premioUnit = g.aciertos >= 6 ? premioUnit6 : premioUnit5;
+      const premioTotal = g.premio || (premioUnit * cantPremios);
       html += `
             <tr>
               <td><code>${g.ticket || '-'}</code></td>
               <td><strong>${g.ctaCte || g.agencia || '-'}</strong></td>
               <td><span class="badge ${g.aciertos >= 6 ? 'badge-primary' : 'badge-success'}">${g.aciertos}</span></td>
-              <td style="font-family: monospace;">${(g.numerosJugados || []).map(n => n.toString().padStart(2, '0')).join(' - ')}${g.esMultiple ? ` <span class="badge badge-warning">×${g.cantidadCombinaciones}</span>` : ''}</td>
-              <td>$${formatNumber(g.importe || 0)}</td>
+              <td style="font-family: monospace;">${(g.numerosJugados || []).map(n => n.toString().padStart(2, '0')).join(' - ')}${g.esMultiple ? ` <span class="badge badge-warning">×${cantPremios}</span>` : ''}</td>
+              <td style="color: var(--success); font-weight: bold;">$${formatNumber(premioTotal)}</td>
             </tr>`;
     });
     html += `
@@ -7659,27 +7668,31 @@ function mostrarResultadosEscrutinioQuini6(resultado) {
   };
 
   // Función para renderizar tickets ganadores
-  const renderTicketsGanadores = (registros, modalidad, color) => {
+  const renderTicketsGanadores = (registros, modalidad, color, premioUnitario = 0) => {
     if (!registros || registros.length === 0) return '';
     return `
       <div style="margin-top: 1rem; padding: 1rem; background: rgba(255,255,255,0.03); border-radius: 8px; border-left: 4px solid ${color};">
         <strong style="font-size: 0.9rem; display: block; margin-bottom: 0.75rem;">
           <i class="fas fa-ticket-alt" style="margin-right: 0.5rem; color: ${color};"></i>
           Tickets ganadores:
+          ${premioUnitario > 0 ? `<span style="margin-left: 1rem; font-weight: normal; color: var(--text-muted);">Premio unitario: <span style="color: #10b981; font-weight: 600;">$${formatNumber(premioUnitario)}</span></span>` : ''}
         </strong>
         <div style="overflow-x: auto;">
           <table style="width: 100%; font-size: 0.9rem; border-collapse: collapse; table-layout: fixed;">
             <thead>
               <tr style="background: rgba(255,255,255,0.08);">
-                <th style="width: 18%; padding: 0.6rem 0.75rem; text-align: left; border-bottom: 2px solid rgba(255,255,255,0.15);">Ticket</th>
-                <th style="width: 15%; padding: 0.6rem 0.75rem; text-align: left; border-bottom: 2px solid rgba(255,255,255,0.15);">Agencia</th>
-                <th style="width: 42%; padding: 0.6rem 0.75rem; text-align: left; border-bottom: 2px solid rgba(255,255,255,0.15);">Números Jugados</th>
-                <th style="width: 12%; padding: 0.6rem 0.75rem; text-align: center; border-bottom: 2px solid rgba(255,255,255,0.15);">Aciertos</th>
-                <th style="width: 13%; padding: 0.6rem 0.75rem; text-align: right; border-bottom: 2px solid rgba(255,255,255,0.15);">Ganadores</th>
+                <th style="width: 16%; padding: 0.6rem 0.75rem; text-align: left; border-bottom: 2px solid rgba(255,255,255,0.15);">Ticket</th>
+                <th style="width: 13%; padding: 0.6rem 0.75rem; text-align: left; border-bottom: 2px solid rgba(255,255,255,0.15);">Agencia</th>
+                <th style="width: 36%; padding: 0.6rem 0.75rem; text-align: left; border-bottom: 2px solid rgba(255,255,255,0.15);">Números Jugados</th>
+                <th style="width: 10%; padding: 0.6rem 0.75rem; text-align: center; border-bottom: 2px solid rgba(255,255,255,0.15);">Aciertos</th>
+                <th style="width: 10%; padding: 0.6rem 0.75rem; text-align: center; border-bottom: 2px solid rgba(255,255,255,0.15);">Premios</th>
+                <th style="width: 15%; padding: 0.6rem 0.75rem; text-align: right; border-bottom: 2px solid rgba(255,255,255,0.15);">Premio Total</th>
               </tr>
             </thead>
             <tbody>
-              ${registros.slice(0, 50).map(r => `
+              ${registros.slice(0, 50).map(r => {
+                const premioTotal = premioUnitario * (r.ganadores || 1);
+                return `
                 <tr style="border-bottom: 1px solid rgba(255,255,255,0.05);">
                   <td style="padding: 0.6rem 0.75rem; font-family: monospace; font-size: 0.85rem;">${r.ticket || r.linea || '-'}</td>
                   <td style="padding: 0.6rem 0.75rem; font-weight: 500;">${r.agencia || '-'}</td>
@@ -7687,10 +7700,11 @@ function mostrarResultadosEscrutinioQuini6(resultado) {
                     ${(r.numerosJugados || []).map(n => n.toString().padStart(2, '0')).join(' - ')}
                   </td>
                   <td style="padding: 0.6rem 0.75rem; text-align: center; font-weight: bold; font-size: 1rem;">${r.aciertos}</td>
-                  <td style="padding: 0.6rem 0.75rem; text-align: right; font-weight: bold; font-size: 1rem; color: #10b981;">${r.ganadores}</td>
-                </tr>
-              `).join('')}
-              ${registros.length > 50 ? `<tr><td colspan="5" style="padding: 0.75rem; text-align: center; color: var(--text-muted);">... y ${registros.length - 50} tickets más</td></tr>` : ''}
+                  <td style="padding: 0.6rem 0.75rem; text-align: center; font-weight: bold; font-size: 1rem;">${r.ganadores}</td>
+                  <td style="padding: 0.6rem 0.75rem; text-align: right; font-weight: bold; font-size: 1rem; color: #10b981;">$${formatNumber(premioTotal)}</td>
+                </tr>`;
+              }).join('')}
+              ${registros.length > 50 ? `<tr><td colspan="6" style="padding: 0.75rem; text-align: center; color: var(--text-muted);">... y ${registros.length - 50} tickets más</td></tr>` : ''}
             </tbody>
           </table>
         </div>
@@ -8009,6 +8023,13 @@ function mostrarResultadosEscrutinioQuini6(resultado) {
           </h5>
         </div>
         <div style="padding: 1.25rem; overflow-x: auto;">
+          <!-- Pool de números del extracto -->
+          <div style="margin-bottom: 1rem; padding: 0.75rem; background: rgba(236, 72, 153, 0.1); border-radius: 8px; border-left: 4px solid #ec4899;">
+            <div style="font-size: 0.75rem; color: var(--text-muted); margin-bottom: 0.25rem;">Pool Premio Extra (${extracto.premioExtra.length} números)</div>
+            <div style="font-family: monospace; font-size: 1.1rem; color: #ec4899; font-weight: 600;">
+              ${(extracto.premioExtra || []).map(n => n.toString().padStart(2, '0')).join(' - ')}
+            </div>
+          </div>
           ${(() => {
             const data = ganadores.premioExtra?.['6'] || { cantidad: 0, premioUnitario: 0, premioTotal: 0, registros: [] };
             const comp = resultado.comparacion?.premioExtra?.['6'] || {};
@@ -8041,38 +8062,73 @@ function mostrarResultadosEscrutinioQuini6(resultado) {
               </table>
             `;
           })()}
+          <!-- Números únicos jugados por ganadores del Premio Extra -->
+          ${(() => {
+            const registrosPE = ganadores.premioExtra?.['6']?.registros || [];
+            if (registrosPE.length === 0) return '';
+            
+            // Recopilar todos los números únicos jugados por ganadores
+            const numerosUnicos = new Set();
+            registrosPE.forEach(r => {
+              (r.numerosJugados || []).forEach(n => numerosUnicos.add(parseInt(n)));
+            });
+            const numerosOrdenados = Array.from(numerosUnicos).sort((a, b) => a - b);
+            
+            return `
+              <div style="margin-top: 1rem; padding: 1rem; background: rgba(236, 72, 153, 0.05); border-radius: 8px; border: 1px dashed #ec4899;">
+                <div style="font-size: 0.85rem; color: var(--text-muted); margin-bottom: 0.5rem; display: flex; align-items: center; gap: 0.5rem;">
+                  <i class="fas fa-search" style="color: #ec4899;"></i>
+                  <strong>Números únicos jugados por ganadores (${numerosOrdenados.length} números diferentes)</strong>
+                </div>
+                <div style="font-family: monospace; font-size: 1rem; color: #ec4899; font-weight: 600; line-height: 1.8;">
+                  ${numerosOrdenados.map(n => `<span style="display: inline-block; padding: 0.25rem 0.5rem; background: rgba(236, 72, 153, 0.15); border-radius: 4px; margin: 0.15rem;">${n.toString().padStart(2, '0')}</span>`).join(' ')}
+                </div>
+                <div style="margin-top: 0.75rem; font-size: 0.8rem; color: var(--text-muted);">
+                  <i class="fas fa-info-circle" style="margin-right: 0.25rem;"></i>
+                  ${registrosPE.length} tickets ganadores participaron en Premio Extra
+                </div>
+              </div>
+            `;
+          })()}
         </div>
       </div>
       ` : ''}
 
       <!-- RESUMEN CONSOLIDADO: TODOS LOS GANADORES CON 6 ACIERTOS -->
       ${(() => {
-        // Recopilar todos los registros con 6 aciertos de todas las modalidades
+        // Recopilar todos los registros con 6 aciertos de todas las modalidades con su premio
         const todosGanadores6 = [];
+        
+        // Premios unitarios por modalidad
+        const premioT1_6 = ganadores.tradicionalPrimera?.['6']?.premioUnitario || 0;
+        const premioT2_6 = ganadores.tradicionalSegunda?.['6']?.premioUnitario || 0;
+        const premioRev = ganadores.revancha?.['6']?.premioUnitario || 0;
+        const premioSS = ganadores.siempreSale?.premioUnitario || 0;
+        const premioPE = ganadores.premioExtra?.['6']?.premioUnitario || 0;
         
         // Tradicional Primera 6 aciertos
         (ganadores.tradicionalPrimera?.['6']?.registros || []).forEach(r => {
-          todosGanadores6.push({ ...r, modalidad: 'Trad. 1ª', color: '#3b82f6' });
+          todosGanadores6.push({ ...r, modalidad: 'Trad. 1ª', color: '#3b82f6', premioUnitario: premioT1_6 });
         });
         
         // Tradicional Segunda 6 aciertos
         (ganadores.tradicionalSegunda?.['6']?.registros || []).forEach(r => {
-          todosGanadores6.push({ ...r, modalidad: 'Trad. 2ª', color: '#10b981' });
+          todosGanadores6.push({ ...r, modalidad: 'Trad. 2ª', color: '#10b981', premioUnitario: premioT2_6 });
         });
         
         // Revancha 6 aciertos
         (ganadores.revancha?.['6']?.registros || []).forEach(r => {
-          todosGanadores6.push({ ...r, modalidad: 'Revancha', color: '#f59e0b' });
+          todosGanadores6.push({ ...r, modalidad: 'Revancha', color: '#f59e0b', premioUnitario: premioRev });
         });
         
         // Siempre Sale (cualquier acierto ganador)
         (ganadores.siempreSale?.registros || []).forEach(r => {
-          todosGanadores6.push({ ...r, modalidad: 'Siempre Sale', color: '#9333ea' });
+          todosGanadores6.push({ ...r, modalidad: 'Siempre Sale', color: '#9333ea', premioUnitario: premioSS });
         });
         
         // Premio Extra 6 aciertos
         (ganadores.premioExtra?.['6']?.registros || []).forEach(r => {
-          todosGanadores6.push({ ...r, modalidad: 'Premio Extra', color: '#ec4899' });
+          todosGanadores6.push({ ...r, modalidad: 'Premio Extra', color: '#ec4899', premioUnitario: premioPE });
         });
         
         if (todosGanadores6.length === 0) return '';
@@ -8091,11 +8147,14 @@ function mostrarResultadosEscrutinioQuini6(resultado) {
                 <th style="padding: 0.75rem; text-align: left; border-bottom: 2px solid #22c55e;">Agencia</th>
                 <th style="padding: 0.75rem; text-align: left; border-bottom: 2px solid #22c55e;">Números Jugados</th>
                 <th style="padding: 0.75rem; text-align: center; border-bottom: 2px solid #22c55e;">Aciertos</th>
-                <th style="padding: 0.75rem; text-align: right; border-bottom: 2px solid #22c55e;">Ganadores</th>
+                <th style="padding: 0.75rem; text-align: center; border-bottom: 2px solid #22c55e;">Premios</th>
+                <th style="padding: 0.75rem; text-align: right; border-bottom: 2px solid #22c55e;">Premio Total</th>
               </tr>
             </thead>
             <tbody>
-              ${todosGanadores6.slice(0, 100).map(r => `
+              ${todosGanadores6.slice(0, 100).map(r => {
+                const premioTotal = (r.premioUnitario || 0) * (r.ganadores || 1);
+                return `
                 <tr style="border-bottom: 1px solid rgba(255,255,255,0.05);">
                   <td style="padding: 0.6rem 0.75rem;"><span style="display: inline-block; padding: 0.25rem 0.5rem; background: ${r.color}; color: #fff; border-radius: 4px; font-size: 0.8rem; font-weight: 600;">${r.modalidad}</span></td>
                   <td style="padding: 0.6rem 0.75rem; font-family: monospace;">${r.ticket || r.linea || '-'}</td>
@@ -8104,10 +8163,11 @@ function mostrarResultadosEscrutinioQuini6(resultado) {
                     ${(r.numerosJugados || []).map(n => n.toString().padStart(2, '0')).join(' - ')}
                   </td>
                   <td style="padding: 0.6rem 0.75rem; text-align: center; font-weight: bold;">${r.aciertos}</td>
-                  <td style="padding: 0.6rem 0.75rem; text-align: right; font-weight: bold; color: #22c55e;">${r.ganadores}</td>
-                </tr>
-              `).join('')}
-              ${todosGanadores6.length > 100 ? `<tr><td colspan="6" style="padding: 0.75rem; text-align: center; color: var(--text-muted);">... y ${todosGanadores6.length - 100} tickets más</td></tr>` : ''}
+                  <td style="padding: 0.6rem 0.75rem; text-align: center; font-weight: bold;">${r.ganadores}</td>
+                  <td style="padding: 0.6rem 0.75rem; text-align: right; font-weight: bold; color: #22c55e;">$${formatNumber(premioTotal)}</td>
+                </tr>`;
+              }).join('')}
+              ${todosGanadores6.length > 100 ? `<tr><td colspan="7" style="padding: 0.75rem; text-align: center; color: var(--text-muted);">... y ${todosGanadores6.length - 100} tickets más</td></tr>` : ''}
             </tbody>
           </table>
         </div>
@@ -8247,6 +8307,7 @@ function mostrarPreviewExtractoQuini6() {
   const rev = cpstExtractoQuini6.revancha || [];
   const ss = cpstExtractoQuini6.siempreSale || [];
   const ssAciertos = cpstExtractoQuini6.siempreSaleAciertos || 6;
+  const pe = cpstExtractoQuini6.premioExtra || [];
 
   preview.innerHTML = `
     <div style="padding: 1rem; background: var(--bg-input); border-radius: 8px; margin-top: 1rem;">
@@ -8273,10 +8334,18 @@ function mostrarPreviewExtractoQuini6() {
       </div>
       ` : ''}
       ${ss.length === 6 ? `
-      <div>
+      <div style="margin-bottom: 0.5rem;">
         <strong><i class="fas fa-check-double" style="color: #9333ea;"></i> Siempre Sale (${ssAciertos} aciertos):</strong>
         <span style="font-family: monospace; font-size: 1rem; color: #9333ea; margin-left: 0.5rem;">
           ${ss.map(n => n.toString().padStart(2, '0')).join(' - ')}
+        </span>
+      </div>
+      ` : ''}
+      ${pe.length > 0 ? `
+      <div>
+        <strong><i class="fas fa-gift" style="color: #ec4899;"></i> Premio Extra (${pe.length} nums):</strong>
+        <span style="font-family: monospace; font-size: 0.9rem; color: #ec4899; margin-left: 0.5rem;">
+          ${pe.map(n => n.toString().padStart(2, '0')).join(' - ')}
         </span>
       </div>
       ` : ''}
@@ -8373,6 +8442,25 @@ function cargarExtractoQuini6Manual() {
     extracto.siempreSaleAciertos = parseInt(ssAciertosInput.value) || 6;
   }
 
+  // Leer Premio Extra (pool de números, opcional)
+  const pePoolInput = document.getElementById('cpst-quini6-pe-pool');
+  if (pePoolInput && pePoolInput.value.trim()) {
+    // Parsear números separados por coma, espacio, guión o cualquier separador
+    const numerosStr = pePoolInput.value.trim();
+    const numeros = numerosStr.split(/[\s,\-;|]+/).filter(s => s.trim() !== '').map(s => parseInt(s.trim()));
+    
+    for (const num of numeros) {
+      if (isNaN(num) || num < 0 || num > 45) {
+        showToast(`Premio Extra - Número "${num}" debe estar entre 0 y 45`, 'warning');
+        return false;
+      }
+    }
+    
+    // Eliminar duplicados y ordenar
+    extracto.premioExtra = [...new Set(numeros)].sort((a, b) => a - b);
+    console.log(`[Premio Extra] Pool cargado: ${extracto.premioExtra.length} números únicos`, extracto.premioExtra);
+  }
+
   cpstExtractoQuini6 = extracto;
 
   mostrarPreviewExtractoQuini6();
@@ -8418,6 +8506,10 @@ function limpiarExtractoQuini6() {
     if (rev) rev.value = '';
     if (ss) ss.value = '';
   }
+  
+  // Limpiar Premio Extra
+  const pePool = document.getElementById('cpst-quini6-pe-pool');
+  if (pePool) pePool.value = '';
   
   // Ocultar info de archivo JSON
   document.getElementById('cpst-quini6-json-info')?.classList.add('hidden');
