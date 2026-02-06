@@ -604,7 +604,13 @@ const ejecutar = async (req, res) => {
     console.log(`    Ganadores: ${resultado.junior.totalGanadores}`);
     console.log(`${'='.repeat(50)}\n`);
     
-    // TODO: Guardar en base de datos cuando se cree la tabla
+    // Guardar en base de datos
+    try {
+      await guardarEscrutinioBrinco(resultado, datosControlPrevio, req.user);
+      console.log('✅ Escrutinio BRINCO guardado en base de datos');
+    } catch (errGuardar) {
+      console.error('⚠️ Error guardando escrutinio BRINCO (no crítico):', errGuardar.message);
+    }
     
     return successResponse(res, resultado, 'Escrutinio BRINCO completado correctamente');
     
@@ -621,13 +627,121 @@ const obtenerGanadoresPrimerPremio = async (req, res) => {
   const { sorteo } = req.params;
   
   try {
-    // TODO: Implementar consulta a BD cuando se cree la tabla
-    return successResponse(res, [], 'Ganadores del primer premio');
+    const ganadores = await query(
+      'SELECT * FROM escrutinio_brinco_ganadores WHERE numero_sorteo = ? AND aciertos = 6',
+      [sorteo]
+    );
+    return successResponse(res, ganadores, 'Ganadores del primer premio');
   } catch (error) {
     console.error('Error obteniendo ganadores:', error);
     return errorResponse(res, 'Error obteniendo ganadores: ' + error.message, 500);
   }
 };
+
+/**
+ * Guarda los resultados del escrutinio de BRINCO en la base de datos
+ */
+async function guardarEscrutinioBrinco(resultado, datosControlPrevio, user) {
+  const sorteo = datosControlPrevio?.sorteo?.numero || 
+                 resultado.datosControlPrevio?.sorteo || 
+                 resultado.numeroSorteo || 
+                 'N/A';
+  
+  const fecha = datosControlPrevio?.sorteo?.fecha || 
+                datosControlPrevio?.fecha ||
+                new Date().toISOString().split('T')[0];
+  
+  const numerosTradicional = resultado.extractoUsado?.tradicional?.join(',') || '';
+  const numerosJunior = resultado.extractoUsado?.junior?.join(',') || '';
+  const numerosSorteados = `${numerosTradicional}|${numerosJunior}`;
+  
+  const totalGanadores = (resultado.tradicional?.totalGanadores || 0) + 
+                         (resultado.junior?.totalGanadores || 0);
+  const totalPremios = (resultado.tradicional?.totalPremios || 0) + 
+                       (resultado.junior?.totalPremios || 0);
+  
+  // Insertar o actualizar escrutinio principal
+  await query(`
+    INSERT INTO escrutinio_brinco
+    (numero_sorteo, fecha, numeros_sorteados, total_apostadores, total_ganadores, 
+     total_premios, datos_json, usuario_id)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+    ON DUPLICATE KEY UPDATE
+      fecha = VALUES(fecha),
+      numeros_sorteados = VALUES(numeros_sorteados),
+      total_apostadores = VALUES(total_apostadores),
+      total_ganadores = VALUES(total_ganadores),
+      total_premios = VALUES(total_premios),
+      datos_json = VALUES(datos_json),
+      usuario_id = VALUES(usuario_id),
+      updated_at = CURRENT_TIMESTAMP
+  `, [
+    sorteo,
+    fecha,
+    numerosSorteados,
+    resultado.datosControlPrevio?.totalApuestas || 0,
+    totalGanadores,
+    totalPremios,
+    JSON.stringify(resultado),
+    user?.id || null
+  ]);
+  
+  // Obtener ID del escrutinio (nuevo o existente)
+  const [escrutinioRow] = await query(
+    'SELECT id FROM escrutinio_brinco WHERE numero_sorteo = ?',
+    [sorteo]
+  );
+  const escrutinioId = escrutinioRow?.id;
+  
+  if (escrutinioId) {
+    // Limpiar ganadores anteriores
+    await query('DELETE FROM escrutinio_brinco_ganadores WHERE escrutinio_id = ?', [escrutinioId]);
+    
+    // Guardar ganadores por nivel (Tradicional)
+    for (const nivel of [6, 5, 4, 3]) {
+      const data = resultado.tradicional?.porNivel?.[nivel];
+      if (data && data.ganadores > 0) {
+        await query(`
+          INSERT INTO escrutinio_brinco_ganadores
+          (escrutinio_id, numero_sorteo, modalidad, aciertos, cantidad_ganadores, 
+           premio_unitario, premio_total)
+          VALUES (?, ?, ?, ?, ?, ?, ?)
+        `, [
+          escrutinioId,
+          sorteo,
+          'TRADICIONAL',
+          nivel,
+          data.ganadores,
+          data.premioUnitario || 0,
+          data.totalPremios || 0
+        ]);
+      }
+    }
+    
+    // Guardar ganadores Junior
+    for (const nivel of [6, 5]) {
+      const data = resultado.junior?.porNivel?.[nivel];
+      if (data && data.ganadores > 0) {
+        await query(`
+          INSERT INTO escrutinio_brinco_ganadores
+          (escrutinio_id, numero_sorteo, modalidad, aciertos, cantidad_ganadores,
+           premio_unitario, premio_total)
+          VALUES (?, ?, ?, ?, ?, ?, ?)
+        `, [
+          escrutinioId,
+          sorteo,
+          'JUNIOR',
+          nivel,
+          data.ganadores,
+          data.premioUnitario || 0,
+          data.totalPremios || 0
+        ]);
+      }
+    }
+  }
+  
+  console.log(`✅ Escrutinio BRINCO guardado: Sorteo ${sorteo}, ${totalGanadores} ganadores, $${totalPremios} premios`);
+}
 
 module.exports = {
   ejecutar,

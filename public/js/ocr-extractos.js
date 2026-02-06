@@ -429,8 +429,116 @@ JSON de respuesta:
   },
 
   /**
+   * PROCESAR IMAGEN DE EXTRACTO POCEADA
+   * Extrae los datos de un extracto de POCEADA (20 números + 4 letras)
+   * Poceada: Los jugadores eligen 8-15 números (0-99), ganan si sus números están entre los 20 sorteados
+   */
+  async procesarImagenPoceada(imageBase64, mimeType) {
+    const prompt = `Actuás como un extractor especializado de resultados de lotería POCEADA de Argentina.
+
+Analizá esta imagen de extracto oficial y devolvé SOLO un objeto JSON válido.
+
+REGLAS DE EXTRACCIÓN CRÍTICAS:
+
+1. POCEADA sortea 20 NÚMEROS del 00 al 99 (dos dígitos cada uno: 00, 01, 02... 99)
+
+2. POCEADA sortea 4 LETRAS válidas (de la A a la P)
+
+3. BUSCAR EN EL EXTRACTO:
+   - Los 20 números sorteados (pueden estar en una tabla o lista)
+   - Las 4 letras ganadoras (pueden aparecer como "LETRAS", "CLAVE" o similar)
+   - Número de sorteo/concurso
+   - Fecha del sorteo
+
+4. PREMIOS (si están visibles):
+   - 8 ACIERTOS: Primer Premio (62% del pozo)
+   - 7 ACIERTOS: Segundo Premio (23.5% del pozo)
+   - 6 ACIERTOS: Tercer Premio (10% del pozo)
+   - VACANTE: Cuando dice "SIN GANADORES" o muestra 0 ganadores
+
+5. FORMATO DE NÚMEROS:
+   - SIEMPRE 2 dígitos: "00", "05", "23", "99"
+   - El cero se escribe "00"
+
+6. MONTOS: Convertir de formato argentino "999.999.999,99" a número decimal con punto
+
+7. FORMATO DE SALIDA:
+{
+  "game": "POCEADA",
+  "sorteo_number": "XXXX",
+  "date": "YYYY-MM-DD",
+  "numeros": ["00","01","02","03","04","05","06","07","08","09","10","11","12","13","14","15","16","17","18","19"],
+  "letras": ["A","B","C","D"],
+  "prizes": {
+    "8": { "winners": N, "premio_por_ganador": MONTO, "pozo": MONTO, "vacante": true/false },
+    "7": { "winners": N, "premio_por_ganador": MONTO, "pozo": MONTO },
+    "6": { "winners": N, "premio_por_ganador": MONTO, "pozo": MONTO }
+  },
+  "estimulo": { "monto": MONTO, "winners": N }
+}
+
+IMPORTANTE: Los 20 números sorteados son los números que salieron en el sorteo. Los jugadores ganan si SUS números elegidos coinciden con estos 20.`;
+
+    return await this.llamarAPI(imageBase64, mimeType, prompt);
+  },
+
+  /**
+   * PROCESAR IMAGEN DE EXTRACTO TOMBOLINA
+   * Extrae los datos de un extracto de TOMBOLINA (20 números + 4 letras, igual que Quiniela pero sorteo propio)
+   */
+  async procesarImagenTombolina(imageBase64, mimeType) {
+    const prompt = `Actuás como un extractor especializado de resultados de lotería TOMBOLINA de Argentina.
+
+Analizá esta imagen de extracto oficial y devolvé SOLO un objeto JSON válido.
+
+REGLAS DE EXTRACCIÓN CRÍTICAS:
+
+1. TOMBOLINA es similar a Quiniela: sortea 20 NÚMEROS en posiciones del 1° al 20°
+
+2. Cada número tiene 2 dígitos (00-99) o 4 dígitos según el extracto
+
+3. También sortea 4 LETRAS válidas (de la A a la P)
+
+4. BUSCAR EN EL EXTRACTO:
+   - Los 20 números sorteados en orden de posición (1° al 20°)
+   - Las 4 letras ganadoras
+   - Número de sorteo
+   - Fecha y hora del sorteo
+   - Modalidad: MATUTINA, VESPERTINA o NOCTURNA
+
+5. TABLA DE PREMIOS TOMBOLINA (referencia):
+   - 3 de 3 números: multiplicador 50x
+   - 4 de 4 números: multiplicador 140x
+   - 5 de 5 números: multiplicador 700x
+   - 6 de 6 números: multiplicador 3500x
+   - 7 de 7 números: multiplicador 8000x
+   - Letras (4 coinciden): premio fijo $1000
+
+6. FORMATO DE NÚMEROS:
+   - Si son 2 dígitos: "00", "05", "23", "99"
+   - Si son 4 dígitos: "0000", "0523", "1234", "9999"
+   - Extraer en el formato que aparezcan
+
+7. FORMATO DE SALIDA:
+{
+  "game": "TOMBOLINA",
+  "sorteo": "XXXX",
+  "fecha": "YYYY-MM-DD",
+  "hora": "HH:MM",
+  "modalidad": "NOCTURNA",
+  "numeros": ["num1","num2",...,"num20"],
+  "letras": ["A","B","C","D"],
+  "provincia": "51"
+}
+
+IMPORTANTE: Detectar si el extracto dice "TOMBOLINA", "TOMBOLA" o similar en el encabezado.`;
+
+    return await this.llamarAPI(imageBase64, mimeType, prompt);
+  },
+
+  /**
    * DETECTAR TIPO DE EXTRACTO Y PROCESAR
-   * Detecta automáticamente si es BRINCO, QUINI 6 o Quiniela y procesa
+   * Detecta automáticamente si es BRINCO, QUINI 6, POCEADA, TOMBOLINA o Quiniela y procesa
    */
   async procesarExtractoAuto(imageBase64, mimeType) {
     // Primero detectar el tipo de extracto
@@ -438,7 +546,9 @@ JSON de respuesta:
 Responde SOLO con uno de estos valores exactos:
 - "BRINCO" si ves textos como "BRINCO EXTRACCIONES", "BRINCO JUNIOR"
 - "QUINI_6" si ves textos como "TRADICIONAL PRIMER SORTEO", "REVANCHA", "SIEMPRE SALE"
-- "QUINIELA" si ves una tabla de 20 números con posiciones del 1 al 20
+- "POCEADA" si ves textos como "POCEADA", "LA POCEADA" o menciona 8 aciertos/7 aciertos como premios
+- "TOMBOLINA" si ves textos como "TOMBOLINA", "TOMBOLA" o similar
+- "QUINIELA" si ves una tabla de 20 números con posiciones del 1 al 20 y menciona CABA/Buenos Aires/etc.
 
 Responde SOLO con la palabra del tipo de juego, sin explicaciones.`;
 
@@ -463,6 +573,10 @@ Responde SOLO con la palabra del tipo de juego, sin explicaciones.`;
         return await this.procesarImagenBrinco(imageBase64, mimeType);
       } else if (tipoDetectado.includes('QUINI') || tipoDetectado.includes('Q6')) {
         return await this.procesarImagenQuini6(imageBase64, mimeType);
+      } else if (tipoDetectado.includes('POCEADA')) {
+        return await this.procesarImagenPoceada(imageBase64, mimeType);
+      } else if (tipoDetectado.includes('TOMBOLINA') || tipoDetectado.includes('TOMBOLA')) {
+        return await this.procesarImagenTombolina(imageBase64, mimeType);
       } else {
         // Por defecto, procesar como Quiniela
         return await this.procesarImagenQuiniela(imageBase64, mimeType);
@@ -484,6 +598,10 @@ Responde SOLO con la palabra del tipo de juego, sin explicaciones.`;
       return `extracto_brinco_${data.sorteo_number}.json`;
     } else if (data.game === 'QUINI_6' && data.drawNumber) {
       return `extracto_quini6_${data.drawNumber}.json`;
+    } else if (data.game === 'POCEADA' && data.sorteo_number) {
+      return `extracto_poceada_${data.sorteo_number}.json`;
+    } else if (data.game === 'TOMBOLINA' && data.sorteo) {
+      return `extracto_tombolina_${data.sorteo}.json`;
     } else if (data.sorteo) {
       return `extracto_quiniela_${data.sorteo}.json`;
     }

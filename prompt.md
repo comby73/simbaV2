@@ -470,3 +470,49 @@ Para detalles técnicos, ver DOCUMENTACION.md y los commits de febrero 2026.
 
 *Fin de registros de la sesión - 5 de Febrero 2026*
 
+---
+
+## Sesión: 6 de Febrero 2026
+
+### Prompt 40 - OCR Fallback para Poceada y Tombolina
+> "hacer lo mismo que hiciste con quini6 y brinco en referencia a si lee el extracto llama a groq y no funciona llama a openai para quiniela poceada y tombolina"
+>
+> **Contexto:**
+> - Usuario solicita implementar OCR con fallback multi-proveedor (GROQ → MISTRAL → OPENAI) para Poceada y Tombolina
+> - El sistema de OCR ya existía en `ocr-extractos.js` con fallback automático
+>
+> **Implementado:**
+> - `procesarImagenPoceada()` en `ocr-extractos.js` - Prompt específico para extraer 20 números + 4 letras
+> - `procesarImagenTombolina()` en `ocr-extractos.js` - Prompt similar al formato Quiniela
+> - Actualizado `procesarExtractoAuto()` para detectar POCEADA y TOMBOLINA automáticamente
+> - Actualizado `generarNombreArchivo()` para manejar nuevos tipos de juego
+> - Tab OCR agregada en HTML para Poceada (líneas 1224-1270)
+> - Funciones frontend: `procesarExtractoPoceadaOCR()`, `cargarExtractoPoceadaDesdeJSON()`, `llenarInputsPoceadaDesdeOCR()`
+
+### Prompt 41 - Reportes Escrutinio no muestran LOTO5/BRINCO/QUINI6
+> "los reportes escrutinio previo no aparecen loto5 brinco y quini6...donde se guardan los controles previos y escrutinios despues de procesar"
+>
+> **Contexto:**
+> - Usuario reporta que los reportes/dashboard no muestran datos de LOTO5, BRINCO y QUINI 6
+> - Se descubrió que BRINCO y QUINI6 tenían `// TODO: Guardar en base de datos` - nunca insertaban datos
+> - LOTO5 ya tenía la implementación completa funcionando
+>
+> **Causa raíz:** Los controladores de escrutinio de BRINCO y QUINI6 procesaban correctamente pero no persistían en BD
+>
+> **Implementado:**
+> - Creada función `guardarEscrutinioBrinco()` en `brinco-escrutinio.controller.js`:
+>   - Inserta en `escrutinio_brinco` con ON DUPLICATE KEY UPDATE
+>   - Inserta ganadores por modalidad (TRADICIONAL/JUNIOR) en `escrutinio_brinco_ganadores`
+>   - Llamada automática al ejecutar escrutinio
+> - Creada función `guardarEscrutinioQuini6DB()` en `quini6-escrutinio.controller.js`:
+>   - Inserta en `escrutinio_quini6` con ON DUPLICATE KEY UPDATE
+>   - Inserta ganadores de las 5 modalidades en `escrutinio_quini6_ganadores`
+>   - Llamada automática al ejecutar escrutinio y al guardar manualmente
+> - Los reportes ahora muestran correctamente datos de los 7 juegos
+
+### Prompt 42 - Actualizar Documentación y Commit
+> "y necesito que agregues los cambios a documentacion.md y prompt.md para que se tenga actualizada mi archivo de como viene la aplicacion, y ademas el commit"
+>
+> **Contexto:** Solicitud de documentar todos los cambios de la sesión y realizar commit.
+
+*Fin de registros de la sesión - 6 de Febrero 2026*

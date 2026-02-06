@@ -11,6 +11,18 @@ El sistema permite:
 
 ## 🆕 Actualizaciones recientes (febrero 2026)
 
+### Versión 3.1 (6 de febrero 2026)
+- **OCR Poceada/Tombolina**: Implementado OCR con fallback multi-proveedor (GROQ → MISTRAL → OPENAI) para cargar extractos desde imágenes
+  - `procesarImagenPoceada()` - Extrae 20 números + 4 letras del extracto
+  - `procesarImagenTombolina()` - Extrae formato similar a Quiniela
+  - Detección automática del tipo de juego en `procesarExtractoAuto()`
+  - Tab OCR agregada en UI de Poceada
+- **Persistencia BRINCO/QUINI6**: Corregido el guardado de escrutinios en base de datos
+  - Los escrutinios ahora se guardan automáticamente al ejecutarse
+  - `guardarEscrutinioBrinco()` - Inserta en `escrutinio_brinco` y `escrutinio_brinco_ganadores`
+  - `guardarEscrutinioQuini6DB()` - Inserta en `escrutinio_quini6` y `escrutinio_quini6_ganadores`
+- **Reportes**: Los reportes del dashboard ahora muestran correctamente datos de los 7 juegos
+
 ### Versión 3.0 (5 de febrero 2026)
 - **BRINCO**: Implementación completa (Control Previo + Escrutinio) con modalidades Tradicional y Revancha
 - **QUINI 6**: Implementación completa (Control Previo + Escrutinio) con 5 modalidades: Tradicional Primera, Tradicional Segunda, Revancha, Siempre Sale y Premio Extra

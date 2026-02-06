@@ -1229,7 +1229,10 @@
 
           <div class="tabs-container" style="margin-top: 1rem;">
             <div class="tabs" style="display: flex; gap: 0; border-bottom: 2px solid var(--border-color);">
-              <button class="tab active" data-tab="poc-ext-xml" onclick="cambiarTabExtractoPoceada('xml')">
+              <button class="tab active" data-tab="poc-ext-ocr" onclick="cambiarTabExtractoPoceada('ocr')">
+                <i class="fas fa-robot"></i> OCR/Imagen
+              </button>
+              <button class="tab" data-tab="poc-ext-xml" onclick="cambiarTabExtractoPoceada('xml')">
                 <i class="fas fa-file-code"></i> XML
               </button>
               <button class="tab" data-tab="poc-ext-manual" onclick="cambiarTabExtractoPoceada('manual')">
@@ -1237,8 +1240,37 @@
               </button>
             </div>
 
+            <!-- Tab OCR Poceada -->
+            <div class="tab-content" id="tab-poc-ext-ocr">
+              <div style="margin-top: 1rem;">
+                <label>Cargar imagen o PDF del extracto</label>
+                <input type="file" id="cpst-poceada-extracto-ocr" accept=".png,.jpg,.jpeg,.pdf,.json" class="form-control"
+                  onchange="procesarExtractoPoceadaOCR(this.files[0])">
+                <small class="text-muted">
+                  Soporta imágenes (PNG, JPG), PDF o JSON. Usa IA para extraer los datos automáticamente.
+                </small>
+              </div>
+              
+              <!-- Status OCR -->
+              <div id="cpst-poceada-ocr-status" class="hidden" style="margin-top: 1rem; padding: 1rem; background: var(--bg-input); border-radius: 8px;">
+                <div style="display: flex; align-items: center; gap: 0.5rem;">
+                  <i class="fas fa-spinner fa-spin"></i>
+                  <span id="cpst-poceada-ocr-mensaje">Procesando...</span>
+                </div>
+                <div id="cpst-poceada-ocr-progress" style="margin-top: 0.5rem; height: 4px; background: var(--border-color); border-radius: 2px; overflow: hidden;">
+                  <div style="width: 0%; height: 100%; background: var(--primary-color); transition: width 0.3s;"></div>
+                </div>
+              </div>
+              
+              <!-- Archivo cargado exitosamente -->
+              <div id="cpst-poceada-file-info" class="hidden" style="margin-top: 1rem; padding: 0.75rem; background: rgba(40, 167, 69, 0.1); border: 1px solid rgba(40, 167, 69, 0.3); border-radius: 6px;">
+                <i class="fas fa-check-circle text-success"></i>
+                <span id="cpst-poceada-filename" style="margin-left: 0.5rem;"></span>
+              </div>
+            </div>
+
             <!-- Tab XML Poceada -->
-            <div class="tab-content" id="tab-poc-ext-xml">
+            <div class="tab-content hidden" id="tab-poc-ext-xml">
               <div style="margin-top: 1rem;">
                 <label>Cargar archivo XML del extracto</label>
                 <input type="file" id="cpst-poceada-extracto-xml" accept=".xml" class="form-control"
@@ -2703,6 +2735,9 @@
                     <option value="poceada">Poceada</option>
                     <option value="tombolina">Tombolina</option>
                     <option value="loto">Loto</option>
+                    <option value="loto5">Loto 5</option>
+                    <option value="quini6">Quini 6</option>
+                    <option value="brinco">Brinco</option>
                   </select>
                 </div>
                 <div class="col-md-2">
@@ -2774,6 +2809,9 @@
                     <option value="poceada">Poceada</option>
                     <option value="tombolina">Tombolina</option>
                     <option value="loto">Loto</option>
+                    <option value="loto5">Loto 5</option>
+                    <option value="quini6">Quini 6</option>
+                    <option value="brinco">Brinco</option>
                   </select>
                 </div>
                 <div class="col-md-2">

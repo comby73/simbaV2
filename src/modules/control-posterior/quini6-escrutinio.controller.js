@@ -652,6 +652,14 @@ async function ejecutar(req, res) {
     // Ejecutar escrutinio
     const resultados = await runScrutiny(registros, extractoNormalizado);
     
+    // Guardar en base de datos automáticamente
+    try {
+      await guardarEscrutinioQuini6DB(resultados, req.user);
+      console.log('✅ Escrutinio QUINI 6 guardado automáticamente en base de datos');
+    } catch (errGuardar) {
+      console.error('⚠️ Error guardando escrutinio QUINI 6 (no crítico):', errGuardar.message);
+    }
+    
     return successResponse(res, resultados, 'Escrutinio de QUINI 6 ejecutado correctamente');
     
   } catch (error) {
@@ -712,6 +720,14 @@ async function guardarEscrutinio(req, res) {
     const backupFile = path.join(backupDir, `escrutinio_${sorteo}_${Date.now()}.json`);
     fs.writeFileSync(backupFile, JSON.stringify(resultados, null, 2));
     
+    // Guardar en base de datos
+    try {
+      await guardarEscrutinioQuini6DB(resultados, req.user);
+      console.log('✅ Escrutinio QUINI 6 guardado en base de datos');
+    } catch (dbError) {
+      console.error('⚠️ Error guardando en BD (no crítico):', dbError.message);
+    }
+    
     return successResponse(res, {
       guardado: true,
       archivo: backupFile
@@ -721,6 +737,161 @@ async function guardarEscrutinio(req, res) {
     console.error('Error guardando escrutinio QUINI 6:', error);
     return errorResponse(res, `Error: ${error.message}`, 500);
   }
+}
+
+/**
+ * Guarda los resultados del escrutinio de QUINI 6 en la base de datos
+ */
+async function guardarEscrutinioQuini6DB(resultados, user) {
+  const sorteo = resultados.sorteo || 'N/A';
+  const fecha = resultados.fecha || new Date().toISOString().split('T')[0];
+  
+  // Extraer números de cada modalidad
+  const numerosTP = resultados.extracto?.tradicionalPrimera?.join(',') || '';
+  const numerosTS = resultados.extracto?.tradicionalSegunda?.join(',') || '';
+  const numerosRev = resultados.extracto?.revancha?.join(',') || '';
+  const numerosSS = resultados.extracto?.siempreSale?.join(',') || '';
+  
+  // Calcular totales
+  let totalGanadores = 0;
+  let totalPremios = 0;
+  
+  // Sumar ganadores de cada modalidad
+  if (resultados.ganadores) {
+    const g = resultados.ganadores;
+    // Tradicional Primera
+    for (const nivel of ['6', '5', '4']) {
+      totalGanadores += g.tradicionalPrimera?.[nivel]?.cantidad || 0;
+      totalPremios += g.tradicionalPrimera?.[nivel]?.premioTotal || 0;
+    }
+    // Tradicional Segunda
+    for (const nivel of ['6', '5', '4']) {
+      totalGanadores += g.tradicionalSegunda?.[nivel]?.cantidad || 0;
+      totalPremios += g.tradicionalSegunda?.[nivel]?.premioTotal || 0;
+    }
+    // Revancha
+    totalGanadores += g.revancha?.['6']?.cantidad || 0;
+    totalPremios += g.revancha?.['6']?.premioTotal || 0;
+    // Siempre Sale
+    totalGanadores += g.siempreSale?.cantidad || 0;
+    totalPremios += g.siempreSale?.premioTotal || 0;
+    // Premio Extra
+    totalGanadores += g.premioExtra?.['6']?.cantidad || 0;
+    totalPremios += g.premioExtra?.['6']?.premioTotal || 0;
+  }
+  
+  // Insertar o actualizar escrutinio
+  await query(`
+    INSERT INTO escrutinio_quini6
+    (numero_sorteo, fecha, numeros_tradicional_primera, numeros_tradicional_segunda,
+     numeros_revancha, numeros_siempre_sale, total_apostadores, total_ganadores,
+     total_premios, datos_json, usuario_id)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    ON DUPLICATE KEY UPDATE
+      fecha = VALUES(fecha),
+      numeros_tradicional_primera = VALUES(numeros_tradicional_primera),
+      numeros_tradicional_segunda = VALUES(numeros_tradicional_segunda),
+      numeros_revancha = VALUES(numeros_revancha),
+      numeros_siempre_sale = VALUES(numeros_siempre_sale),
+      total_apostadores = VALUES(total_apostadores),
+      total_ganadores = VALUES(total_ganadores),
+      total_premios = VALUES(total_premios),
+      datos_json = VALUES(datos_json),
+      usuario_id = VALUES(usuario_id),
+      updated_at = CURRENT_TIMESTAMP
+  `, [
+    sorteo,
+    fecha,
+    numerosTP,
+    numerosTS,
+    numerosRev,
+    numerosSS,
+    resultados.totalApuestas || 0,
+    totalGanadores,
+    totalPremios,
+    JSON.stringify(resultados),
+    user?.id || null
+  ]);
+  
+  // Obtener ID del escrutinio
+  const [escrutinioRow] = await query(
+    'SELECT id FROM escrutinio_quini6 WHERE numero_sorteo = ?',
+    [sorteo]
+  );
+  const escrutinioId = escrutinioRow?.id;
+  
+  if (escrutinioId && resultados.ganadores) {
+    // Limpiar ganadores anteriores
+    await query('DELETE FROM escrutinio_quini6_ganadores WHERE escrutinio_id = ?', [escrutinioId]);
+    
+    const g = resultados.ganadores;
+    
+    // Guardar ganadores Tradicional Primera
+    for (const nivel of ['6', '5', '4']) {
+      const data = g.tradicionalPrimera?.[nivel];
+      if (data && data.cantidad > 0) {
+        await query(`
+          INSERT INTO escrutinio_quini6_ganadores
+          (escrutinio_id, numero_sorteo, modalidad, aciertos, cantidad_ganadores,
+           premio_unitario, premio_total)
+          VALUES (?, ?, ?, ?, ?, ?, ?)
+        `, [escrutinioId, sorteo, 'TRADICIONAL_PRIMERA', parseInt(nivel), 
+            data.cantidad, data.premioUnitario || 0, data.premioTotal || 0]);
+      }
+    }
+    
+    // Guardar ganadores Tradicional Segunda
+    for (const nivel of ['6', '5', '4']) {
+      const data = g.tradicionalSegunda?.[nivel];
+      if (data && data.cantidad > 0) {
+        await query(`
+          INSERT INTO escrutinio_quini6_ganadores
+          (escrutinio_id, numero_sorteo, modalidad, aciertos, cantidad_ganadores,
+           premio_unitario, premio_total)
+          VALUES (?, ?, ?, ?, ?, ?, ?)
+        `, [escrutinioId, sorteo, 'TRADICIONAL_SEGUNDA', parseInt(nivel),
+            data.cantidad, data.premioUnitario || 0, data.premioTotal || 0]);
+      }
+    }
+    
+    // Guardar Revancha
+    const revancha = g.revancha?.['6'];
+    if (revancha && revancha.cantidad > 0) {
+      await query(`
+        INSERT INTO escrutinio_quini6_ganadores
+        (escrutinio_id, numero_sorteo, modalidad, aciertos, cantidad_ganadores,
+         premio_unitario, premio_total)
+        VALUES (?, ?, ?, ?, ?, ?, ?)
+      `, [escrutinioId, sorteo, 'REVANCHA', 6,
+          revancha.cantidad, revancha.premioUnitario || 0, revancha.premioTotal || 0]);
+    }
+    
+    // Guardar Siempre Sale
+    const ss = g.siempreSale;
+    if (ss && ss.cantidad > 0) {
+      await query(`
+        INSERT INTO escrutinio_quini6_ganadores
+        (escrutinio_id, numero_sorteo, modalidad, aciertos, cantidad_ganadores,
+         premio_unitario, premio_total)
+        VALUES (?, ?, ?, ?, ?, ?, ?)
+      `, [escrutinioId, sorteo, 'SIEMPRE_SALE', ss.aciertosRequeridos || 0,
+          ss.cantidad, ss.premioUnitario || 0, ss.premioTotal || 0]);
+    }
+    
+    // Guardar Premio Extra
+    const extra = g.premioExtra?.['6'];
+    if (extra && extra.cantidad > 0) {
+      await query(`
+        INSERT INTO escrutinio_quini6_ganadores
+        (escrutinio_id, numero_sorteo, modalidad, aciertos, cantidad_ganadores,
+         premio_unitario, premio_total)
+        VALUES (?, ?, ?, ?, ?, ?, ?)
+      `, [escrutinioId, sorteo, 'PREMIO_EXTRA', 6,
+          extra.cantidad, extra.premioUnitario || 0, extra.premioTotal || 0]);
+    }
+  }
+  
+  console.log(`✅ QUINI 6 guardado: Sorteo ${sorteo}, ${totalGanadores} ganadores, $${totalPremios} premios`);
 }
 
 /**

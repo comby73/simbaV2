@@ -3442,6 +3442,184 @@ function procesarXMLExtractoPoceada(xmlText) {
   }
 }
 
+/**
+ * Procesar imagen/PDF de extracto POCEADA con OCR
+ */
+async function procesarExtractoPoceadaOCR(file) {
+  if (!file) return;
+  
+  const status = document.getElementById('cpst-poceada-ocr-status');
+  const mensaje = document.getElementById('cpst-poceada-ocr-mensaje');
+  const progress = document.getElementById('cpst-poceada-ocr-progress');
+  const fileInfo = document.getElementById('cpst-poceada-file-info');
+  const filename = document.getElementById('cpst-poceada-filename');
+  
+  // Si es JSON, cargar directamente
+  if (file.name.toLowerCase().endsWith('.json')) {
+    try {
+      const text = await file.text();
+      const data = JSON.parse(text);
+      if (cargarExtractoPoceadaDesdeJSON(data)) {
+        fileInfo?.classList.remove('hidden');
+        if (filename) filename.textContent = file.name;
+      }
+    } catch (error) {
+      console.error('Error cargando JSON:', error);
+      showToast('Error al cargar archivo JSON', 'error');
+    }
+    return;
+  }
+  
+  // Mostrar status OCR
+  status?.classList.remove('hidden');
+  fileInfo?.classList.add('hidden');
+  if (mensaje) mensaje.textContent = 'Procesando archivo con OCR...';
+  if (progress) progress.querySelector('div').style.width = '10%';
+  
+  try {
+    // Verificar si OCRExtractos está disponible
+    if (!window.OCRExtractos) {
+      throw new Error('Módulo OCR no cargado. Recargue la página.');
+    }
+    
+    // Si no tiene API Key, intentar reinicializar
+    if (!OCRExtractos.hasApiKey()) {
+      OCRExtractos.init();
+    }
+    
+    // Si aún no tiene API Key, mostrar error
+    if (!OCRExtractos.hasApiKey()) {
+      throw new Error('OCR no configurado. Configure la API Key en Configuración.');
+    }
+    
+    if (progress) progress.querySelector('div').style.width = '20%';
+    
+    let base64, mimeType;
+    
+    // Detectar si es PDF y convertir
+    if (file.type === 'application/pdf' || file.name.toLowerCase().endsWith('.pdf')) {
+      if (mensaje) mensaje.textContent = 'Convirtiendo PDF a imagen...';
+      const pdfResult = await OCRExtractos.pdfToImage(file);
+      base64 = pdfResult.base64;
+      mimeType = pdfResult.mimeType;
+    } else {
+      if (mensaje) mensaje.textContent = 'Procesando imagen...';
+      const imgResult = await OCRExtractos.imageToBase64(file);
+      base64 = imgResult.base64;
+      mimeType = imgResult.mimeType;
+    }
+    
+    if (progress) progress.querySelector('div').style.width = '50%';
+    if (mensaje) mensaje.textContent = 'Extrayendo datos con IA...';
+    
+    // Procesar con OCR específico según el juego seleccionado
+    let result;
+    if (cpstJuegoSeleccionado === 'Tombolina') {
+      result = await OCRExtractos.procesarImagenTombolina(base64, mimeType);
+    } else {
+      result = await OCRExtractos.procesarImagenPoceada(base64, mimeType);
+    }
+    
+    if (progress) progress.querySelector('div').style.width = '90%';
+    
+    if (result.success && result.data) {
+      // Cargar los datos extraídos
+      if (cargarExtractoPoceadaDesdeJSON(result.data)) {
+        if (progress) progress.querySelector('div').style.width = '100%';
+        
+        // Llenar también los inputs manuales
+        llenarInputsPoceadaDesdeOCR(result.data);
+        
+        setTimeout(() => {
+          status?.classList.add('hidden');
+          fileInfo?.classList.remove('hidden');
+          if (filename) filename.textContent = file.name;
+        }, 500);
+        
+        showToast(`Extracto ${cpstJuegoSeleccionado === 'Tombolina' ? 'TOMBOLINA' : 'POCEADA'} procesado correctamente con OCR`, 'success');
+      }
+    } else {
+      throw new Error(result.error || 'No se pudieron extraer los datos');
+    }
+  } catch (error) {
+    console.error(`Error OCR ${cpstJuegoSeleccionado}:`, error);
+    status?.classList.add('hidden');
+    showToast(`Error OCR: ${error.message}`, 'error');
+  }
+}
+
+/**
+ * Cargar extracto Poceada/Tombolina desde datos JSON
+ */
+function cargarExtractoPoceadaDesdeJSON(data) {
+  try {
+    let numeros = data.numeros || [];
+    let letras = data.letras || [];
+    
+    // Normalizar números a enteros (manejar formato de 2 o 4 dígitos)
+    numeros = numeros.map(n => {
+      const str = n.toString().replace(/\D/g, '');
+      // Si tiene 4 dígitos, tomar los últimos 2
+      return parseInt(str.slice(-2)) || 0;
+    });
+    
+    // Normalizar letras a mayúsculas
+    letras = letras.map(l => l.toString().toUpperCase().charAt(0));
+    
+    if (numeros.length < 20) {
+      showToast(`JSON incompleto: solo ${numeros.length} números (se requieren 20)`, 'warning');
+      return false;
+    }
+    
+    // Letras son opcionales para Tombolina (usa extracto de Quiniela que sí las tiene)
+    if (letras.length < 4 && cpstJuegoSeleccionado !== 'Tombolina') {
+      showToast(`JSON incompleto: solo ${letras.length} letras (se requieren 4)`, 'warning');
+      return false;
+    }
+    
+    cpstExtractoPoceada = {
+      numeros: numeros.slice(0, 20),
+      letras: letras.length >= 4 ? letras.slice(0, 4) : ['A', 'B', 'C', 'D'], // Default para Tombolina
+      sorteo: data.sorteo_number || data.sorteo || '',
+      fecha: data.date || data.fecha || ''
+    };
+    
+    mostrarPreviewExtractoPoceada();
+    return true;
+  } catch (error) {
+    console.error('Error cargando JSON:', error);
+    showToast('Error al procesar JSON: ' + error.message, 'error');
+    return false;
+  }
+}
+
+/**
+ * Llenar los inputs manuales de Poceada desde los datos OCR
+ */
+function llenarInputsPoceadaDesdeOCR(data) {
+  // Generar inputs si no existen
+  generarInputsPoceadaManual();
+  
+  const numeros = data.numeros || [];
+  const letras = data.letras || [];
+  
+  // Llenar números
+  const numerosInputs = document.querySelectorAll('#cpst-poceada-numeros-grid .poceada-numero');
+  numerosInputs.forEach((input, i) => {
+    if (numeros[i] !== undefined) {
+      input.value = parseInt(numeros[i].toString().replace(/\D/g, '')) || 0;
+    }
+  });
+  
+  // Llenar letras
+  const letrasInputs = document.querySelectorAll('#cpst-poceada-letras-grid .poceada-letra');
+  letrasInputs.forEach((input, i) => {
+    if (letras[i]) {
+      input.value = letras[i].toString().toUpperCase().charAt(0);
+    }
+  });
+}
+
 // Confirmar extracto de Poceada desde entrada manual
 function confirmarExtractoPoceada() {
   const numerosInputs = document.querySelectorAll('#cpst-poceada-numeros-grid .poceada-numero');
