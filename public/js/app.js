@@ -8062,34 +8062,6 @@ function mostrarResultadosEscrutinioQuini6(resultado) {
               </table>
             `;
           })()}
-          <!-- Números únicos jugados por ganadores del Premio Extra -->
-          ${(() => {
-            const registrosPE = ganadores.premioExtra?.['6']?.registros || [];
-            if (registrosPE.length === 0) return '';
-            
-            // Recopilar todos los números únicos jugados por ganadores
-            const numerosUnicos = new Set();
-            registrosPE.forEach(r => {
-              (r.numerosJugados || []).forEach(n => numerosUnicos.add(parseInt(n)));
-            });
-            const numerosOrdenados = Array.from(numerosUnicos).sort((a, b) => a - b);
-            
-            return `
-              <div style="margin-top: 1rem; padding: 1rem; background: rgba(236, 72, 153, 0.05); border-radius: 8px; border: 1px dashed #ec4899;">
-                <div style="font-size: 0.85rem; color: var(--text-muted); margin-bottom: 0.5rem; display: flex; align-items: center; gap: 0.5rem;">
-                  <i class="fas fa-search" style="color: #ec4899;"></i>
-                  <strong>Números únicos jugados por ganadores (${numerosOrdenados.length} números diferentes)</strong>
-                </div>
-                <div style="font-family: monospace; font-size: 1rem; color: #ec4899; font-weight: 600; line-height: 1.8;">
-                  ${numerosOrdenados.map(n => `<span style="display: inline-block; padding: 0.25rem 0.5rem; background: rgba(236, 72, 153, 0.15); border-radius: 4px; margin: 0.15rem;">${n.toString().padStart(2, '0')}</span>`).join(' ')}
-                </div>
-                <div style="margin-top: 0.75rem; font-size: 0.8rem; color: var(--text-muted);">
-                  <i class="fas fa-info-circle" style="margin-right: 0.25rem;"></i>
-                  ${registrosPE.length} tickets ganadores participaron en Premio Extra
-                </div>
-              </div>
-            `;
-          })()}
         </div>
       </div>
       ` : ''}
