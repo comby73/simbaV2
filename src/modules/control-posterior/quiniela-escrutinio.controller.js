@@ -216,7 +216,7 @@ function ejecutarEscrutinio(registros, extractos) {
             ganadoresDetalle.push({
               ticket: reg.numeroTicket,
               provincia: reg.provincia || '51',
-              agencia: `${reg.provincia || '51'}-${(reg.agencia || '').padStart(5, '0')}`,
+              agencia: `${reg.provincia || '51'}${(reg.agencia || '').padStart(5, '0')}`,
               tipo: 'SIMPLE',
               cifras: cifras,
               extracto: reportePorExtracto[idx].nombre,
@@ -432,7 +432,7 @@ function ejecutarEscrutinio(registros, extractos) {
             ganadoresDetalle.push({
               ticket: reg.numeroTicket,
               provincia: reg.provincia || '51',
-              agencia: `${reg.provincia || '51'}-${(reg.agencia || '').padStart(5, '0')}`,
+              agencia: `${reg.provincia || '51'}${(reg.agencia || '').padStart(5, '0')}`,
               tipo: 'REDOBLONA',
               cifras: 2,
               extracto: reportePorExtracto[idx].nombre,
@@ -559,7 +559,7 @@ function ejecutarEscrutinio(registros, extractos) {
         ganadoresDetalle.push({
           ticket: ticketNum,
           provincia: regOriginal.provincia || '51',
-          agencia: `${regOriginal.provincia || '51'}-${(regOriginal.agencia || '').padStart(5, '0')}`,
+          agencia: `${regOriginal.provincia || '51'}${(regOriginal.agencia || '').padStart(5, '0')}`,
           tipo: 'LETRAS',
           cifras: 4,
           extracto: reportePorExtracto[extractoAsignado].nombre,

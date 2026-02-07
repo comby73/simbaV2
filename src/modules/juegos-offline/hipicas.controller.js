@@ -83,11 +83,15 @@ function parsearLinea(line, debug = false) {
     }
     const sorteoConcatenado = `${numeroReunion}-${hipodromo.abrev}`;
 
-    // Agencia (sin ceros a la izquierda)
-    const agente = provinciaAgencia.substring(2).replace(/^0+/, '') || '0';
-
-    // Provincia
+    // Provincia y Agencia
     const codigoProv = provinciaAgencia.substring(0, 2);
+    const agenciaCompleta = provinciaAgencia.substring(2); // 6 dígitos (incluye dígito verificador)
+    const agenciaSinVerificador = agenciaCompleta.substring(0, 5); // Primeros 5 dígitos
+    const agente = agenciaSinVerificador.replace(/^0+/, '') || '0'; // Sin ceros a la izquierda para display
+    
+    // ctaCte formato numérico: provincia (2 dígitos) + agencia (5 dígitos) = 5100011
+    const ctaCte = codigoProv + agenciaSinVerificador;
+    
     const provinciaNombre = CODIGOS_PROVINCIA[codigoProv] || codigoProv;
 
     // Fecha (DDMMYYYY -> YYYY-MM-DD)
@@ -109,6 +113,7 @@ function parsearLinea(line, debug = false) {
       sorteoConcatenado,
       reunion: String(numeroReunion),
       agente,
+      ctaCte,  // Formato: 5100011 (provincia + agencia 5 dígitos)
       provincia: codigoProv,
       provinciaNombre,
       fechaSorteo,
@@ -167,7 +172,7 @@ function procesarContenidoTXT(contenido, nombreArchivo) {
     reunionesEncontradas[reunionKey] = (reunionesEncontradas[reunionKey] || 0) + 1;
 
     lineasProcesadas++;
-    const key = `${parsed.sorteoConcatenado}_${parsed.agente}`;
+    const key = `${parsed.sorteoConcatenado}_${parsed.ctaCte}`;
 
     if (!agencias[key]) {
       agencias[key] = {
@@ -177,6 +182,7 @@ function procesarContenidoTXT(contenido, nombreArchivo) {
         hipodromo_nombre: parsed.hipodromo.nombre,
         reunion: parsed.reunion,
         agency: parsed.agente,
+        ctaCte: parsed.ctaCte,  // Formato: 5100011
         provincia: parsed.provincia,
         provincia_nombre: parsed.provinciaNombre,
         recaudacion_total: 0,
@@ -262,7 +268,7 @@ const procesarTXT = async (req, res) => {
             updated_at = CURRENT_TIMESTAMP
         `, [
           reg.sorteo, reg.fecha_sorteo, reg.hipodromo_codigo, reg.hipodromo_nombre,
-          reg.reunion, reg.agency, reg.recaudacion_total, reg.importe_cancelaciones,
+          reg.reunion, reg.ctaCte, reg.recaudacion_total, reg.importe_cancelaciones,
           reg.devoluciones, reg.total_premios, reg.archivo_origen, req.user?.id || null
         ]);
 
@@ -273,7 +279,7 @@ const procesarTXT = async (req, res) => {
         }
       } catch (err) {
         if (errores.length < 5) {
-          errores.push(`Sorteo ${reg.sorteo}, Agencia ${reg.agency}: ${err.message}`);
+          errores.push(`Sorteo ${reg.sorteo}, CtaCte ${reg.ctaCte}: ${err.message}`);
         }
       }
     }

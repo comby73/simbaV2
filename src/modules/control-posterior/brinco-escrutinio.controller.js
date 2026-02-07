@@ -252,9 +252,9 @@ function runScrutiny(registrosNTF, extracto, datosControlPrevio, registrosAnulad
         
         ganadoresDetalle.push({
           ticket: registro.ticket || registro.numeroTicket,
-          agencia: `${codProv}-${codAgencia}`,
+          agencia: `${codProv}${codAgencia}`,
           provincia: codProv,
-          cta_cte: `${codProv}-${codAgencia}`,
+          cta_cte: `${codProv}${codAgencia}`,
           modalidad: 'Tradicional',
           aciertos: aciertos,
           tipo: `BRINCO Tradicional ${aciertos} aciertos`,
@@ -266,7 +266,7 @@ function runScrutiny(registrosNTF, extracto, datosControlPrevio, registrosAnulad
           porNivelTradicional[6].agenciasGanadoras.push({
             agencia: registro.agencia || '',
             provincia: codProv,
-            ctaCte: `${codProv}-${codAgencia}`,
+            ctaCte: `${codProv}${codAgencia}`,
             ticket: registro.ticket || registro.numeroTicket || '',
             importe: importe,
             numerosJugados: numerosJugados.slice()
@@ -289,7 +289,7 @@ function runScrutiny(registrosNTF, extracto, datosControlPrevio, registrosAnulad
             porNivelTradicional[6].agenciasGanadoras.push({
               agencia: registro.agencia || '',
               provincia: codProv,
-              ctaCte: `${codProv}-${codAgencia}`,
+              ctaCte: `${codProv}${codAgencia}`,
               esMultiple: true,
               cantidad: ganadoresMultiples[nivel],
               ticket: registro.ticket || registro.numeroTicket || '',
@@ -301,9 +301,9 @@ function runScrutiny(registrosNTF, extracto, datosControlPrevio, registrosAnulad
           for (let k = 0; k < ganadoresMultiples[nivel]; k++) {
             ganadoresDetalle.push({
               ticket: registro.ticket || registro.numeroTicket,
-              agencia: `${codProv}-${codAgencia}`,
+              agencia: `${codProv}${codAgencia}`,
               provincia: codProv,
-              cta_cte: `${codProv}-${codAgencia}`,
+              cta_cte: `${codProv}${codAgencia}`,
               modalidad: 'Tradicional',
               aciertos: nivel,
               tipo: `BRINCO Tradicional ${nivel} aciertos (múltiple)`,
@@ -331,9 +331,9 @@ function runScrutiny(registrosNTF, extracto, datosControlPrevio, registrosAnulad
         
         ganadoresDetalle.push({
           ticket: registro.ticket || registro.numeroTicket,
-          agencia: `${codProv}-${codAgencia}`,
+          agencia: `${codProv}${codAgencia}`,
           provincia: codProv,
-          cta_cte: `${codProv}-${codAgencia}`,
+          cta_cte: `${codProv}${codAgencia}`,
           modalidad: 'Junior',
           aciertos: aciertosJunior,
           tipo: `BRINCO Junior ${aciertosJunior} aciertos`,
@@ -345,7 +345,7 @@ function runScrutiny(registrosNTF, extracto, datosControlPrevio, registrosAnulad
         porNivelJunior[nivelJunior].agenciasGanadoras.push({
           agencia: registro.agencia || '',
           provincia: codProv,
-          ctaCte: `${codProv}-${codAgencia}`,
+          ctaCte: `${codProv}${codAgencia}`,
           ticket: registro.ticket || registro.numeroTicket || '',
           importe: importe,
           aciertos: aciertosJunior,
@@ -368,7 +368,7 @@ function runScrutiny(registrosNTF, extracto, datosControlPrevio, registrosAnulad
           porNivelJunior[nivel].agenciasGanadoras.push({
             agencia: registro.agencia || '',
             provincia: codProv,
-            ctaCte: `${codProv}-${codAgencia}`,
+            ctaCte: `${codProv}${codAgencia}`,
             ticket: registro.ticket || registro.numeroTicket || '',
             importe: importe,
             aciertos: nivel,
@@ -380,9 +380,9 @@ function runScrutiny(registrosNTF, extracto, datosControlPrevio, registrosAnulad
           for (let k = 0; k < ganadoresMultiplesJunior[nivel]; k++) {
             ganadoresDetalle.push({
               ticket: registro.ticket || registro.numeroTicket,
-              agencia: `${codProv}-${codAgencia}`,
+              agencia: `${codProv}${codAgencia}`,
               provincia: codProv,
-              cta_cte: `${codProv}-${codAgencia}`,
+              cta_cte: `${codProv}${codAgencia}`,
               modalidad: 'Junior',
               aciertos: nivel,
               tipo: `BRINCO Junior ${nivel} aciertos (múltiple)`,

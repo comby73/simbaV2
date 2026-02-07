@@ -299,9 +299,9 @@ function runScrutiny(registrosNTF, extracto, datosControlPrevio, registrosAnulad
 
         ganadoresDetalle.push({
           ticket: registro.ticket || registro.numeroTicket,
-          agencia: `${codProv}-${codAgencia}`,
+          agencia: `${codProv}${codAgencia}`,
           provincia: codProv,
-          cta_cte: `${codProv}-${codAgencia}`,
+          cta_cte: `${codProv}${codAgencia}`,
           hits: hits,
           tipo: `Poceada ${hits} aciertos`,
           premio: 0 // Se calculará después al tener el unitario
@@ -311,7 +311,7 @@ function runScrutiny(registrosNTF, extracto, datosControlPrevio, registrosAnulad
           porNivel[8].agenciasGanadoras.push({
             agencia: registro.agencia || '',
             provincia: codProv,
-            ctaCte: `${codProv}-${codAgencia}`,
+            ctaCte: `${codProv}${codAgencia}`,
             posicion: registro.posicion || null,
             ticket: registro.ticket || registro.numeroTicket || '',
             importe: importe,
@@ -337,7 +337,7 @@ function runScrutiny(registrosNTF, extracto, datosControlPrevio, registrosAnulad
         porNivel[8].agenciasGanadoras.push({
           agencia: registro.agencia || '',
           provincia: codProv,
-          ctaCte: `${codProv}-${codAgencia}`,
+          ctaCte: `${codProv}${codAgencia}`,
           esMultiple: true,
           cantidad: ganadoresMultiples[8],
           ticket: registro.ticket || registro.numeroTicket || '',
@@ -354,9 +354,9 @@ function runScrutiny(registrosNTF, extracto, datosControlPrevio, registrosAnulad
           for (let k = 0; k < ganadoresMultiples[nivel]; k++) {
             ganadoresDetalle.push({
               ticket: registro.ticket || registro.numeroTicket,
-              agencia: `${codProv}-${codAgencia}`,
+              agencia: `${codProv}${codAgencia}`,
               provincia: codProv,
-              cta_cte: `${codProv}-${codAgencia}`,
+              cta_cte: `${codProv}${codAgencia}`,
               hits: nivel,
               tipo: `Poceada ${nivel} aciertos (múltiple)`,
               premio: 0
@@ -384,9 +384,9 @@ function runScrutiny(registrosNTF, extracto, datosControlPrevio, registrosAnulad
 
       ganadoresDetalle.push({
         ticket: registro.ticket || registro.numeroTicket,
-        agencia: `${codProv}-${codAgencia}`,
+        agencia: `${codProv}${codAgencia}`,
         provincia: codProv,
-        cta_cte: `${codProv}-${codAgencia}`,
+        cta_cte: `${codProv}${codAgencia}`,
         hits: 'letras',
         tipo: `Poceada Letras`,
         premio: 1000 // Fijo para letras

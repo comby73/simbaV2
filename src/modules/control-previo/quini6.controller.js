@@ -254,7 +254,7 @@ async function procesarArchivoNTF(contenido) {
       sorteo: numeroSorteo,
       provincia,
       agencia,
-      ctaCte: `${provincia}-${agencia}`,
+      ctaCte: `${provincia}${agencia}`,
       ticket,
       fechaVenta,
       horaVenta,
@@ -331,7 +331,7 @@ async function procesarArchivoNTF(contenido) {
     }
     
     // Estadísticas por agencia
-    const agenciaKey = `${provincia}-${agencia}`;
+    const agenciaKey = `${provincia}${agencia}`;
     if (!porAgencia[agenciaKey]) {
       porAgencia[agenciaKey] = {
         provincia,

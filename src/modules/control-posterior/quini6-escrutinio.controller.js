@@ -161,7 +161,7 @@ async function runScrutiny(registros, extracto) {
     const numerosJugados = registro.numerosJugados || [];
     const cantidadNumeros = registro.cantidadNumeros || numerosJugados.length;
     const instancia = registro.instancias || '1';
-    const agenciaKey = registro.ctaCte || `${registro.provincia}-${registro.agencia}`;
+    const agenciaKey = registro.ctaCte || `${registro.provincia}${registro.agencia}`;
     
     // Estadísticas por instancia
     // Cada instancia representa cuántas modalidades juega:

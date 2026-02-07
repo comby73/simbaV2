@@ -244,11 +244,15 @@ async function guardarPremiosPorAgencia(escrutinioId, juego, ganadoresDetalle) {
     let codProv = '51'; // Default CABA
     let codAgencia = agencia.padStart(5, '0');
 
-    // Si la agencia viene como cta_cte (ej: "51-12345")
+    // Si la agencia viene como cta_cte (ej: "51-12345" o "5112345")
     if (agencia.includes('-')) {
       const partes = agencia.split('-');
       codProv = partes[0];
       codAgencia = partes[1];
+    } else if (agencia.length === 7 && /^\d{7}$/.test(agencia)) {
+      // Formato numérico puro: "5112345" → provincia "51", agencia "12345"
+      codProv = agencia.substring(0, 2);
+      codAgencia = agencia.substring(2);
     }
 
     let clave;
@@ -256,8 +260,8 @@ async function guardarPremiosPorAgencia(escrutinioId, juego, ganadoresDetalle) {
     let nombreDisplay;
 
     if (codProv === '51') {
-      // CABA: Por agencia individual
-      clave = `${codProv}-${codAgencia}`;
+      // CABA: Por agencia individual - formato numérico sin guión
+      clave = `${codProv}${codAgencia}`;
       tipoAgrupacion = 'agencia';
       nombreDisplay = clave;
     } else {
@@ -314,7 +318,7 @@ async function guardarPremiosPorAgenciaPoceada(escrutinioId, agencieroData) {
     let nombreDisplay;
 
     if (codProv === '51') {
-      clave = det.ctaCte || `${codProv}-${codAgencia}`;
+      clave = det.ctaCte || `${codProv}${codAgencia}`;
       tipoAgrupacion = 'agencia';
       nombreDisplay = clave;
     } else {
@@ -373,14 +377,21 @@ async function guardarDetalleGanadores(escrutinioId, juego, ganadoresDetalle) {
       const partes = agencia.split('-');
       codProv = partes[0];
       codAgencia = partes[1];
+    } else if (agencia.length === 7 && /^\d{7}$/.test(agencia)) {
+      // Formato numérico puro: "5112345" → provincia "51", agencia "12345"
+      codProv = agencia.substring(0, 2);
+      codAgencia = agencia.substring(2);
     }
+
+    // cta_cte siempre en formato numérico sin guión
+    const ctaCte = `${codProv}${codAgencia}`;
 
     valores.push([
       escrutinioId,
       juego,
       g.ticket || '',
       g.ordinal || '01',
-      agencia.includes('-') ? agencia : `${codProv}-${codAgencia}`,
+      ctaCte,
       codProv,
       codAgencia,
       g.tipo || 'SIMPLE',

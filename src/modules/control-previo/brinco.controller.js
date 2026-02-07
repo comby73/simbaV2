@@ -233,7 +233,7 @@ async function procesarArchivoNTF(contenido) {
       sorteo: numeroSorteo,
       provincia,
       agencia,
-      ctaCte: `${provincia}-${agencia}`,
+      ctaCte: `${provincia}${agencia}`,
       ticket,
       fechaVenta,
       horaVenta,
@@ -278,7 +278,7 @@ async function procesarArchivoNTF(contenido) {
       porProvincia[provincia].recaudacion += valorRealApuesta;
       
       // Por agencia
-      const keyAgencia = `${provincia}-${agencia}`;
+      const keyAgencia = `${provincia}${agencia}`;
       if (!porAgencia[keyAgencia]) {
         porAgencia[keyAgencia] = {
           ctaCte: keyAgencia,

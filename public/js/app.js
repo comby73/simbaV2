@@ -12329,15 +12329,22 @@ async function buscarEscrutinios() {
     escrutiniosData = data.data;
     emptyMsg.classList.add('hidden');
 
-    tbody.innerHTML = escrutiniosData.map(item => `
+    tbody.innerHTML = escrutiniosData.map(item => {
+      // Modalidad solo aplica a Quiniela
+      const modalidadHtml = item.juego === 'quiniela' 
+        ? `<span class="badge badge-modalidad-${item.modalidad || 'N'}">${getModalidadNombre(item.modalidad || 'N')}</span>`
+        : '-';
+      
+      return `
       <tr>
         <td>${formatDate(item.fecha)}</td>
         <td><strong>${item.numero_sorteo}</strong></td>
-        <td><span class="badge badge-modalidad-${item.modalidad || 'N'}">${getModalidadNombre(item.modalidad || 'N')}</span></td>
+        <td>${modalidadHtml}</td>
         <td><span class="badge game-${item.juego}">${item.juego.toUpperCase()}</span></td>
         <td class="text-end">${formatNumber(item.total_ganadores)}</td>
         <td class="text-end text-success"><strong>$${formatNumber(item.total_premios)}</strong></td>
         <td>${item.usuario_nombre || '-'}</td>
+        <td>${formatDateTime(item.created_at)}</td>
         <td>
           <button class="btn btn-sm btn-secondary" onclick="verDetalleEscrutinio(${item.id}, '${item.juego}')" title="Ver detalle">
             <i class="fas fa-eye"></i>
@@ -12347,7 +12354,7 @@ async function buscarEscrutinios() {
           </button>
         </td>
       </tr>
-    `).join('');
+    `}).join('');
 
   } catch (error) {
     console.error('Error cargando escrutinios:', error);
