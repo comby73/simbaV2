@@ -607,7 +607,7 @@ async function runScrutiny(registros, extracto) {
  */
 async function ejecutar(req, res) {
   try {
-    const { registros, extracto } = req.body;
+    const { registros, extracto, datosControlPrevio } = req.body;
     
     if (!registros || !Array.isArray(registros) || registros.length === 0) {
       return errorResponse(res, 'No se proporcionaron registros para escrutar', 400);
@@ -616,6 +616,19 @@ async function ejecutar(req, res) {
     if (!extracto) {
       return errorResponse(res, 'No se proporcionó el extracto oficial', 400);
     }
+    
+    // Obtener fecha del sorteo: primero del extracto, luego del control previo, luego de datosOficiales
+    let fechaSorteo = extracto.fecha || extracto.fechaSorteo 
+      || datosControlPrevio?.fecha || datosControlPrevio?.fechaSorteo
+      || datosControlPrevio?.datosOficiales?.fecha
+      || null;
+    
+    // Si la fecha viene en formato YYYYMMDD, convertir a YYYY-MM-DD
+    if (fechaSorteo && /^\d{8}$/.test(fechaSorteo)) {
+      fechaSorteo = `${fechaSorteo.substring(0, 4)}-${fechaSorteo.substring(4, 6)}-${fechaSorteo.substring(6, 8)}`;
+    }
+    
+    console.log('[QUINI6] Fecha sorteo detectada:', fechaSorteo || 'No disponible');
     
     // Validar extracto
     const tradicionalPrimera = extracto.tradicional?.primera || extracto.tradicional?.primer?.numbers || [];
@@ -661,6 +674,9 @@ async function ejecutar(req, res) {
     
     // Ejecutar escrutinio
     const resultados = await runScrutiny(registros, extractoNormalizado);
+    
+    // Agregar fecha del sorteo a los resultados
+    resultados.fecha = fechaSorteo;
     
     // Guardar en base de datos automáticamente
     try {
