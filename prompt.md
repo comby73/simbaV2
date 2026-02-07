@@ -516,3 +516,69 @@ Para detalles técnicos, ver DOCUMENTACION.md y los commits de febrero 2026.
 > **Contexto:** Solicitud de documentar todos los cambios de la sesión y realizar commit.
 
 *Fin de registros de la sesión - 6 de Febrero 2026*
+
+---
+
+## Sesión: 7 de Febrero 2026
+
+### Prompt 43 - Tickets Brinco/Quini6 muestran IMPORTE en vez de PREMIO
+> "en brinco y quini6 la tabla de tickets ganadores muestra el importe (apuesta) en vez del premio ganado"
+>
+> **Contexto:**
+> - Las tablas de ganadores mostraban la columna IMPORTE (valor de la apuesta) en lugar del PREMIO (monto ganado)
+> - El backend calculaba premios correctamente pero no los asignaba a cada ganador individual
+>
+> **Implementado:**
+> - Backend `brinco-escrutinio.controller.js`: Después de calcular `premioUnitario` por nivel, se asigna `premio` y `premioUnitario` a cada ganador en `agenciasGanadoras`
+> - Backend `quini6-escrutinio.controller.js`: Misma lógica aplicada para las 5 modalidades
+> - Frontend `app.js`: `renderTicketsGanadores()` actualizado con parámetro `premioUnitario` para mostrar PREMIO en vez de IMPORTE
+> - Tabla de resumen Quini6 con columna "Premio Total" por modalidad
+
+### Prompt 44 - Premio Extra: Eliminar sección redundante de números únicos
+> "en premio extra, la sección de números únicos jugados por ganadores es redundante, solo quiero ver el pool"
+>
+> **Contexto:**
+> - La sección de Premio Extra en Quini6 mostraba dos bloques: el pool de números y los "números únicos jugados por ganadores"
+> - El segundo bloque era redundante y confuso
+>
+> **Implementado:**
+> - Removida la sección "Números únicos jugados por ganadores" del frontend
+> - Se mantiene solo el display del pool de Premio Extra
+> - Campo manual `cpst-quini6-pe-pool` para ingresar números del pool cuando no vienen del extracto
+
+### Prompt 45 - Premio Extra: Debugging de discrepancia en ganadores
+> "hay una diferencia en premio extra: yo cuento 63 ganadores pero el sistema da 64"
+>
+> **Contexto:**
+> - Investigación de discrepancia en conteo de ganadores del Premio Extra
+> - Se agregaron logs detallados de debugging al motor de escrutinio
+>
+> **Implementado:**
+> - Enhanced debugging en `quini6-escrutinio.controller.js`:
+>   - Log de cada ticket evaluado con sus números y aciertos
+>   - Acumulador de totales mostrado periódicamente
+>   - Resumen final del escrutinio con totales por modalidad
+> - Los logs permiten rastrear exactamente qué tickets son marcados como ganadores
+
+### Prompt 46 - Datos faltantes en Reportes para Quini6 y Loto5
+> "en reportes, quini6 y loto5 no aparecen datos aunque procesé escrutinios"
+>
+> **Contexto:**
+> - Usuario reporta que los reportes del dashboard no muestran datos de QUINI 6 y LOTO 5
+> - Investigación iniciada sobre queries del historial controller
+
+### Prompt 47 - Actualizar DOCUMENTACION.md y prompt.md
+> "me podes actualizar el la documentacion y prompt .md para entender todo lo que tiene mi aplicacion"
+>
+> **Contexto:**
+> - Solicitud de actualización integral de ambos archivos de documentación
+> - DOCUMENTACION.md: Completamente reescrito (~600 líneas, estructura limpia)
+>   - Cubre los 7 juegos + Hipicas con secciones detalladas
+>   - API endpoints completa (todas las rutas)
+>   - Base de datos: todas las tablas y migraciones
+>   - Frontend: arquitectura SPA, objetos API, secciones
+>   - OCR: sistema multi-proveedor documentado
+>   - Configuración dinámica y convenciones
+> - prompt.md: Agregados prompts 43-47 de la sesión del 7 de febrero
+
+*Fin de registros de la sesión - 7 de Febrero 2026*

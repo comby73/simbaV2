@@ -551,6 +551,15 @@ const procesarZip = async (req, res) => {
     
     console.log(`✅ BRINCO procesado: Sorteo ${logsTxt.numeroSorteo}, ${logsTxt.resumen.registros} registros válidos`);
     
+    // Guardar en BD para alimentar Dashboard/Reportes
+    try {
+      const resguardoInfo = await guardarControlPrevioBrincoDB(logsTxt, datosXml, req.user, req.file.originalname);
+      resultado.resguardo = resguardoInfo;
+    } catch (errGuardar) {
+      console.error('⚠️ Error guardando resguardo Brinco (no crítico):', errGuardar.message);
+      resultado.resguardo = { success: false, error: errGuardar.message };
+    }
+    
     return successResponse(res, resultado, 'Archivo BRINCO procesado correctamente');
     
   } catch (error) {
@@ -558,6 +567,119 @@ const procesarZip = async (req, res) => {
     return errorResponse(res, 'Error procesando archivo: ' + error.message, 500);
   }
 };
+
+/**
+ * Guarda los resultados del control previo de BRINCO en la BD
+ * Alimenta control_previo_brinco Y control_previo_agencias (para Dashboard)
+ */
+async function guardarControlPrevioBrincoDB(logsTxt, datosXml, user, nombreArchivo) {
+  try {
+    const sorteo = logsTxt.numeroSorteo || 'N/A';
+    const resumen = logsTxt.resumen || {};
+    
+    // Obtener fecha: intentar del XML, luego del primer registro NTF
+    let fecha = null;
+    if (datosXml?.fecha) {
+      const f = datosXml.fecha.replace(/[^0-9]/g, '');
+      if (f.length === 8) {
+        fecha = `${f.substring(0, 4)}-${f.substring(4, 6)}-${f.substring(6, 8)}`;
+      } else {
+        fecha = datosXml.fecha;
+      }
+    } else if (logsTxt.registros && logsTxt.registros.length > 0) {
+      const fv = logsTxt.registros[0].fechaVenta;
+      if (fv && fv.length === 8) {
+        fecha = `${fv.substring(0, 4)}-${fv.substring(4, 6)}-${fv.substring(6, 8)}`;
+      }
+    }
+    if (!fecha) {
+      fecha = new Date().toISOString().split('T')[0];
+    }
+
+    // INSERT/UPDATE en control_previo_brinco
+    const result = await query(`
+      INSERT INTO control_previo_brinco
+      (numero_sorteo, fecha, archivo, registros_validos, registros_anulados,
+       apuestas_total, recaudacion, datos_json, usuario_id)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ON DUPLICATE KEY UPDATE
+        archivo = VALUES(archivo),
+        fecha = VALUES(fecha),
+        registros_validos = VALUES(registros_validos),
+        registros_anulados = VALUES(registros_anulados),
+        apuestas_total = VALUES(apuestas_total),
+        recaudacion = VALUES(recaudacion),
+        datos_json = VALUES(datos_json),
+        usuario_id = VALUES(usuario_id),
+        updated_at = CURRENT_TIMESTAMP
+    `, [
+      sorteo,
+      fecha,
+      nombreArchivo,
+      resumen.registros || 0,
+      resumen.anulados || 0,
+      resumen.apuestasTotal || 0,
+      resumen.recaudacion || 0,
+      JSON.stringify(logsTxt.resumen),
+      user?.id || null
+    ]);
+
+    // Obtener el ID
+    let controlPrevioId = result.insertId;
+    if (!controlPrevioId) {
+      const [row] = await query('SELECT id FROM control_previo_brinco WHERE numero_sorteo = ?', [sorteo]);
+      controlPrevioId = row?.id || 0;
+    }
+
+    // Guardar datos por agencia en control_previo_agencias (alimenta Dashboard)
+    const agencias = logsTxt.agencias;
+    if (agencias && agencias.length > 0) {
+      await query(
+        'DELETE FROM control_previo_agencias WHERE juego = ? AND numero_sorteo = ?',
+        ['brinco', sorteo]
+      );
+
+      const valores = [];
+      const placeholders = [];
+
+      for (const ag of agencias) {
+        const codigoAgencia = (ag.provincia || '51') + (ag.agencia || '00000').padStart(5, '0');
+        placeholders.push('(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)');
+        valores.push(
+          controlPrevioId,
+          'brinco',
+          fecha,
+          sorteo,
+          'U', // Brinco modalidad única
+          codigoAgencia,
+          ag.provincia || '51',
+          ag.registros || 0,   // total_tickets
+          ag.apuestas || 0,    // total_apuestas
+          0,                   // total_anulados (brinco no separa por agencia)
+          ag.recaudacion || 0  // total_recaudacion
+        );
+      }
+
+      if (placeholders.length > 0) {
+        await query(`
+          INSERT INTO control_previo_agencias 
+            (control_previo_id, juego, fecha, numero_sorteo, modalidad, codigo_agencia, 
+             codigo_provincia, total_tickets, total_apuestas, total_anulados, total_recaudacion)
+          VALUES ${placeholders.join(', ')}
+        `, valores);
+      }
+
+      console.log(`✅ Guardadas ${agencias.length} agencias para Control Previo BRINCO (sorteo: ${sorteo})`);
+    }
+
+    console.log(`✅ Control Previo BRINCO guardado en BD (sorteo: ${sorteo}, ID: ${controlPrevioId})`);
+    return { success: true, id: controlPrevioId };
+
+  } catch (error) {
+    console.error('❌ Error guardando Control Previo BRINCO:', error);
+    return { success: false, error: error.message };
+  }
+}
 
 /**
  * Guardar resultado del control previo de BRINCO

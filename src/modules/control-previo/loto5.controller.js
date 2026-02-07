@@ -514,12 +514,13 @@ function parsearPremiosXml(ds) {
 
 /**
  * Guarda los resultados del control previo de Loto 5 en la BD
+ * Alimenta control_previo_loto5 Y control_previo_agencias (para Dashboard)
  */
 async function guardarControlPrevioLoto5(resultado, user, nombreArchivo) {
   const sorteo = resultado.sorteo || 'N/A';
   const resumen = resultado.resumen || {};
 
-  await query(`
+  const insertResult = await query(`
     INSERT INTO control_previo_loto5
     (numero_sorteo, archivo, registros_validos, registros_anulados,
      apuestas_total, recaudacion, datos_json, usuario_id)
@@ -543,6 +544,77 @@ async function guardarControlPrevioLoto5(resultado, user, nombreArchivo) {
     JSON.stringify(resultado),
     user?.id || null
   ]);
+
+  // Obtener el ID para guardar agencias
+  let controlPrevioId = insertResult.insertId;
+  if (!controlPrevioId) {
+    const [row] = await query('SELECT id FROM control_previo_loto5 WHERE numero_sorteo = ?', [sorteo]);
+    controlPrevioId = row?.id || 0;
+  }
+
+  // Guardar datos por agencia en control_previo_agencias (alimenta Dashboard)
+  const registrosNTF = resultado.registrosNTF;
+  if (registrosNTF && registrosNTF.length > 0 && controlPrevioId) {
+    try {
+      // Obtener fecha del XML o usar hoy
+      let fecha = null;
+      if (resultado.datosOficiales?.fecha) {
+        const f = String(resultado.datosOficiales.fecha).replace(/[^0-9]/g, '');
+        if (f.length === 8) {
+          fecha = `${f.substring(0, 4)}-${f.substring(4, 6)}-${f.substring(6, 8)}`;
+        } else {
+          fecha = resultado.datosOficiales.fecha;
+        }
+      }
+      if (!fecha) {
+        fecha = new Date().toISOString().split('T')[0];
+      }
+
+      // Agrupar por agencia
+      const agenciasMap = new Map();
+      for (const reg of registrosNTF) {
+        const codigoCompleto = reg.agenciaCompleta || ('51' + (reg.agencia || '00000'));
+        if (!agenciasMap.has(codigoCompleto)) {
+          agenciasMap.set(codigoCompleto, {
+            codigoProvincia: codigoCompleto.substring(0, 2),
+            totalTickets: 0,
+            totalApuestas: 0,
+            totalRecaudacion: 0,
+            ticketsSet: new Set()
+          });
+        }
+        const ag = agenciasMap.get(codigoCompleto);
+        ag.ticketsSet.add(reg.ticket);
+        ag.totalApuestas++;
+        ag.totalRecaudacion += reg.importe || 0;
+      }
+
+      // Eliminar previos y insertar
+      await query('DELETE FROM control_previo_agencias WHERE juego = ? AND numero_sorteo = ?', ['loto5', sorteo]);
+      
+      const valores = [];
+      const placeholders = [];
+      for (const [codigo, ag] of agenciasMap) {
+        placeholders.push('(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)');
+        valores.push(
+          controlPrevioId, 'loto5', fecha, sorteo, 'U',
+          codigo, ag.codigoProvincia,
+          ag.ticketsSet.size, ag.totalApuestas, 0, ag.totalRecaudacion
+        );
+      }
+      if (placeholders.length > 0) {
+        await query(`
+          INSERT INTO control_previo_agencias 
+            (control_previo_id, juego, fecha, numero_sorteo, modalidad, codigo_agencia, 
+             codigo_provincia, total_tickets, total_apuestas, total_anulados, total_recaudacion)
+          VALUES ${placeholders.join(', ')}
+        `, valores);
+        console.log(`✅ Guardadas ${agenciasMap.size} agencias para Control Previo LOTO 5 (sorteo: ${sorteo})`);
+      }
+    } catch (errAg) {
+      console.error('⚠️ Error guardando agencias Loto 5 (no crítico):', errAg.message);
+    }
+  }
 }
 
 function limpiarDirectorio(directory) {

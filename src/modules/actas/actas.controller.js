@@ -2214,33 +2214,29 @@ const generarActaControlPosterior = async (req, res) => {
       // Tradicional Primera
       for (const nivel of ['6', '5', '4']) {
         const data = ganadores.tradicionalPrimera?.[nivel] || { cantidad: 0, premioUnitario: 0, premioTotal: 0 };
-        if (data.cantidad > 0 || nivel === '6') {
-          doc.fillColor('#3b82f6').font('Helvetica-Bold').text('Tradicional 1ª', 60, y);
-          doc.fillColor('#333').font('Helvetica');
-          doc.text(`${nivel} aciertos`, 160, y);
-          doc.text(formatearNumero(data.cantidad), 230, y);
-          doc.text(formatearMoneda(data.premioUnitario), 320, y);
-          doc.fillColor(data.cantidad > 0 ? '#10b981' : '#333').font(data.cantidad > 0 ? 'Helvetica-Bold' : 'Helvetica');
-          doc.text(formatearMoneda(data.premioTotal), 430, y);
-          doc.font('Helvetica').fillColor('#333');
-          y += 12;
-        }
+        doc.fillColor('#3b82f6').font('Helvetica-Bold').text('Tradicional 1ª', 60, y);
+        doc.fillColor('#333').font('Helvetica');
+        doc.text(`${nivel} aciertos`, 160, y);
+        doc.text(formatearNumero(data.cantidad), 230, y);
+        doc.text(formatearMoneda(data.premioUnitario), 320, y);
+        doc.fillColor(data.cantidad > 0 ? '#10b981' : '#333').font(data.cantidad > 0 ? 'Helvetica-Bold' : 'Helvetica');
+        doc.text(formatearMoneda(data.premioTotal), 430, y);
+        doc.font('Helvetica').fillColor('#333');
+        y += 12;
       }
       
       // Tradicional Segunda
       for (const nivel of ['6', '5', '4']) {
         const data = ganadores.tradicionalSegunda?.[nivel] || { cantidad: 0, premioUnitario: 0, premioTotal: 0 };
-        if (data.cantidad > 0 || nivel === '6') {
-          doc.fillColor('#10b981').font('Helvetica-Bold').text('Tradicional 2ª', 60, y);
-          doc.fillColor('#333').font('Helvetica');
-          doc.text(`${nivel} aciertos`, 160, y);
-          doc.text(formatearNumero(data.cantidad), 230, y);
-          doc.text(formatearMoneda(data.premioUnitario), 320, y);
-          doc.fillColor(data.cantidad > 0 ? '#10b981' : '#333').font(data.cantidad > 0 ? 'Helvetica-Bold' : 'Helvetica');
-          doc.text(formatearMoneda(data.premioTotal), 430, y);
-          doc.font('Helvetica').fillColor('#333');
-          y += 12;
-        }
+        doc.fillColor('#10b981').font('Helvetica-Bold').text('Tradicional 2ª', 60, y);
+        doc.fillColor('#333').font('Helvetica');
+        doc.text(`${nivel} aciertos`, 160, y);
+        doc.text(formatearNumero(data.cantidad), 230, y);
+        doc.text(formatearMoneda(data.premioUnitario), 320, y);
+        doc.fillColor(data.cantidad > 0 ? '#10b981' : '#333').font(data.cantidad > 0 ? 'Helvetica-Bold' : 'Helvetica');
+        doc.text(formatearMoneda(data.premioTotal), 430, y);
+        doc.font('Helvetica').fillColor('#333');
+        y += 12;
       }
       
       // Revancha

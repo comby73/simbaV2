@@ -613,9 +613,19 @@ async function procesarZip(req, res) {
     // Limpiar directorio temporal
     limpiarDirectorio(tempDir);
     
+    // Guardar en BD para alimentar Dashboard/Reportes
+    let resguardoInfo = { success: false };
+    try {
+      resguardoInfo = await guardarControlPrevioQuini6DB(resultadoNTF, resultadoXML, req.user, req.file.originalname);
+    } catch (errGuardar) {
+      console.error('⚠️ Error guardando resguardo Quini6 (no crítico):', errGuardar.message);
+      resguardoInfo = { success: false, error: errGuardar.message };
+    }
+    
     // Preparar respuesta con estructura compatible con frontend
     // NOTA: procesarArchivoNTF devuelve los campos en raíz, no en "resumen"
     return successResponse(res, {
+      resguardo: resguardoInfo,
       archivo: txtFileInfo.name,
       archivoXml: xmlFileInfo ? xmlFileInfo.name : null,
       tipoJuego: 'Quini 6',
@@ -783,6 +793,123 @@ async function procesarNTF(req, res) {
   } catch (error) {
     console.error('Error procesando NTF QUINI 6:', error);
     return errorResponse(res, `Error procesando archivo: ${error.message}`, 500);
+  }
+}
+
+/**
+ * Guarda los resultados del control previo de QUINI 6 en la BD
+ * Alimenta control_previo_quini6 Y control_previo_agencias (para Dashboard)
+ */
+async function guardarControlPrevioQuini6DB(resultadoNTF, resultadoXML, user, nombreArchivo) {
+  try {
+    const sorteo = resultadoNTF.sorteo || 'N/A';
+    
+    // Obtener fecha: intentar del XML, luego del primer registro NTF
+    let fecha = null;
+    if (resultadoXML?.fecha) {
+      // XML puede tener formato YYYYMMDD o YYYY-MM-DD
+      const f = resultadoXML.fecha.replace(/[^0-9]/g, '');
+      if (f.length === 8) {
+        fecha = `${f.substring(0, 4)}-${f.substring(4, 6)}-${f.substring(6, 8)}`;
+      } else {
+        fecha = resultadoXML.fecha;
+      }
+    } else if (resultadoNTF.registros && resultadoNTF.registros.length > 0) {
+      const fv = resultadoNTF.registros[0].fechaVenta;
+      if (fv && fv.length === 8) {
+        fecha = `${fv.substring(0, 4)}-${fv.substring(4, 6)}-${fv.substring(6, 8)}`;
+      }
+    }
+    if (!fecha) {
+      fecha = new Date().toISOString().split('T')[0];
+    }
+
+    // INSERT/UPDATE en control_previo_quini6
+    const result = await query(`
+      INSERT INTO control_previo_quini6
+      (numero_sorteo, fecha, archivo, registros_validos, registros_anulados,
+       apuestas_total, recaudacion, datos_json, usuario_id)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ON DUPLICATE KEY UPDATE
+        archivo = VALUES(archivo),
+        fecha = VALUES(fecha),
+        registros_validos = VALUES(registros_validos),
+        registros_anulados = VALUES(registros_anulados),
+        apuestas_total = VALUES(apuestas_total),
+        recaudacion = VALUES(recaudacion),
+        datos_json = VALUES(datos_json),
+        usuario_id = VALUES(usuario_id),
+        updated_at = CURRENT_TIMESTAMP
+    `, [
+      sorteo,
+      fecha,
+      nombreArchivo,
+      resultadoNTF.registrosValidos || 0,
+      resultadoNTF.registrosCancelados || 0,
+      resultadoNTF.apuestasSimples || 0,
+      resultadoNTF.recaudacionValida || 0,
+      JSON.stringify({
+        porModalidad: resultadoNTF.porModalidad,
+        porInstancia: resultadoNTF.porInstancia
+      }),
+      user?.id || null
+    ]);
+
+    // Obtener el ID (insertId o buscar por sorteo)
+    let controlPrevioId = result.insertId;
+    if (!controlPrevioId) {
+      const [row] = await query('SELECT id FROM control_previo_quini6 WHERE numero_sorteo = ?', [sorteo]);
+      controlPrevioId = row?.id || 0;
+    }
+
+    // Guardar datos por agencia en control_previo_agencias (alimenta Dashboard)
+    const porAgencia = resultadoNTF.porAgencia;
+    if (porAgencia && porAgencia.length > 0) {
+      // Eliminar registros previos
+      await query(
+        'DELETE FROM control_previo_agencias WHERE juego = ? AND numero_sorteo = ?',
+        ['quini6', sorteo]
+      );
+
+      const valores = [];
+      const placeholders = [];
+
+      for (const ag of porAgencia) {
+        const codigoAgencia = (ag.provincia || '51') + (ag.agencia || '00000').padStart(5, '0');
+        placeholders.push('(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)');
+        valores.push(
+          controlPrevioId,
+          'quini6',
+          fecha,
+          sorteo,
+          'U', // Quini6 modalidad única
+          codigoAgencia,
+          ag.provincia || '51',
+          ag.registros || 0,      // total_tickets
+          ag.apuestasSimples || 0, // total_apuestas
+          ag.cancelados || 0,      // total_anulados
+          ag.recaudacion || 0      // total_recaudacion
+        );
+      }
+
+      if (placeholders.length > 0) {
+        await query(`
+          INSERT INTO control_previo_agencias 
+            (control_previo_id, juego, fecha, numero_sorteo, modalidad, codigo_agencia, 
+             codigo_provincia, total_tickets, total_apuestas, total_anulados, total_recaudacion)
+          VALUES ${placeholders.join(', ')}
+        `, valores);
+      }
+
+      console.log(`✅ Guardadas ${porAgencia.length} agencias para Control Previo QUINI 6 (sorteo: ${sorteo})`);
+    }
+
+    console.log(`✅ Control Previo QUINI 6 guardado en BD (sorteo: ${sorteo}, ID: ${controlPrevioId})`);
+    return { success: true, id: controlPrevioId };
+
+  } catch (error) {
+    console.error('❌ Error guardando Control Previo QUINI 6:', error);
+    return { success: false, error: error.message };
   }
 }
 

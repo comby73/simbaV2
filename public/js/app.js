@@ -7667,6 +7667,9 @@ function cargarExtractoBrincoDesdeJSON(data) {
 
   cpstExtractoBrinco = extracto;
 
+  // Llenar los inputs de números y premios
+  llenarInputsBrincoDesdeOCR(data);
+
   // Mostrar preview
   mostrarPreviewExtractoBrinco();
 
@@ -7746,23 +7749,76 @@ function cargarExtractoBrincoManual() {
     return false;
   }
 
+  // Leer aciertos requeridos de Junior
+  const juniorAciertosInput = document.getElementById('cpst-brinco-junior-aciertos');
+  const juniorAciertos = juniorAciertosInput?.value ? parseInt(juniorAciertosInput.value) : 5;
+
   cpstExtractoBrinco = {
     tradicional: {
       numeros: numsTrad,
-      premios: {}
+      premios: leerPremiosBrincoTrad()
     },
     junior: {
       numeros: numsJunior,
-      premios: {},
-      aciertosRequeridos: 5
+      premios: leerPremiosBrincoJunior(),
+      aciertosRequeridos: juniorAciertos
     }
   };
+  
+  console.log('[Brinco Manual] Premios leídos:', {
+    trad: cpstExtractoBrinco.tradicional.premios,
+    junior: cpstExtractoBrinco.junior.premios
+  });
 
   mostrarPreviewExtractoBrinco();
   showToast('Extracto BRINCO cargado manualmente', 'success');
   return true;
 }
 
+/**
+ * Leer premios de BRINCO Tradicional desde inputs editables
+ */
+function leerPremiosBrincoTrad() {
+  const premios = {};
+  for (const nivel of ['6', '5', '4']) {
+    const ganInput = document.getElementById(`cpst-brinco-trad-gan${nivel}`);
+    const premioInput = document.getElementById(`cpst-brinco-trad-premio${nivel}`);
+    const ganadores = ganInput?.value ? parseInt(ganInput.value) : null;
+    const premio = premioInput?.value ? parseFloat(premioInput.value) : null;
+    
+    if (ganadores !== null || premio !== null) {
+      premios[nivel] = {
+        winners: ganadores || 0,
+        premio_por_ganador: premio || 0,
+        ganadores: ganadores || 0,
+        premioUnitario: premio || 0
+      };
+    }
+  }
+  return premios;
+}
+
+/**
+ * Leer premios de BRINCO Junior desde inputs editables
+ */
+function leerPremiosBrincoJunior() {
+  const ganInput = document.getElementById('cpst-brinco-junior-gan');
+  const premioInput = document.getElementById('cpst-brinco-junior-premio');
+  const ganadores = ganInput?.value ? parseInt(ganInput.value) : null;
+  const premio = premioInput?.value ? parseFloat(premioInput.value) : null;
+  
+  if (ganadores !== null || premio !== null) {
+    return {
+      '1': {
+        winners: ganadores || 0,
+        premio_por_ganador: premio || 0,
+        ganadores: ganadores || 0,
+        premioUnitario: premio || 0
+      }
+    };
+  }
+  return {};
+}
 /**
  * Cargar extracto BRINCO desde archivo JSON
  */
@@ -7977,39 +8033,6 @@ function mostrarResultadosEscrutinioQuini6(resultado) {
             <div style="display: flex; justify-content: space-between;">
               <span>Recaudación:</span>
               <span style="font-weight: 600; color: #9333ea;">$${formatNumber(porInstancia['3']?.recaudacion || 0)}</span>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <!-- EXTRACTO OFICIAL -->
-      <div style="background: var(--bg-card); border: 1px solid var(--border); border-radius: 12px; padding: 1.25rem; margin-bottom: 2rem;">
-        <h4 style="margin: 0 0 1rem 0; display: flex; align-items: center; gap: 0.5rem;">
-          <i class="fas fa-dice" style="color: var(--primary);"></i> Extracto Oficial
-        </h4>
-        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1rem;">
-          <div style="padding: 0.75rem; background: rgba(59, 130, 246, 0.1); border-radius: 8px; border-left: 4px solid #3b82f6;">
-            <div style="font-size: 0.75rem; color: var(--text-muted); margin-bottom: 0.25rem;">Tradicional 1ª</div>
-            <div style="font-family: monospace; font-size: 1.1rem; color: #3b82f6; font-weight: 600;">
-              ${(extracto.tradicional?.primera || []).map(n => n.toString().padStart(2, '0')).join(' - ')}
-            </div>
-          </div>
-          <div style="padding: 0.75rem; background: rgba(16, 185, 129, 0.1); border-radius: 8px; border-left: 4px solid #10b981;">
-            <div style="font-size: 0.75rem; color: var(--text-muted); margin-bottom: 0.25rem;">Tradicional 2ª</div>
-            <div style="font-family: monospace; font-size: 1.1rem; color: #10b981; font-weight: 600;">
-              ${(extracto.tradicional?.segunda || []).map(n => n.toString().padStart(2, '0')).join(' - ')}
-            </div>
-          </div>
-          <div style="padding: 0.75rem; background: rgba(245, 158, 11, 0.1); border-radius: 8px; border-left: 4px solid #f59e0b;">
-            <div style="font-size: 0.75rem; color: var(--text-muted); margin-bottom: 0.25rem;">Revancha</div>
-            <div style="font-family: monospace; font-size: 1.1rem; color: #f59e0b; font-weight: 600;">
-              ${(extracto.revancha || []).map(n => n.toString().padStart(2, '0')).join(' - ')}
-            </div>
-          </div>
-          <div style="padding: 0.75rem; background: rgba(147, 51, 234, 0.1); border-radius: 8px; border-left: 4px solid #9333ea;">
-            <div style="font-size: 0.75rem; color: var(--text-muted); margin-bottom: 0.25rem;">Siempre Sale (${extracto.siempreSaleAciertosRequeridos || 6} aciertos)</div>
-            <div style="font-family: monospace; font-size: 1.1rem; color: #9333ea; font-weight: 600;">
-              ${(extracto.siempreSale || []).map(n => n.toString().padStart(2, '0')).join(' - ')}
             </div>
           </div>
         </div>
@@ -8433,6 +8456,9 @@ function cargarExtractoQuini6DesdeJSON(data) {
 
   cpstExtractoQuini6 = extracto;
   
+  // Llenar los inputs de números y premios
+  llenarInputsQuini6DesdeOCR(data);
+  
   // Log para debug
   console.log('[Quini6] Extracto cargado:', extracto);
   console.log('[Quini6] Siempre Sale Aciertos:', extracto.siempreSaleAciertos);
@@ -8611,6 +8637,21 @@ function cargarExtractoQuini6Manual() {
     console.log(`[Premio Extra] Pool cargado: ${extracto.premioExtra.length} números únicos`, extracto.premioExtra);
   }
 
+  // ========== LEER PREMIOS DE LOS INPUTS EDITABLES ==========
+  extracto.tradicional.premiosPrimera = leerPremiosDesdeInputs('trad1');
+  extracto.tradicional.premiosSegunda = leerPremiosDesdeInputs('trad2');
+  extracto.revanchaPremios = leerPremiosRevancha();
+  extracto.siempreSalePremios = leerPremiosSiempreSale();
+  extracto.premioExtraPremios = leerPremiosPremioExtra();
+  
+  console.log('[Quini6 Manual] Premios leídos:', {
+    trad1: extracto.tradicional.premiosPrimera,
+    trad2: extracto.tradicional.premiosSegunda,
+    revancha: extracto.revanchaPremios,
+    siempreSale: extracto.siempreSalePremios,
+    premioExtra: extracto.premioExtraPremios
+  });
+
   cpstExtractoQuini6 = extracto;
 
   mostrarPreviewExtractoQuini6();
@@ -8645,7 +8686,7 @@ async function cargarExtractoQuini6DesdeArchivo(file) {
 function limpiarExtractoQuini6() {
   cpstExtractoQuini6 = null;
   
-  // Limpiar todos los inputs
+  // Limpiar todos los inputs de números
   for (let i = 1; i <= 6; i++) {
     const trad1 = document.getElementById(`cpst-quini6-trad1-${i}`);
     const trad2 = document.getElementById(`cpst-quini6-trad2-${i}`);
@@ -8660,6 +8701,25 @@ function limpiarExtractoQuini6() {
   // Limpiar Premio Extra
   const pePool = document.getElementById('cpst-quini6-pe-pool');
   if (pePool) pePool.value = '';
+  
+  // Limpiar y ocultar inputs de premios
+  const premioInputIds = [
+    'cpst-quini6-trad1-gan6', 'cpst-quini6-trad1-premio6', 'cpst-quini6-trad1-gan5', 'cpst-quini6-trad1-premio5', 'cpst-quini6-trad1-gan4', 'cpst-quini6-trad1-premio4',
+    'cpst-quini6-trad2-gan6', 'cpst-quini6-trad2-premio6', 'cpst-quini6-trad2-gan5', 'cpst-quini6-trad2-premio5', 'cpst-quini6-trad2-gan4', 'cpst-quini6-trad2-premio4',
+    'cpst-quini6-rev-gan6', 'cpst-quini6-rev-premio6',
+    'cpst-quini6-ss-aciertos', 'cpst-quini6-ss-gan', 'cpst-quini6-ss-premio',
+    'cpst-quini6-pe-gan', 'cpst-quini6-pe-premio'
+  ];
+  premioInputIds.forEach(id => {
+    const input = document.getElementById(id);
+    if (input) input.value = id === 'cpst-quini6-ss-aciertos' ? '6' : '';
+  });
+  
+  // Ocultar divs de premios
+  ['trad1', 'trad2', 'rev', 'ss', 'pe'].forEach(mod => {
+    const div = document.getElementById(`cpst-quini6-${mod}-premios`);
+    if (div) div.style.display = 'none';
+  });
   
   // Ocultar info de archivo JSON
   document.getElementById('cpst-quini6-json-info')?.classList.add('hidden');
@@ -8685,13 +8745,29 @@ function limpiarExtractoQuini6() {
 function limpiarExtractoBrinco() {
   cpstExtractoBrinco = null;
   
-  // Limpiar todos los inputs
+  // Limpiar todos los inputs de números
   for (let i = 1; i <= 6; i++) {
     const trad = document.getElementById(`cpst-brinco-trad-${i}`);
     const junior = document.getElementById(`cpst-brinco-junior-${i}`);
     if (trad) trad.value = '';
     if (junior) junior.value = '';
   }
+  
+  // Limpiar y ocultar inputs de premios
+  const premioInputIds = [
+    'cpst-brinco-trad-gan6', 'cpst-brinco-trad-premio6', 'cpst-brinco-trad-gan5', 'cpst-brinco-trad-premio5', 'cpst-brinco-trad-gan4', 'cpst-brinco-trad-premio4',
+    'cpst-brinco-junior-aciertos', 'cpst-brinco-junior-gan', 'cpst-brinco-junior-premio'
+  ];
+  premioInputIds.forEach(id => {
+    const input = document.getElementById(id);
+    if (input) input.value = id === 'cpst-brinco-junior-aciertos' ? '5' : '';
+  });
+  
+  // Ocultar divs de premios
+  ['trad', 'junior'].forEach(mod => {
+    const div = document.getElementById(`cpst-brinco-${mod}-premios`);
+    if (div) div.style.display = 'none';
+  });
   
   // Ocultar info de archivo
   document.getElementById('cpst-brinco-file-info')?.classList.add('hidden');
@@ -8840,6 +8916,189 @@ function llenarInputsQuini6DesdeOCR(data) {
     const input = document.getElementById(`cpst-quini6-ss-${i + 1}`);
     if (input) input.value = parseInt(num);
   });
+  
+  // Premio Extra
+  const premioExtra = data.premio_extra?.numbers || data.premioExtra || [];
+  if (premioExtra.length > 0) {
+    const peInput = document.getElementById('cpst-quini6-pe-pool');
+    if (peInput) peInput.value = premioExtra.join(', ');
+  }
+  
+  // ========== LLENAR PREMIOS DEL EXTRACTO ==========
+  llenarPremiosQuini6DesdeOCR(data);
+}
+
+/**
+ * Llenar los inputs de premios de Quini6 desde datos OCR/JSON y mostrar los divs
+ */
+function llenarPremiosQuini6DesdeOCR(data) {
+  // Tradicional Primera - Premios
+  const premiosT1 = data.tradicional?.primer?.prizes || data.tradicional?.premiosPrimera || {};
+  if (Object.keys(premiosT1).length > 0) {
+    document.getElementById('cpst-quini6-trad1-premios').style.display = 'block';
+    for (const nivel of ['6', '5', '4']) {
+      const premio = premiosT1[nivel] || premiosT1['1'] || premiosT1['2'] || premiosT1['3']; // Los niveles pueden estar numerados 1,2,3
+      const premioData = nivel === '6' ? (premiosT1['1'] || premiosT1['6']) : 
+                         nivel === '5' ? (premiosT1['2'] || premiosT1['5']) :
+                                         (premiosT1['3'] || premiosT1['4']);
+      if (premioData) {
+        const ganInput = document.getElementById(`cpst-quini6-trad1-gan${nivel}`);
+        const premioInput = document.getElementById(`cpst-quini6-trad1-premio${nivel}`);
+        if (ganInput) ganInput.value = premioData.winners || premioData.ganadores || '';
+        if (premioInput) premioInput.value = premioData.premio_por_ganador || premioData.premioUnitario || '';
+      }
+    }
+  }
+  
+  // Tradicional Segunda - Premios
+  const premiosT2 = data.tradicional?.segunda?.prizes || data.tradicional?.premiosSegunda || {};
+  if (Object.keys(premiosT2).length > 0) {
+    document.getElementById('cpst-quini6-trad2-premios').style.display = 'block';
+    for (const nivel of ['6', '5', '4']) {
+      const premioData = nivel === '6' ? (premiosT2['1'] || premiosT2['6']) : 
+                         nivel === '5' ? (premiosT2['2'] || premiosT2['5']) :
+                                         (premiosT2['3'] || premiosT2['4']);
+      if (premioData) {
+        const ganInput = document.getElementById(`cpst-quini6-trad2-gan${nivel}`);
+        const premioInput = document.getElementById(`cpst-quini6-trad2-premio${nivel}`);
+        if (ganInput) ganInput.value = premioData.winners || premioData.ganadores || '';
+        if (premioInput) premioInput.value = premioData.premio_por_ganador || premioData.premioUnitario || '';
+      }
+    }
+  }
+  
+  // Revancha - Premios
+  const premiosRev = data.revancha?.prizes || data.revanchaPremios || {};
+  if (Object.keys(premiosRev).length > 0) {
+    document.getElementById('cpst-quini6-rev-premios').style.display = 'block';
+    const premioData = premiosRev['1'] || premiosRev['6'] || premiosRev;
+    const ganInput = document.getElementById('cpst-quini6-rev-gan6');
+    const premioInput = document.getElementById('cpst-quini6-rev-premio6');
+    if (ganInput) ganInput.value = premioData.winners || premioData.ganadores || '';
+    if (premioInput) premioInput.value = premioData.premio_por_ganador || premioData.premioUnitario || '';
+  }
+  
+  // Siempre Sale - Premios
+  const premiosSS = data.siempre_sale?.prizes || data.siempreSalePremios || {};
+  const ssAciertos = data.siempre_sale?.winning_hits || data.siempreSaleAciertos || 6;
+  if (Object.keys(premiosSS).length > 0 || ssAciertos !== 6) {
+    document.getElementById('cpst-quini6-ss-premios').style.display = 'block';
+    const aciertosInput = document.getElementById('cpst-quini6-ss-aciertos');
+    if (aciertosInput) aciertosInput.value = ssAciertos;
+    const premioData = premiosSS['1'] || premiosSS;
+    const ganInput = document.getElementById('cpst-quini6-ss-gan');
+    const premioInput = document.getElementById('cpst-quini6-ss-premio');
+    if (ganInput) ganInput.value = premioData.winners || premioData.ganadores || '';
+    if (premioInput) premioInput.value = premioData.premio_por_ganador || premioData.premioUnitario || '';
+  }
+  
+  // Premio Extra - Premios
+  const premiosPE = data.premio_extra || data.premioExtraPremios || {};
+  if (premiosPE.winners || premiosPE.pot || Object.keys(premiosPE).length > 0) {
+    document.getElementById('cpst-quini6-pe-premios').style.display = 'block';
+    const ganInput = document.getElementById('cpst-quini6-pe-gan');
+    const premioInput = document.getElementById('cpst-quini6-pe-premio');
+    // El formato puede variar
+    const ganadores = premiosPE.winners || premiosPE['1']?.winners || 0;
+    const premio = premiosPE.premio_por_ganador || premiosPE['1']?.premio_por_ganador || 0;
+    if (ganInput) ganInput.value = ganadores || '';
+    if (premioInput) premioInput.value = premio || '';
+  }
+  
+  console.log('[Quini6 OCR] Premios cargados en inputs editables');
+}
+
+/**
+ * Leer premios de Tradicional (Primera o Segunda) desde inputs editables
+ * @param {string} modalidad - 'trad1' o 'trad2'
+ */
+function leerPremiosDesdeInputs(modalidad) {
+  const premios = {};
+  for (const nivel of ['6', '5', '4']) {
+    const ganInput = document.getElementById(`cpst-quini6-${modalidad}-gan${nivel}`);
+    const premioInput = document.getElementById(`cpst-quini6-${modalidad}-premio${nivel}`);
+    const ganadores = ganInput?.value ? parseInt(ganInput.value) : null;
+    const premio = premioInput?.value ? parseFloat(premioInput.value) : null;
+    
+    if (ganadores !== null || premio !== null) {
+      // Usar índice 1,2,3 para mantener compatibilidad con el backend
+      const idx = nivel === '6' ? '1' : nivel === '5' ? '2' : '3';
+      premios[idx] = {
+        winners: ganadores || 0,
+        premio_por_ganador: premio || 0,
+        ganadores: ganadores || 0,
+        premioUnitario: premio || 0
+      };
+    }
+  }
+  return premios;
+}
+
+/**
+ * Leer premios de Revancha desde inputs editables
+ */
+function leerPremiosRevancha() {
+  const ganInput = document.getElementById('cpst-quini6-rev-gan6');
+  const premioInput = document.getElementById('cpst-quini6-rev-premio6');
+  const ganadores = ganInput?.value ? parseInt(ganInput.value) : null;
+  const premio = premioInput?.value ? parseFloat(premioInput.value) : null;
+  
+  if (ganadores !== null || premio !== null) {
+    return {
+      '1': {
+        winners: ganadores || 0,
+        premio_por_ganador: premio || 0,
+        ganadores: ganadores || 0,
+        premioUnitario: premio || 0
+      }
+    };
+  }
+  return {};
+}
+
+/**
+ * Leer premios de Siempre Sale desde inputs editables
+ */
+function leerPremiosSiempreSale() {
+  const ganInput = document.getElementById('cpst-quini6-ss-gan');
+  const premioInput = document.getElementById('cpst-quini6-ss-premio');
+  const ganadores = ganInput?.value ? parseInt(ganInput.value) : null;
+  const premio = premioInput?.value ? parseFloat(premioInput.value) : null;
+  
+  if (ganadores !== null || premio !== null) {
+    return {
+      '1': {
+        winners: ganadores || 0,
+        premio_por_ganador: premio || 0,
+        ganadores: ganadores || 0,
+        premioUnitario: premio || 0
+      }
+    };
+  }
+  return {};
+}
+
+/**
+ * Leer premios de Premio Extra desde inputs editables
+ */
+function leerPremiosPremioExtra() {
+  const ganInput = document.getElementById('cpst-quini6-pe-gan');
+  const premioInput = document.getElementById('cpst-quini6-pe-premio');
+  const ganadores = ganInput?.value ? parseInt(ganInput.value) : null;
+  const premio = premioInput?.value ? parseFloat(premioInput.value) : null;
+  
+  if (ganadores !== null || premio !== null) {
+    return {
+      '1': {
+        winners: ganadores || 0,
+        premio_por_ganador: premio || 0,
+        ganadores: ganadores || 0,
+        premioUnitario: premio || 0,
+        pot: 0
+      }
+    };
+  }
+  return {};
 }
 
 /**
@@ -8960,6 +9219,46 @@ function llenarInputsBrincoDesdeOCR(data) {
     const input = document.getElementById(`cpst-brinco-junior-${i + 1}`);
     if (input) input.value = parseInt(num);
   });
+  
+  // ========== LLENAR PREMIOS DE BRINCO ==========
+  llenarPremiosBrincoDesdeOCR(data);
+}
+
+/**
+ * Llenar los inputs de premios de Brinco desde datos OCR/JSON y mostrar los divs
+ */
+function llenarPremiosBrincoDesdeOCR(data) {
+  // BRINCO Tradicional - Premios
+  const premiosTrad = data.brinco?.prizes || data.tradicional?.premios || {};
+  if (Object.keys(premiosTrad).length > 0) {
+    document.getElementById('cpst-brinco-trad-premios').style.display = 'block';
+    for (const nivel of ['6', '5', '4']) {
+      const premioData = premiosTrad[nivel] || premiosTrad[nivel === '6' ? '1' : nivel === '5' ? '2' : '3'];
+      if (premioData) {
+        const ganInput = document.getElementById(`cpst-brinco-trad-gan${nivel}`);
+        const premioInput = document.getElementById(`cpst-brinco-trad-premio${nivel}`);
+        if (ganInput) ganInput.value = premioData.winners || premioData.ganadores || '';
+        if (premioInput) premioInput.value = premioData.premio_por_ganador || premioData.premioUnitario || '';
+      }
+    }
+  }
+  
+  // BRINCO Junior - Premios
+  const premiosJunior = data.brinco_junior?.prizes || data.junior?.premios || {};
+  const juniorAciertos = data.brinco_junior?.aciertos_requeridos || data.junior?.aciertosRequeridos || 5;
+  if (Object.keys(premiosJunior).length > 0 || juniorAciertos !== 5) {
+    document.getElementById('cpst-brinco-junior-premios').style.display = 'block';
+    const aciertosInput = document.getElementById('cpst-brinco-junior-aciertos');
+    if (aciertosInput) aciertosInput.value = juniorAciertos;
+    
+    const premioData = premiosJunior['1'] || premiosJunior;
+    const ganInput = document.getElementById('cpst-brinco-junior-gan');
+    const premioInput = document.getElementById('cpst-brinco-junior-premio');
+    if (ganInput) ganInput.value = premioData.winners || premioData.ganadores || '';
+    if (premioInput) premioInput.value = premioData.premio_por_ganador || premioData.premioUnitario || '';
+  }
+  
+  console.log('[Brinco OCR] Premios cargados en inputs editables');
 }
 
 // ============= FIN QUINI 6 EXTRACTO FUNCTIONS =============

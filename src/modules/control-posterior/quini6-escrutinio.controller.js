@@ -76,7 +76,8 @@ async function runScrutiny(registros, extracto) {
       revancha: extracto.revancha || [],
       siempreSale: extracto.siempreSale || [],
       siempreSaleAciertosRequeridos: extracto.siempreSaleAciertos || 6,
-      premioExtra: extracto.premioExtra || []
+      // Premio Extra: eliminar duplicados (números que salen en ambos sorteos se tachan)
+      premioExtra: [...new Set(extracto.premioExtra || [])]
     },
     
     // Resumen general
@@ -347,21 +348,29 @@ async function runScrutiny(registros, extracto) {
     }
     
     // ===========================================
-    // PREMIO EXTRA (todas las instancias)
-    // Premio Extra tiene un pool de ~18 números. Ganas si tus 6 números están en ese pool.
+    // PREMIO EXTRA (Art. 30° del reglamento)
+    // Pool de 18 números: 6 de Trad 1ª + 6 de Trad 2ª + 6 de Revancha (sin duplicados)
+    // SE EXCLUYEN las apuestas que obtuvieron 6 aciertos en Trad 1ª, Trad 2ª o Revancha
     // Para múltiples: C(matches, 6) combinaciones ganadoras
     // ===========================================
     if (numsPremioExtra.length > 0) {
+      // Primero verificar si está excluido por haber ganado 6 aciertos en otra modalidad
+      const aciertosTrad1 = contarAciertos(numerosJugados, numsTradPrimera);
+      const aciertosTrad2 = contarAciertos(numerosJugados, numsTradSegunda);
+      const aciertosRevancha = (instancia === '2' || instancia === '3') ? contarAciertos(numerosJugados, numsRevancha) : 0;
+      
+      const excluido = (aciertosTrad1 >= 6 || aciertosTrad2 >= 6 || aciertosRevancha >= 6);
+      
       const aciertos = contarAciertos(numerosJugados, numsPremioExtra);
       
       // Debug log para Premio Extra con 5+ aciertos
       if (aciertos >= 5) {
         const numerosEnPool = numerosJugados.filter(n => numsPremioExtra.includes(n));
-        console.log(`[PE] Línea ${registro.linea}: jugados=[${numerosJugados.join(',')}] (${cantidadNumeros}nums), enPool=[${numerosEnPool.join(',')}], aciertos=${aciertos}/${numsPremioExtra.length}`);
+        console.log(`[PE] Línea ${registro.linea}: jugados=[${numerosJugados.join(',')}] (${cantidadNumeros}nums), enPool=[${numerosEnPool.join(',')}], aciertos=${aciertos}/${numsPremioExtra.length}, excluido=${excluido} (T1:${aciertosTrad1}, T2:${aciertosTrad2}, Rev:${aciertosRevancha})`);
       }
       
-      // Para ganar Premio Extra, necesitas que 6 de tus números estén en el pool
-      if (aciertos >= 6) {
+      // Para ganar Premio Extra: 6+ aciertos en el pool Y NO estar excluido
+      if (aciertos >= 6 && !excluido) {
         let cantidadGanadores;
         
         if (cantidadNumeros === 6) {
@@ -569,7 +578,7 @@ async function runScrutiny(registros, extracto) {
   
   // Log de resumen del Premio Extra para auditoría
   console.log(`\n========== RESUMEN PREMIO EXTRA ==========`);
-  console.log(`Pool Premio Extra: [${resultados.extracto.premioExtra.join(', ')}] (${resultados.extracto.premioExtra.length} números)`);
+  console.log(`Pool Premio Extra (sin duplicados): [${resultados.extracto.premioExtra.join(', ')}] (${resultados.extracto.premioExtra.length} números únicos)`);
   console.log(`Total tickets ganadores: ${extraData.registros.length}`);
   console.log(`Total premios (considerando múltiples): ${extraData.cantidad}`);
   if (extraData.registros.length > 0) {
@@ -635,13 +644,14 @@ async function ejecutar(req, res) {
       siempreSale: siempreSale.map(n => parseInt(n)),
       siempreSaleAciertos: parseInt(ssAciertos),
       siempreSalePremios: extracto.siempreSalePremios || extracto.siempre_sale?.prizes || {},
-      premioExtra: premioExtra.map(n => parseInt(n)),
+      // Premio Extra: eliminar duplicados (números tachados en el extracto)
+      premioExtra: [...new Set(premioExtra.map(n => parseInt(n)))],
       premioExtraPremios: extracto.premioExtraPremios || extracto.premio_extra?.prizes || {}
     };
     
     // Log para debug
     console.log('[QUINI6] Extracto normalizado:');
-    console.log('  - Premio Extra pool:', extractoNormalizado.premioExtra.length, 'números:', extractoNormalizado.premioExtra);
+    console.log(`  - Premio Extra: ${premioExtra.length} números recibidos → ${extractoNormalizado.premioExtra.length} únicos:`, extractoNormalizado.premioExtra);
     console.log('[QUINI6] Premios recibidos:', {
       premiosPrimera: extractoNormalizado.tradicional.premiosPrimera,
       premiosSegunda: extractoNormalizado.tradicional.premiosSegunda,
