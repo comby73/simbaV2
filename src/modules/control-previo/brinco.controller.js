@@ -574,7 +574,8 @@ const procesarZip = async (req, res) => {
  */
 async function guardarControlPrevioBrincoDB(logsTxt, datosXml, user, nombreArchivo) {
   try {
-    const sorteo = logsTxt.numeroSorteo || 'N/A';
+    const sorteoStr = logsTxt.numeroSorteo || 'N/A';
+    const sorteo = parseInt(sorteoStr, 10) || 0; // Convertir a INT
     const resumen = logsTxt.resumen || {};
     
     // Obtener fecha: intentar del XML, luego del primer registro NTF
@@ -613,7 +614,7 @@ async function guardarControlPrevioBrincoDB(logsTxt, datosXml, user, nombreArchi
         usuario_id = VALUES(usuario_id),
         updated_at = CURRENT_TIMESTAMP
     `, [
-      sorteo,
+      sorteo, // Ahora es INT
       fecha,
       nombreArchivo,
       resumen.registros || 0,

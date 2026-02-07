@@ -802,7 +802,8 @@ async function procesarNTF(req, res) {
  */
 async function guardarControlPrevioQuini6DB(resultadoNTF, resultadoXML, user, nombreArchivo) {
   try {
-    const sorteo = resultadoNTF.sorteo || 'N/A';
+    const sorteoStr = resultadoNTF.sorteo || 'N/A';
+    const sorteo = parseInt(sorteoStr, 10) || 0; // Convertir a INT
     
     // Obtener fecha: intentar del XML, luego del primer registro NTF, luego hoy
     let fecha = null;
@@ -850,7 +851,7 @@ async function guardarControlPrevioQuini6DB(resultadoNTF, resultadoXML, user, no
         usuario_id = VALUES(usuario_id),
         updated_at = CURRENT_TIMESTAMP
     `, [
-      sorteo,
+      sorteo, // Ahora es INT
       fecha,
       nombreArchivo,
       resultadoNTF.registrosValidos || 0,

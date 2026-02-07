@@ -596,7 +596,13 @@ const listarControlPrevioGeneral = async (req, res) => {
     if (!juego || juego === 'loto5') {
       try {
         let sqlL5 = `
-          SELECT cp.*, u.nombre as usuario_nombre, 'loto5' as juego
+          SELECT cp.id, cp.numero_sorteo, cp.fecha, cp.archivo,
+                 cp.registros_validos as total_registros,
+                 cp.apuestas_total as total_apuestas,
+                 cp.registros_anulados as total_anulados,
+                 cp.recaudacion as total_recaudacion,
+                 cp.usuario_id, cp.created_at, cp.updated_at,
+                 u.nombre as usuario_nombre, 'loto5' as juego
           FROM control_previo_loto5 cp
           LEFT JOIN usuarios u ON cp.usuario_id = u.id
           WHERE 1=1
@@ -619,7 +625,13 @@ const listarControlPrevioGeneral = async (req, res) => {
     if (!juego || juego === 'brinco') {
       try {
         let sqlB = `
-          SELECT cp.*, u.nombre as usuario_nombre, 'brinco' as juego
+          SELECT cp.id, cp.numero_sorteo, cp.fecha, cp.archivo,
+                 cp.registros_validos as total_registros,
+                 cp.apuestas_total as total_apuestas,
+                 cp.registros_anulados as total_anulados,
+                 cp.recaudacion as total_recaudacion,
+                 cp.usuario_id, cp.created_at, cp.updated_at,
+                 u.nombre as usuario_nombre, 'brinco' as juego
           FROM control_previo_brinco cp
           LEFT JOIN usuarios u ON cp.usuario_id = u.id
           WHERE 1=1
@@ -642,7 +654,13 @@ const listarControlPrevioGeneral = async (req, res) => {
     if (!juego || juego === 'quini6') {
       try {
         let sqlQ6 = `
-          SELECT cp.*, u.nombre as usuario_nombre, 'quini6' as juego
+          SELECT cp.id, cp.numero_sorteo, cp.fecha, cp.archivo,
+                 cp.registros_validos as total_registros,
+                 cp.apuestas_total as total_apuestas,
+                 cp.registros_anulados as total_anulados,
+                 cp.recaudacion as total_recaudacion,
+                 cp.usuario_id, cp.created_at, cp.updated_at,
+                 u.nombre as usuario_nombre, 'quini6' as juego
           FROM control_previo_quini6 cp
           LEFT JOIN usuarios u ON cp.usuario_id = u.id
           WHERE 1=1

@@ -17,6 +17,7 @@ const xml2js = require('xml2js');
 const crypto = require('crypto');
 const { query } = require('../../config/database');
 const { successResponse, errorResponse, PROVINCIAS } = require('../../shared/helpers');
+const { buscarFechaProgramacion } = require('../../shared/control-previo.helper');
 
 // Código de juego Loto 5 en el NTF
 const LOTO5_GAME_CODE = '05';
@@ -518,14 +519,25 @@ function parsearPremiosXml(ds) {
  */
 async function guardarControlPrevioLoto5(resultado, user, nombreArchivo) {
   const sorteo = resultado.sorteo || 'N/A';
+  const sorteoNum = parseInt(sorteo, 10) || 0;
   const resumen = resultado.resumen || {};
+  
+  // Buscar fecha en programación primero
+  let fecha = await buscarFechaProgramacion('loto5', sorteoNum);
+  if (fecha) {
+    console.log(`📅 Loto5 sorteo ${sorteoNum}: fecha desde programación = ${fecha}`);
+  } else {
+    fecha = new Date().toISOString().split('T')[0];
+    console.log(`⚠️ Loto5 sorteo ${sorteoNum}: usando fecha actual (no encontrada en programación)`);
+  }
 
   const insertResult = await query(`
     INSERT INTO control_previo_loto5
-    (numero_sorteo, archivo, registros_validos, registros_anulados,
+    (numero_sorteo, fecha, archivo, registros_validos, registros_anulados,
      apuestas_total, recaudacion, datos_json, usuario_id)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
     ON DUPLICATE KEY UPDATE
+      fecha = VALUES(fecha),
       archivo = VALUES(archivo),
       registros_validos = VALUES(registros_validos),
       registros_anulados = VALUES(registros_anulados),
@@ -535,7 +547,8 @@ async function guardarControlPrevioLoto5(resultado, user, nombreArchivo) {
       usuario_id = VALUES(usuario_id),
       updated_at = CURRENT_TIMESTAMP
   `, [
-    sorteo,
+    sorteoNum,
+    fecha,
     nombreArchivo,
     resumen.registros || 0,
     resumen.anulados || 0,

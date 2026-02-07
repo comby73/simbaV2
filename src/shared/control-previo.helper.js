@@ -313,9 +313,27 @@ async function guardarControlPrevioPoceada(resultado, usuario, nombreArchivo) {
       seguridad
     } = resultado;
 
-    // Extraer datos
-    const fecha = fechaSorteo || new Date().toISOString().split('T')[0];
+    // Extraer datos - Buscar fecha en programación primero
     const numeroSorteo = parseInt(sorteo || 0);
+    let fecha = null;
+    
+    // 1. Buscar en tabla de programación
+    const fechaProgramacion = await buscarFechaProgramacion('poceada', numeroSorteo);
+    if (fechaProgramacion) {
+      fecha = fechaProgramacion;
+      console.log(`📅 Poceada sorteo ${numeroSorteo}: fecha desde programación = ${fecha}`);
+    }
+    
+    // 2. Fallback: usar fecha del XML/NTF
+    if (!fecha && fechaSorteo) {
+      fecha = fechaSorteo;
+    }
+    
+    // 3. Último fallback: fecha actual
+    if (!fecha) {
+      fecha = new Date().toISOString().split('T')[0];
+      console.log(`⚠️ Poceada sorteo ${numeroSorteo}: usando fecha actual (no encontrada en programación)`);
+    }
 
     // Verificar si ya existe (para reemplazar)
     const existe = await query(
@@ -476,9 +494,22 @@ async function guardarControlPrevioTombolina(resultado, usuario, nombreArchivo) 
       registrosNTF
     } = resultado;
 
-    // Extraer datos
-    const fecha = new Date().toISOString().split('T')[0]; // Tombolina usa fecha actual si no viene otra
+    // Extraer datos - Buscar fecha en programación primero
     const numeroSorteo = parseInt(sorteo || datosCalculados?.numeroSorteo || 0);
+    let fecha = null;
+    
+    // 1. Buscar en tabla de programación
+    const fechaProgramacion = await buscarFechaProgramacion('tombolina', numeroSorteo);
+    if (fechaProgramacion) {
+      fecha = fechaProgramacion;
+      console.log(`📅 Tombolina sorteo ${numeroSorteo}: fecha desde programación = ${fecha}`);
+    }
+    
+    // 2. Último fallback: fecha actual
+    if (!fecha) {
+      fecha = new Date().toISOString().split('T')[0];
+      console.log(`⚠️ Tombolina sorteo ${numeroSorteo}: usando fecha actual (no encontrada en programación)`);
+    }
 
     // Verificar si ya existe
     const existe = await query(
@@ -558,9 +589,63 @@ async function guardarControlPrevioTombolina(resultado, usuario, nombreArchivo) 
   }
 }
 
+/**
+ * Busca la fecha de sorteo en la tabla de programación
+ * @param {string} tipoJuego - Tipo de juego: 'quiniela', 'poceada', 'tombolina', 'loto', 'loto5'
+ * @param {string|number} numeroSorteo - Número de sorteo
+ * @param {string} [modalidad] - Código de modalidad (P, N, M, V) para quiniela
+ * @returns {Promise<string|null>} - Fecha en formato YYYY-MM-DD o null
+ */
+async function buscarFechaProgramacion(tipoJuego, numeroSorteo, modalidad = null) {
+  try {
+    // Normalizar numero_sorteo (sin ceros a la izquierda para comparar)
+    const sorteoNormalizado = String(parseInt(numeroSorteo, 10));
+    
+    // Mapeo de tipoJuego a tipo_juego en BD
+    const mapeoTipos = {
+      'quiniela': 'quiniela',
+      'poceada': 'poceada',
+      'tombolina': 'tombolina',
+      'loto': 'loto',
+      'loto5': 'loto5'
+    };
+    
+    const tipoJuegoDB = mapeoTipos[tipoJuego.toLowerCase()] || tipoJuego;
+    
+    let sql = `
+      SELECT fecha_sorteo 
+      FROM programacion_sorteos 
+      WHERE tipo_juego = ? 
+        AND (numero_sorteo = ? OR numero_sorteo = ?)
+    `;
+    const params = [tipoJuegoDB, sorteoNormalizado, String(numeroSorteo)];
+    
+    // Si hay modalidad, filtrar por ella también
+    if (modalidad && tipoJuego === 'quiniela') {
+      sql += ' AND modalidad_codigo = ?';
+      params.push(modalidad);
+    }
+    
+    sql += ' LIMIT 1';
+    
+    const rows = await query(sql, params);
+    
+    if (rows && rows.length > 0 && rows[0].fecha_sorteo) {
+      const fecha = new Date(rows[0].fecha_sorteo);
+      return fecha.toISOString().split('T')[0]; // YYYY-MM-DD
+    }
+    
+    return null;
+  } catch (error) {
+    console.warn('⚠️ Error buscando fecha en programación:', error.message);
+    return null;
+  }
+}
+
 module.exports = {
   guardarControlPrevioQuiniela,
   guardarControlPrevioPoceada,
   guardarControlPrevioTombolina,
-  obtenerHistorialControlPrevio
+  obtenerHistorialControlPrevio,
+  buscarFechaProgramacion
 };
