@@ -804,25 +804,34 @@ async function guardarControlPrevioQuini6DB(resultadoNTF, resultadoXML, user, no
   try {
     const sorteo = resultadoNTF.sorteo || 'N/A';
     
-    // Obtener fecha: intentar del XML, luego del primer registro NTF
+    // Obtener fecha: intentar del XML, luego del primer registro NTF, luego hoy
     let fecha = null;
+    
+    // 1. Intentar del XML
     if (resultadoXML?.fecha) {
-      // XML puede tener formato YYYYMMDD o YYYY-MM-DD
-      const f = resultadoXML.fecha.replace(/[^0-9]/g, '');
+      const f = String(resultadoXML.fecha).replace(/[^0-9]/g, '');
       if (f.length === 8) {
         fecha = `${f.substring(0, 4)}-${f.substring(4, 6)}-${f.substring(6, 8)}`;
-      } else {
+      } else if (resultadoXML.fecha.includes('-')) {
         fecha = resultadoXML.fecha;
       }
-    } else if (resultadoNTF.registros && resultadoNTF.registros.length > 0) {
+    }
+    
+    // 2. Si no hay fecha del XML, buscar en los registros del NTF
+    if (!fecha && resultadoNTF.registros && resultadoNTF.registros.length > 0) {
       const fv = resultadoNTF.registros[0].fechaVenta;
-      if (fv && fv.length === 8) {
+      if (fv && fv.length === 8 && /^\d{8}$/.test(fv)) {
         fecha = `${fv.substring(0, 4)}-${fv.substring(4, 6)}-${fv.substring(6, 8)}`;
       }
     }
+    
+    // 3. Fallback: fecha de hoy
     if (!fecha) {
       fecha = new Date().toISOString().split('T')[0];
+      console.log('⚠️ No se encontró fecha en XML ni NTF, usando fecha actual:', fecha);
     }
+    
+    console.log('📅 Fecha control previo QUINI6:', fecha, '(sorteo:', sorteo, ')');
 
     // INSERT/UPDATE en control_previo_quini6
     const result = await query(`
