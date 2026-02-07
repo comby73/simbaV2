@@ -805,6 +805,7 @@ Dev: nodemon
 - **Git**: Rama `main` principal, sincronizada con `principal` para Hostinger
 - **Decodificación binaria**: BINARY_CODE (A=0000, B=0001, ... P=1111) para números en Poceada/Brinco/Quini6/Loto
 - **Agencia venta web**: `5188880` (provincia 51 + agencia 88880)
+- **Formato ctaCte**: `5100011` (provincia 2 dígitos + agencia 5 dígitos, sin guión, sin verificador)
 
 ---
 
@@ -812,6 +813,7 @@ Dev: nodemon
 
 | Versión | Fecha | Cambios Principales |
 |---------|-------|---------------------|
+| 3.3 | 7 Feb 2026 | ctaCte formato unificado "5100011", Fecha Sorteo vs Fecha Control en historial, Premio Extra exclusión Art. 30°, Migraciones BD completas |
 | 3.2 | 7 Feb 2026 | Ticket display con premio (no importe) en Brinco/Quini6, Premio Extra pool manual, cleanup display |
 | 3.1 | 6 Feb 2026 | OCR Poceada/Tombolina, persistencia BRINCO/QUINI6 en BD, reportes 7 juegos |
 | 3.0 | 5 Feb 2026 | BRINCO y QUINI 6 completos, historial extendido a 7 juegos, 8 tablas BD nuevas |
@@ -826,7 +828,7 @@ Dev: nodemon
 
 ---
 
-**Versión del Documento**: 3.2  
+**Versión del Documento**: 3.3  
 **Última actualización**: 7 de Febrero, 2026
 
 **Estado actual:**

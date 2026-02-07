@@ -582,3 +582,110 @@ Para detalles técnicos, ver DOCUMENTACION.md y los commits de febrero 2026.
 > - prompt.md: Agregados prompts 43-47 de la sesión del 7 de febrero
 
 *Fin de registros de la sesión - 7 de Febrero 2026*
+---
+
+## Sesión: 7 de Febrero 2026 (continuación)
+
+### Prompt 48 - Edición de premios Quini6/Brinco
+> "ME GUSTARIA QUE ME DEVUEVLA O UN MODAL CON LOS NUMERO Y LOS GANADORES MAS LOS PREMIOS A PAGAR PARA DE SER NECESARIO LO CORRGIA"
+>
+> **Contexto:** Solicitud de campos editables para corregir premios en el escrutinio
+>
+> **Implementado:**
+> - Campos editables de premios para todas las modalidades de QUINI 6 y BRINCO
+> - Inputs type="number" con step="0.01" para precisión decimal
+> - Los premios se actualizan automáticamente al cambiar valores
+
+### Prompt 49 - Premio Extra mostrando 1 ganador de más (64 vs 63)
+> "hay una diferencia en premio extra: yo cuento 63 ganadores pero el sistema da 64"
+>
+> **Contexto:** 
+> - Análisis detallado del Premio Extra de QUINI 6
+> - El pool tenía duplicados (18 números → 15 únicos)
+> - Art. 30° del reglamento: tickets con 6 aciertos en Trad1/Trad2/Revancha deben ser EXCLUIDOS del Premio Extra
+>
+> **Implementado:**
+> - Script de análisis `analizar_premio_extra.js`
+> - Eliminación de duplicados en pool: `[...new Set(premioExtra)]`
+> - Lógica de exclusión en `quini6-escrutinio.controller.js`:
+>   ```javascript
+>   const excluido = (aciertosTrad1 >= 6 || aciertosTrad2 >= 6 || aciertosRevancha >= 6);
+>   if (aciertos >= 6 && !excluido) { // Solo contar si NO está excluido }
+>   ```
+
+### Prompt 50 - Tres correcciones en historial de escrutinios
+> "CUANDO SUBE FECHA DE ESCRUTINIO NO PUEDE PONER UNA FECHA DISTINTA A LA DEL SORTEO... EL UNICO QUE TIENE MODALIDAD ES QUINIELA LOS OTROS JUEGOS NO... HIPICAS ESTA TOMANDO MAL LA CUENTA CORRIENTE"
+>
+> **Contexto:**
+> 1. Fecha mostrada era la de carga, no la del sorteo
+> 2. Modalidad aparecía para todos los juegos (solo aplica a Quiniela)
+> 3. Hipicas incluía el dígito verificador en ctaCte
+>
+> **Implementado:**
+> - [index.html](public/index.html): Columnas "Fecha Sorteo" + "Fecha Control" en historial
+> - [app.js](public/js/app.js): Modalidad solo visible para `item.juego === 'quiniela'`
+> - [hipicas.controller.js](src/modules/juegos-offline/hipicas.controller.js): ctaCte sin verificador, formato "5100011"
+
+### Prompt 51 - Estandarización formato ctaCte
+> "quiero que sea asi 5100011 en formato numero"
+>
+> **Contexto:** Unificar formato de cuenta corriente en todo el sistema (sin guión)
+>
+> **Implementado:** Cambio de `${provincia}-${agencia}` a `${provincia}${agencia}` en:
+> - [quini6.controller.js](src/modules/control-previo/quini6.controller.js)
+> - [brinco.controller.js](src/modules/control-previo/brinco.controller.js)  
+> - [quini6-escrutinio.controller.js](src/modules/control-posterior/quini6-escrutinio.controller.js)
+> - [poceada-escrutinio.controller.js](src/modules/control-posterior/poceada-escrutinio.controller.js)
+> - [brinco-escrutinio.controller.js](src/modules/control-posterior/brinco-escrutinio.controller.js)
+> - [quiniela-escrutinio.controller.js](src/modules/control-posterior/quiniela-escrutinio.controller.js)
+> - [escrutinio.helper.js](src/shared/escrutinio.helper.js): Detecta ambos formatos de entrada
+
+### Prompt 52 - Fecha sorteo Quini6 incorrecta
+> "la fecha de sorteo no es la que deberia tomar del ml o del extracto pdf o de la carga manual"
+>
+> **Contexto:** Escrutinio Quini6 mostraba fecha de hoy en lugar de la del sorteo
+>
+> **Implementado:**
+> - Extraer `datosControlPrevio` del request body
+> - Buscar fecha en: `extracto.fecha`, `datosControlPrevio.fecha`, `datosOficiales.fecha`
+> - Convertir formato YYYYMMDD a YYYY-MM-DD
+> - Agregar fecha a resultados antes de guardar
+
+### Prompt 53 - Tablas faltantes en desarrollo
+> "y que debo hacer ahora volver a cargar todo los datos o que?"
+>
+> **Contexto:** Las tablas de Quini6 no existían en la base de datos
+>
+> **Implementado:**
+> - Ejecutadas migraciones: `migration_quini6.js`, `migration_brinco.js`, `migration_loto5.js`
+> - Tablas creadas: 10 tablas nuevas para los 3 juegos
+
+### Prompt 54 - SQL para producción
+> "y esas tablas hay que llevarlas a produccion mas el commit, si es asi dame las tablas para copiarlas en produccion"
+>
+> **Contexto:** Solicitud de scripts SQL listos para ejecutar en producción
+>
+> **Entregado:** 
+> - SQL completo para QUINI 6 (4 tablas)
+> - SQL completo para BRINCO (4 tablas)
+> - SQL completo para LOTO 5 (2 tablas)
+
+### Prompt 55 - Actualizar documentación
+> "bueno realiza el commit y actualiza documentacion y prompt.md"
+>
+> **Contexto:** Cierre de sesión con commit y documentación actualizada
+
+---
+
+## Resumen de Cambios - 7 de Febrero 2026
+
+| Cambio | Archivos afectados |
+|--------|-------------------|
+| Premio Extra exclusión Art. 30° | `quini6-escrutinio.controller.js` |
+| ctaCte formato "5100011" | 7 controllers + 1 helper |
+| Fecha Sorteo vs Fecha Control | `index.html`, `app.js`, `quini6-escrutinio.controller.js` |
+| Modalidad solo Quiniela | `app.js` |
+| Hipicas sin verificador | `hipicas.controller.js` |
+| Migraciones ejecutadas | `migration_quini6.js`, `migration_brinco.js`, `migration_loto5.js` |
+
+*Fin de registros de la sesión - 7 de Febrero 2026 (continuación)*
