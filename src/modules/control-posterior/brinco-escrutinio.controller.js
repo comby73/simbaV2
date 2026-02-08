@@ -13,6 +13,7 @@ const path = require('path');
 const fs = require('fs');
 const { query } = require('../../config/database');
 const { successResponse, errorResponse } = require('../../shared/helpers');
+const { guardarPremiosPorAgencia } = require('../../shared/escrutinio.helper');
 
 // ============================================================
 // CONSTANTES Y CONFIGURACIÓN
@@ -737,6 +738,49 @@ async function guardarEscrutinioBrinco(resultado, datosControlPrevio, user) {
           data.totalPremios || 0
         ]);
       }
+    }
+    
+    // Guardar premios por agencia
+    const ganadoresDetalle = [];
+    
+    // Tradicional - cada nivel
+    for (const nivel of [6, 5, 4, 3]) {
+      const data = resultado.tradicional?.porNivel?.[nivel];
+      if (data && data.agenciasGanadoras) {
+        for (const ag of data.agenciasGanadoras) {
+          const cantidad = ag.cantidad || 1;
+          for (let i = 0; i < cantidad; i++) {
+            ganadoresDetalle.push({
+              agencia: ag.agenciaCompleta || ag.agencia,
+              premio: data.premioUnitario || 0
+            });
+          }
+        }
+      }
+    }
+    
+    // Junior - niveles 6 y 5
+    for (const nivel of [6, 5]) {
+      const data = resultado.junior?.porNivel?.[nivel];
+      if (data && data.agenciasGanadoras) {
+        for (const ag of data.agenciasGanadoras) {
+          const cantidad = ag.cantidad || 1;
+          for (let i = 0; i < cantidad; i++) {
+            ganadoresDetalle.push({
+              agencia: ag.agenciaCompleta || ag.agencia,
+              premio: data.premioUnitario || 0
+            });
+          }
+        }
+      }
+    }
+    
+    // Limpiar y guardar
+    await query('DELETE FROM escrutinio_premios_agencia WHERE escrutinio_id = ? AND juego = ?',
+      [escrutinioId, 'brinco']);
+    
+    if (ganadoresDetalle.length > 0) {
+      await guardarPremiosPorAgencia(escrutinioId, 'brinco', ganadoresDetalle);
     }
   }
   

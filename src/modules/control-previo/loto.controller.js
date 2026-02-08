@@ -144,16 +144,35 @@ function decodificarNumerosLoto(secuencia25) {
 
 /**
  * Decodifica el número PLUS (posición 238 en NTF)
- * Es un solo carácter A-P que codifica un número 0-9
+ * Puede ser:
+ * - Un dígito directo '0'-'9' (más común)
+ * - Una letra A-J codificando 0-9
+ * - Espacio o vacío = no apostó al Multiplicador
  */
 function decodificarNumeroPlus(charPlus) {
   if (!charPlus || charPlus.trim() === '') return null;
-  const letra = charPlus.toUpperCase();
+  
+  const char = charPlus.trim();
+  
+  // Si es un dígito directo '0'-'9'
+  if (/^[0-9]$/.test(char)) {
+    return parseInt(char, 10);
+  }
+  
+  // Si es una letra A-J (0-9 codificado)
+  const letra = char.toUpperCase();
+  if (letra >= 'A' && letra <= 'J') {
+    return letra.charCodeAt(0) - 65; // A=0, B=1, ..., J=9
+  }
+  
+  // Formato antiguo A-P como binario
   const binario = BINARY_CODE[letra];
-  if (!binario) return null;
-  // El número PLUS es el valor decimal del nibble
-  const valor = parseInt(binario, 2);
-  return valor <= 9 ? valor : null;
+  if (binario) {
+    const valor = parseInt(binario, 2);
+    return valor <= 9 ? valor : null;
+  }
+  
+  return null;
 }
 
 function normalizarSorteo(valor) {
@@ -366,6 +385,7 @@ function procesarArchivoNTF(content) {
   let anulados = 0;
   let apuestasTotal = 0;
   let recaudacion = 0;
+  let debugPlusCount = 0;  // DEBUG: contar registros con Plus válido
   const provincias = {};
   // En LOTO, NO separamos por modalidad porque TODAS las apuestas participan en TODAS las modalidades
   // Solo mantenemos esta estructura para compatibilidad con la UI
@@ -418,11 +438,23 @@ function procesarArchivoNTF(content) {
     // Secuencia de números
     const secuencia = line.substr(NTF_LOTO.SECUENCIA_NUMEROS.start, NTF_LOTO.SECUENCIA_NUMEROS.length);
 
-    // Número PLUS (solo para código 11)
+    // Número PLUS - TODOS los registros pueden tener apuesta al Multiplicador
+    // Si el número Plus está presente (0-9), significa que apostó también al Multiplicador
     let numeroPlus = null;
-    if (gameCode === '11' && line.length >= 238) {
+    if (line.length >= 238) {
       const charPlus = line.substr(NTF_LOTO.NUMERO_PLUS.start, NTF_LOTO.NUMERO_PLUS.length);
       numeroPlus = decodificarNumeroPlus(charPlus);
+      // Debug: mostrar primeros 5 registros
+      if (registros < 5) {
+        console.log(`📋 DEBUG PLUS registro ${registros}: lineLen=${line.length}, charPlus='${charPlus}' (code=${charPlus.charCodeAt(0)}), numeroPlus=${numeroPlus}`);
+      }
+      // Contar cuántos tienen Plus válido
+      if (numeroPlus !== null) {
+        if (debugPlusCount === 0) {
+          console.log(`🎯 PRIMER registro con Plus válido: charPlus='${charPlus}', numeroPlus=${numeroPlus}`);
+        }
+        debugPlusCount++;
+      }
     }
 
     const provCod = line.substr(NTF_GENERIC.PROVINCIA.start, NTF_GENERIC.PROVINCIA.length);
@@ -463,10 +495,10 @@ function procesarArchivoNTF(content) {
         tipoJuego: 'Loto',
         modalidad: modalidadNombre,
         gameCode,
-        agencia: line.substr(NTF_GENERIC.AGENCIA.start, NTF_GENERIC.AGENCIA.length),
+        agencia: line.substr(NTF_GENERIC.AGENCIA.start, NTF_GENERIC.AGENCIA.length).trim(),
         agenciaCompleta,
         esVentaWeb,
-        ticket: line.substr(NTF_GENERIC.NUMERO_TICKET.start, NTF_GENERIC.NUMERO_TICKET.length),
+        ticket: line.substr(NTF_GENERIC.NUMERO_TICKET.start, NTF_GENERIC.NUMERO_TICKET.length).trim(),
         secuencia,
         cantNum,
         numeroPlus,
@@ -484,6 +516,7 @@ function procesarArchivoNTF(content) {
   // Log de códigos de juego encontrados
   console.log('📊 Códigos de juego en archivo NTF:', gameCodesCount);
   console.log('📊 Modalidades procesadas:', modalidades);
+  console.log(`📊 DEBUG: Total registros con Plus válido: ${debugPlusCount} de ${registros} (${(debugPlusCount/registros*100).toFixed(2)}%)`);
 
   return {
     numeroSorteo,
@@ -531,7 +564,11 @@ function parsearPremiosModalidad(modXml) {
   if (modXml.PRIMER_PREMIO) premios.primerPremio = parsearNodoPremio(modXml.PRIMER_PREMIO);
   if (modXml.SEGUNDO_PREMIO) premios.segundoPremio = parsearNodoPremio(modXml.SEGUNDO_PREMIO);
   if (modXml.TERCER_PREMIO) premios.tercerPremio = parsearNodoPremio(modXml.TERCER_PREMIO);
-  if (modXml.PREMIO_AGENCIERO) premios.agenciero = parsearNodoPremio(modXml.PREMIO_AGENCIERO);
+  if (modXml.PREMIO_AGENCIERO) {
+    console.log(`📋 DEBUG PREMIO_AGENCIERO raw:`, JSON.stringify(modXml.PREMIO_AGENCIERO));
+    premios.agenciero = parsearNodoPremio(modXml.PREMIO_AGENCIERO);
+    console.log(`📋 DEBUG agenciero parsed:`, premios.agenciero);
+  }
   if (modXml.FONDO_RESERVA) {
     premios.fondoReserva = { monto: parseFloat(String(modXml.FONDO_RESERVA.MONTO || 0).trim()) };
   }

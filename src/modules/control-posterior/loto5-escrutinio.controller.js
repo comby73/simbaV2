@@ -14,6 +14,7 @@
 
 const { query } = require('../../config/database');
 const { successResponse, errorResponse } = require('../../shared/helpers');
+const { guardarPremiosPorAgencia } = require('../../shared/escrutinio.helper');
 
 const BINARY_CODE = {
   'A': '0000', 'B': '0001', 'C': '0010', 'D': '0011',
@@ -119,6 +120,22 @@ function ganadoresTexto(n) {
 const ejecutar = async (req, res) => {
   const { registrosNTF, extracto, datosControlPrevio } = req.body;
 
+  console.log(`\n${'='.repeat(50)}`);
+  console.log(`=== ESCRUTINIO LOTO 5 - DEBUG PREMIOS ===`);
+  console.log(`${'='.repeat(50)}`);
+  
+  // DEBUG: Verificar estructura de datosControlPrevio
+  console.log(`📋 DEBUG datosControlPrevio LOTO 5:`);
+  console.log(`  - datosOficiales existe: ${!!datosControlPrevio?.datosOficiales}`);
+  console.log(`  - premios existe: ${!!datosControlPrevio?.datosOficiales?.premios}`);
+  if (datosControlPrevio?.datosOficiales?.premios) {
+    const premios = datosControlPrevio.datosOficiales.premios;
+    console.log(`  - primerPremio.totales: ${premios.primerPremio?.totales}`);
+    console.log(`  - segundoPremio.totales: ${premios.segundoPremio?.totales}`);
+    console.log(`  - tercerPremio.totales: ${premios.tercerPremio?.totales}`);
+    console.log(`  - agenciero.totales: ${premios.agenciero?.totales}`);
+  }
+
   if (!registrosNTF || !extracto) {
     return errorResponse(res, 'Faltan datos para ejecutar el escrutinio', 400);
   }
@@ -214,12 +231,14 @@ function runScrutiny(registrosNTF, extracto, datosControlPrevio, xmlPremios) {
       if (hits >= 3) {
         porNivel[hits].ganadores++;
         if (hits === 5) {
+          const esVentaWeb = reg.esVentaWeb || reg.agenciaCompleta === '5188880';
           porNivel[5].agenciasGanadoras.push({
             agencia: reg.agencia || '',
             agenciaCompleta: reg.agenciaCompleta || '',
             ticket: reg.ticket || '',
             importe: importe,
-            numerosJugados: betNumbers.slice()
+            numerosJugados: betNumbers.slice(),
+            esVentaWeb
           });
         }
         if (hits === 3) {
@@ -234,6 +253,7 @@ function runScrutiny(registrosNTF, extracto, datosControlPrevio, xmlPremios) {
         porNivel[nivel].ganadores += ganadoresMultiples[nivel];
       }
       if (ganadoresMultiples[5] > 0) {
+        const esVentaWeb = reg.esVentaWeb || reg.agenciaCompleta === '5188880';
         porNivel[5].agenciasGanadoras.push({
           agencia: reg.agencia || '',
           agenciaCompleta: reg.agenciaCompleta || '',
@@ -241,7 +261,8 @@ function runScrutiny(registrosNTF, extracto, datosControlPrevio, xmlPremios) {
           esMultiple: true,
           cantidad: ganadoresMultiples[5],
           importe: importe,
-          numerosJugados: betNumbers.slice()
+          numerosJugados: betNumbers.slice(),
+          esVentaWeb
         });
       }
       if (ganadoresMultiples[3] > 0) {
@@ -287,21 +308,54 @@ function runScrutiny(registrosNTF, extracto, datosControlPrevio, xmlPremios) {
     porNivel[3].esDevolucion = true;
   }
 
-  // Agenciero: 1% del total de pozos (1er + 2do)
+  // Agenciero: se paga cuando hay ganadores de 5 aciertos (primer premio)
+  // El premio va a las agencias que vendieron los tickets ganadores
   const totalPozosPrincipales = pozoXml5 + pozoXml4;
   const pozoAgencieroXml = parseFloat(xmlPremios.agenciero?.totales || 0);
-  const agenciero = {
-    ganadores: porNivel[5].agenciasGanadoras.length,
-    premioUnitario: 0,
-    totalPremios: 0,
-    pozoXml: pozoAgencieroXml
-  };
-
-  if (agenciero.ganadores > 0) {
-    // Si hay agenciero del XML, usar ese valor. Si no, calcular como 1% del total
-    const pozoAgenciero = pozoAgencieroXml > 0 ? pozoAgencieroXml : totalPozosPrincipales * 0.01;
-    agenciero.premioUnitario = pozoAgenciero / agenciero.ganadores;
-    agenciero.totalPremios = pozoAgenciero;
+  
+  // Contar agencias únicas que vendieron tickets con 5 aciertos (excluyendo venta web)
+  const agenciasGanadoras5 = porNivel[5].agenciasGanadoras || [];
+  const agenciasUnicas = [...new Set(
+    agenciasGanadoras5
+      .filter(g => !g.esVentaWeb && g.agenciaCompleta !== '5188880')
+      .map(g => g.agenciaCompleta)
+  )];
+  
+  const hayGanadoresDe5 = porNivel[5].ganadores > 0;
+  const pozoAgenciero = pozoAgencieroXml > 0 ? pozoAgencieroXml : totalPozosPrincipales * 0.01;
+  
+  let agenciero;
+  if (hayGanadoresDe5 && agenciasUnicas.length > 0) {
+    // Hay ganadores de 5 aciertos con agencias físicas
+    agenciero = {
+      ganadores: agenciasUnicas.length,
+      premioUnitario: pozoAgenciero / agenciasUnicas.length,
+      totalPremios: pozoAgenciero,
+      pozoVacante: 0,
+      pozoXml: pozoAgencieroXml,
+      agencias: agenciasUnicas
+    };
+  } else if (hayGanadoresDe5 && agenciasUnicas.length === 0) {
+    // Hay ganadores de 5 pero son todos de venta web
+    agenciero = {
+      ganadores: 0,
+      premioUnitario: 0,
+      totalPremios: 0,
+      pozoVacante: pozoAgenciero,
+      pozoXml: pozoAgencieroXml,
+      agencias: [],
+      nota: 'Ganadores por venta web (sin premio agenciero)'
+    };
+  } else {
+    // No hay ganadores de 5 aciertos
+    agenciero = {
+      ganadores: 0,
+      premioUnitario: 0,
+      totalPremios: 0,
+      pozoVacante: pozoAgenciero,
+      pozoXml: pozoAgencieroXml,
+      agencias: []
+    };
   }
 
   // Fondo de reserva (informativo)
@@ -357,28 +411,145 @@ function runScrutiny(registrosNTF, extracto, datosControlPrevio, xmlPremios) {
 /**
  * Guarda los resultados del escrutinio de Loto 5 en la BD
  */
+/**
+ * Guarda los resultados del escrutinio de Loto 5 en la BD
+ * Incluye: escrutinio_loto5 (resumen) + escrutinio_loto5_ganadores (por nivel)
+ */
 async function guardarEscrutinioLoto5(resultado, datosControlPrevio, user) {
   const sorteo = resultado.numeroSorteo || 'N/A';
+  const fecha = resultado.fechaSorteo || new Date().toISOString().split('T')[0];
+  
+  console.log(`📝 Guardando escrutinio LOTO 5: Sorteo ${sorteo}`);
 
+  // 1. Guardar/actualizar registro principal
   await query(`
     INSERT INTO escrutinio_loto5
     (numero_sorteo, fecha_sorteo, total_ganadores, total_premios,
-     datos_json, usuario_id)
-    VALUES (?, ?, ?, ?, ?, ?)
+     extracto, datos_json, usuario_id)
+    VALUES (?, ?, ?, ?, ?, ?, ?)
     ON DUPLICATE KEY UPDATE
       total_ganadores = VALUES(total_ganadores),
       total_premios = VALUES(total_premios),
+      extracto = VALUES(extracto),
       datos_json = VALUES(datos_json),
       usuario_id = VALUES(usuario_id),
       updated_at = CURRENT_TIMESTAMP
   `, [
     sorteo,
-    resultado.fechaSorteo || new Date().toISOString().split('T')[0],
+    fecha,
     resultado.totalGanadores || 0,
     resultado.totalPremios || 0,
+    JSON.stringify(resultado.extractoUsado || {}),
     JSON.stringify(resultado),
     user?.id || null
   ]);
+
+  // 2. Obtener ID del escrutinio
+  const [escrutinioRow] = await query(
+    'SELECT id FROM escrutinio_loto5 WHERE numero_sorteo = ?',
+    [sorteo]
+  );
+  const escrutinioId = escrutinioRow?.id;
+
+  if (!escrutinioId) {
+    console.warn('⚠️ No se pudo obtener ID del escrutinio LOTO 5');
+    return;
+  }
+
+  // 3. Guardar ganadores por nivel
+  try {
+    // Limpiar ganadores anteriores
+    await query('DELETE FROM escrutinio_loto5_ganadores WHERE escrutinio_id = ?', [escrutinioId]);
+
+    // Niveles de aciertos (5, 4, 3)
+    const niveles = [5, 4, 3];
+    
+    for (const nivel of niveles) {
+      const nivelData = resultado.porNivel?.[nivel];
+      if (nivelData && nivelData.ganadores > 0) {
+        await query(`
+          INSERT INTO escrutinio_loto5_ganadores
+          (escrutinio_id, numero_sorteo, aciertos, cantidad_ganadores,
+           premio_unitario, premio_total, pozo_xml, pozo_vacante)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        `, [
+          escrutinioId,
+          sorteo,
+          nivel,
+          nivelData.ganadores,
+          nivelData.premioUnitario || 0,
+          nivelData.totalPremios || 0,
+          nivelData.pozoXml || 0,
+          nivelData.pozoVacante || 0
+        ]);
+      }
+    }
+
+    // Guardar agenciero
+    const agenciero = resultado.agenciero;
+    if (agenciero && (agenciero.ganadores > 0 || agenciero.pozoXml > 0)) {
+      await query(`
+        INSERT INTO escrutinio_loto5_ganadores
+        (escrutinio_id, numero_sorteo, aciertos, cantidad_ganadores,
+         premio_unitario, premio_total, pozo_xml, pozo_vacante)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+      `, [
+        escrutinioId,
+        sorteo,
+        0, // 0 = agenciero
+        agenciero.ganadores || 0,
+        agenciero.premioUnitario || 0,
+        agenciero.totalPremios || 0,
+        agenciero.pozoXml || 0,
+        agenciero.pozoVacante || 0
+      ]);
+    }
+
+    // Guardar premios por agencia (acumulado)
+    const ganadoresDetalle = [];
+    
+    // Ganadores de nivel 5
+    const agGanadoras5 = resultado.porNivel?.[5]?.agenciasGanadoras || [];
+    const premioUnit5 = resultado.porNivel?.[5]?.premioUnitario || 0;
+    for (const ag of agGanadoras5) {
+      const cantidad = ag.cantidad || 1;
+      for (let i = 0; i < cantidad; i++) {
+        ganadoresDetalle.push({
+          agencia: ag.agenciaCompleta || ag.agencia,
+          premio: premioUnit5
+        });
+      }
+    }
+    
+    // Agenciero detalles
+    const agencieroDet = resultado.agenciero?.detalles || [];
+    const agencieroUnit = resultado.agenciero?.premioUnitario || 0;
+    for (const det of agencieroDet) {
+      ganadoresDetalle.push({
+        agencia: det.agenciaCompleta || `${det.provincia || '51'}${(det.agencia || '').padStart(5, '0')}`,
+        premio: agencieroUnit
+      });
+    }
+    
+    // Limpiar premios por agencia anteriores
+    await query('DELETE FROM escrutinio_premios_agencia WHERE escrutinio_id = ? AND juego = ?', 
+      [escrutinioId, 'loto5']);
+    
+    // Guardar
+    if (ganadoresDetalle.length > 0) {
+      await guardarPremiosPorAgencia(escrutinioId, 'loto5', ganadoresDetalle);
+    }
+
+    console.log(`✅ Escrutinio LOTO 5 guardado: Sorteo ${sorteo}, ${resultado.totalGanadores} ganadores, $${resultado.totalPremios?.toLocaleString('es-AR')} premios`);
+  } catch (errGanadores) {
+    // Si la tabla de ganadores no existe, solo loguear advertencia
+    if (errGanadores.code === 'ER_NO_SUCH_TABLE') {
+      console.warn('⚠️ Tabla escrutinio_loto5_ganadores no existe. Solo se guardó el JSON principal.');
+      console.log('   Ejecute: node database/migration_loto5_ganadores.js');
+    } else {
+      throw errGanadores;
+    }
+  }
 }
 
 module.exports = {

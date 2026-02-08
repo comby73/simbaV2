@@ -689,3 +689,148 @@ Para detalles técnicos, ver DOCUMENTACION.md y los commits de febrero 2026.
 | Migraciones ejecutadas | `migration_quini6.js`, `migration_brinco.js`, `migration_loto5.js` |
 
 *Fin de registros de la sesión - 7 de Febrero 2026 (continuación)*
+---
+
+## Sesión: 8 de Febrero 2026
+
+### Prompt 56 - Mejoras Escrutinio LOTO: Agenciero Vacante y Venta Web
+> "El agenciero de LOTO debe mostrarse siempre, indicando si está VACANTE o si los ganadores son por venta web"
+>
+> **Contexto:**
+> - En LOTO, cuando hay ganadores de 6 aciertos pero son todos de venta web (agencia 5188880), no se paga premio agenciero a agencias físicas
+> - El sistema no mostraba el premio agenciero cuando quedaba vacante
+>
+> **Implementado:**
+> - Backend `loto-escrutinio.controller.js`:
+>   - Agenciero siempre muestra `pozoXml` y `pozoVacante` cuando aplica
+>   - Si hay ganadores de 6 aciertos pero todos son venta web: `pozoVacante = agPool`, `nota = 'Ganadores por venta web (sin premio agenciero)'`
+>   - Logging mejorado con debug de agenciero por modalidad
+>   - `distribuirPremiosTradMatch()`, `distribuirPremiosDesquite()`, `distribuirPremiosSaleOSale()` actualizadas
+> - Frontend `app.js`:
+>   - `mostrarResultadosEscrutinioLoto()`: Muestra "VACANTE" cuando `pozoVacante > 0` y ganadores = 0
+>   - Muestra icono de info cuando ganadores son de venta web
+>   - Columna "Pozo Vacante" agregada a la tabla de resultados
+
+### Prompt 57 - Mejoras Escrutinio LOTO5: Agenciero Vacante
+> "Lo mismo para LOTO 5 - mostrar agenciero vacante cuando aplique"
+>
+> **Contexto:** Replicar la lógica de agenciero vacante de LOTO a LOTO5
+>
+> **Implementado:**
+> - Backend `loto5-escrutinio.controller.js`:
+>   - Contar agencias únicas excluyendo venta web (`agenciaCompleta !== '5188880'`)
+>   - Si hay ganadores de 5 pero todos son venta web: agenciero queda vacante con `nota`
+>   - Campo `esVentaWeb` agregado a cada ganador en `agenciasGanadoras`
+> - Frontend `app.js`:
+>   - `mostrarResultadosEscrutinioLoto5()`: Muestra "VACANTE" o icono info similar a LOTO
+>   - Siempre muestra el agenciero (no solo cuando hay ganadores)
+
+### Prompt 58 - Multiplicador LOTO: Mejoras de logueo y display
+> "El multiplicador no encuentra ganadores - necesito debugging"
+>
+> **Contexto:** Investigación de por qué el Multiplicador no detectaba ganadores correctamente
+>
+> **Implementado:**
+> - Backend `loto-escrutinio.controller.js`:
+>   - Logs detallados en `procesarMultiplicador()`:
+>     - Número PLUS sorteado y recibido
+>     - Registros con Plus acertado
+>     - Tickets ganadores de 6 encontrados por modalidad
+>   - Comparación flexible de PLUS (string vs number)
+>   - Limpieza de tickets con `.trim()` para evitar falsos negativos
+> - Backend `loto.controller.js`:
+>   - `decodificarNumeroPlus()` mejorada: acepta dígito directo '0'-'9', letra A-J, o formato binario A-P
+>   - Debug de registros con Plus válido durante parsing
+>   - Campo `numeroPlus` se asigna a TODOS los registros (no solo código 11)
+> - Frontend `app.js`:
+>   - Mostrar `numeroPLUS` en la tabla del Multiplicador
+>   - Fila adicional para agenciero del Multiplicador ($500.000/agencia)
+>   - Premio unitario calculado como `premioExtra / ganadores`
+
+### Prompt 59 - Actualizar modelo OCR Groq
+> "Actualizar modelo de Groq a llama-4-scout"
+>
+> **Contexto:** El modelo anterior `llama-3.2-90b-vision-preview` fue deprecado
+>
+> **Implementado:**
+> - `public/js/config.js`: Modelo actualizado a `meta-llama/llama-4-scout-17b-16e-instruct`
+> - Mantiene fallback a OpenAI GPT-4o
+
+### Prompt 60 - Actualizar documentación
+> "actualiza el promt y documentacion.d los dos archivops md con todo lo ultimo qu eno tiene"
+>
+> **Contexto:** Sincronización de archivos de documentación con todos los cambios de la sesión
+
+### Prompt 61 - Bug LOTO agenciero en 0
+> "el sistema de escrutinio de Loto Plus no está leyendo correctamente el PREMIO_AGENCIERO del XML"
+>
+> **Contexto:** El escrutinio de LOTO mostraba agenciero en $0 cuando el XML tenía 64,106,017.47
+>
+> **Causa raíz encontrada:**
+> - `app.js` líneas 5933-5948 tenía un loop que SOBRESCRIBÍA `datosCP.datosOficiales.modalidades[mod]` con los pozos del extracto XML
+> - El extracto XML tiene `pozos[mod].agenciero = 0` o vacío
+> - Los premios correctos venían del Control Previo ZIP → XML → PREMIO_AGENCIERO
+>
+> **Implementado:**
+> - `app.js`: Eliminado el loop que sobrescribía premios, ahora usa `JSON.parse(JSON.stringify(...))` para clonar sin modificar
+> - `loto-escrutinio.controller.js` y `loto5-escrutinio.controller.js`: Debug logs para rastrear flujo de premios
+
+### Prompt 62 - Mejora guardado BD escrutinio LOTO/LOTO5
+> "como se sube a la tabla cuando realizo el control posterior que valores sube y el resumen por agente"
+>
+> **Contexto:** El escrutinio solo guardaba en `escrutinio_loto` con JSON, sin tabla de ganadores
+>
+> **Implementado:**
+> - Creada migración `migration_loto_ganadores.js` → tabla `escrutinio_loto_ganadores`
+> - Creada migración `migration_loto5_ganadores.js` → tabla `escrutinio_loto5_ganadores`
+> - `guardarEscrutinioLoto()` mejorada: guarda por modalidad/nivel + agenciero
+> - `guardarEscrutinioLoto5()` mejorada: guarda por nivel + agenciero
+> - Ambas tablas con: escrutinio_id, numero_sorteo, modalidad/aciertos, cantidad_ganadores, premio_unitario, premio_total, pozo_xml, pozo_vacante
+
+### Prompt 63 - Consulta premios por agencia en Quiniela
+> "quiniela si lo guarda por agencia"
+>
+> **Contexto:** Verificación de qué juegos guardan premios por agencia
+>
+> **Resultado:**
+> - ✅ Quiniela y Poceada ya usan `guardarPremiosPorAgencia()` → tabla `escrutinio_premios_agencia`
+> - ❌ LOTO, LOTO5, QUINI6, BRINCO no guardaban por agencia
+
+### Prompt 64 - Unificar premios por agencia para todos los juegos
+> "si y todos cuando ponga todos los juegos quiero que los acumule por cta cte se entiende eso..."
+>
+> **Contexto:** El usuario quiere que TODOS los juegos guarden premios por agencia y que la consulta "Todos" los acumule
+>
+> **Implementado:**
+> 1. **Migración `migration_premios_agencia_juegos.js`:**
+>    - ENUM `juego` ampliado: `quiniela`, `poceada`, `loto`, `loto5`, `quini6`, `brinco`, `hipodromo`
+>
+> 2. **Controllers modificados para guardar por agencia:**
+>    - `loto-escrutinio.controller.js`: Guarda `agenciasGanadoras` por modalidad en `escrutinio_premios_agencia`
+>    - `loto5-escrutinio.controller.js`: Guarda ganadores nivel 5 + agenciero
+>    - `quini6-escrutinio.controller.js`: Usa `porAgencia` existente para guardar
+>    - `brinco-escrutinio.controller.js`: Tradicional + Junior → tabla compartida
+>
+> 3. **Consulta acumulada en historial:**
+>    - `historial.controller.js` → `obtenerDatosDashboard()`:
+>    - Cuando `juego` está vacío o es "todos" + `tipoConsulta === 'totalizado'`
+>    - Acumula todos los premios por `cta_cte` (agencia) sumando de todos los juegos
+>    - Cada fila muestra: total_premios, total_ganadores, total_recaudacion, lista de juegos
+
+---
+
+## Resumen de Cambios - 8 de Febrero 2026
+
+| Cambio | Archivos afectados |
+|--------|-------------------|
+| Agenciero vacante/venta web LOTO | `loto-escrutinio.controller.js`, `app.js` |
+| Agenciero vacante/venta web LOTO5 | `loto5-escrutinio.controller.js`, `app.js` |
+| Multiplicador debugging + display | `loto-escrutinio.controller.js`, `loto.controller.js`, `app.js` |
+| Modelo OCR actualizado | `config.js` (llama-4-scout) |
+| Decodificación Plus mejorada | `loto.controller.js` |
+| Fix bug agenciero LOTO $0 | `app.js` (eliminado overwrite de premios) |
+| Guardado escrutinio LOTO/LOTO5 mejorado | `loto-escrutinio.controller.js`, `loto5-escrutinio.controller.js`, migraciones |
+| Guardado premios por agencia (todos) | 4 controllers + migración ENUM |
+| Consulta acumulada todos juegos | `historial.controller.js` |
+
+*Fin de registros de la sesión - 8 de Febrero 2026*

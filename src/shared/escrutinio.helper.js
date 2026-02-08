@@ -587,5 +587,6 @@ module.exports = {
   guardarEscrutinioTombolina,
   obtenerHistorialEscrutinio,
   obtenerGanadoresEscrutinio,
-  obtenerPremiosPorAgencia
+  obtenerPremiosPorAgencia,
+  guardarPremiosPorAgencia  // Para uso en LOTO, LOTO5, QUINI6, BRINCO
 };

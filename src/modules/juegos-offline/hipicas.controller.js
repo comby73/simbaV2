@@ -181,7 +181,7 @@ function procesarContenidoTXT(contenido, nombreArchivo) {
         hipodromo_codigo: parsed.hipodromo.codigo,
         hipodromo_nombre: parsed.hipodromo.nombre,
         reunion: parsed.reunion,
-        agency: parsed.agente,
+        agency: parsed.ctaCte,  // Formato: 5100011 (provincia + agencia)
         ctaCte: parsed.ctaCte,  // Formato: 5100011
         provincia: parsed.provincia,
         provincia_nombre: parsed.provinciaNombre,

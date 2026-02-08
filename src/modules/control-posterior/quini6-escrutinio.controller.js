@@ -16,6 +16,7 @@ const path = require('path');
 const fs = require('fs');
 const { query } = require('../../config/database');
 const { successResponse, errorResponse, formatNumber } = require('../../shared/helpers');
+const { guardarPremiosPorAgencia } = require('../../shared/escrutinio.helper');
 const { 
   decodificarNumerosQuini6, 
   calcularCombinaciones, 
@@ -914,6 +915,70 @@ async function guardarEscrutinioQuini6DB(resultados, user) {
         VALUES (?, ?, ?, ?, ?, ?, ?)
       `, [escrutinioId, sorteo, 'PREMIO_EXTRA', 6,
           extra.cantidad, extra.premioUnitario || 0, extra.premioTotal || 0]);
+    }
+    
+    // Guardar premios por agencia
+    // porAgencia ya es un array con {provincia, agencia, ctaCte, premiosTotales, ganadores count...}
+    const porAgencia = resultados.porAgencia || [];
+    if (porAgencia.length > 0) {
+      // Limpiar registros anteriores
+      await query('DELETE FROM escrutinio_premios_agencia WHERE escrutinio_id = ? AND juego = ?',
+        [escrutinioId, 'quini6']);
+      
+      // Construir ganadoresDetalle - un registro por cada ganador por agencia
+      const ganadoresDetalle = [];
+      for (const ag of porAgencia) {
+        const agenciaCompleta = ag.ctaCte || `${ag.provincia}${(ag.agencia || '').padStart(5, '0')}`;
+        
+        // Para cada nivel de ganadores, agregar al detalle
+        const gans = ag.ganadores || {};
+        
+        // Tradicional Primera
+        for (const nivel of ['6', '5', '4']) {
+          const cant = gans.tradicionalPrimera?.[nivel] || 0;
+          const premioUnit = g.tradicionalPrimera?.[nivel]?.premioUnitario || 0;
+          for (let i = 0; i < cant; i++) {
+            ganadoresDetalle.push({ agencia: agenciaCompleta, premio: premioUnit });
+          }
+        }
+        
+        // Tradicional Segunda
+        for (const nivel of ['6', '5', '4']) {
+          const cant = gans.tradicionalSegunda?.[nivel] || 0;
+          const premioUnit = g.tradicionalSegunda?.[nivel]?.premioUnitario || 0;
+          for (let i = 0; i < cant; i++) {
+            ganadoresDetalle.push({ agencia: agenciaCompleta, premio: premioUnit });
+          }
+        }
+        
+        // Revancha
+        for (let i = 0; i < (gans.revancha || 0); i++) {
+          ganadoresDetalle.push({ 
+            agencia: agenciaCompleta, 
+            premio: g.revancha?.['6']?.premioUnitario || 0 
+          });
+        }
+        
+        // Siempre Sale
+        for (let i = 0; i < (gans.siempreSale || 0); i++) {
+          ganadoresDetalle.push({ 
+            agencia: agenciaCompleta, 
+            premio: g.siempreSale?.premioUnitario || 0 
+          });
+        }
+        
+        // Premio Extra
+        for (let i = 0; i < (gans.premioExtra || 0); i++) {
+          ganadoresDetalle.push({ 
+            agencia: agenciaCompleta, 
+            premio: g.premioExtra?.['6']?.premioUnitario || 0 
+          });
+        }
+      }
+      
+      if (ganadoresDetalle.length > 0) {
+        await guardarPremiosPorAgencia(escrutinioId, 'quini6', ganadoresDetalle);
+      }
     }
   }
   

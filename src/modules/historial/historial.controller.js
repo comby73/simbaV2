@@ -1733,6 +1733,49 @@ const obtenerDatosDashboard = async (req, res) => {
         resultados = resultados.concat(hipicasTot);
       }
 
+      // Si no se especificó juego (todos), acumular por agencia sumando todos los juegos
+      if (!juego || juego === 'todos') {
+        const acumulado = new Map();
+        
+        for (const row of resultados) {
+          const clave = row.agencia || row.codigo || 'DESCONOCIDO';
+          
+          if (!acumulado.has(clave)) {
+            acumulado.set(clave, {
+              agencia: clave,
+              codigo: row.codigo,
+              codigo_provincia: row.codigo_provincia,
+              nombre: row.nombre || clave,
+              total_ganadores: 0,
+              total_premios: 0,
+              total_sorteos: 0,
+              total_tickets: 0,
+              total_apuestas: 0,
+              total_anulados: 0,
+              total_recaudacion: 0,
+              juegos: [], // Lista de juegos que aportaron
+              juego: 'todos'
+            });
+          }
+          
+          const acc = acumulado.get(clave);
+          acc.total_ganadores += parseInt(row.total_ganadores) || 0;
+          acc.total_premios += parseFloat(row.total_premios) || 0;
+          acc.total_sorteos += parseInt(row.total_sorteos) || 0;
+          acc.total_tickets += parseInt(row.total_tickets) || 0;
+          acc.total_apuestas += parseInt(row.total_apuestas) || 0;
+          acc.total_anulados += parseInt(row.total_anulados) || 0;
+          acc.total_recaudacion += parseFloat(row.total_recaudacion) || 0;
+          
+          if (row.juego && !acc.juegos.includes(row.juego)) {
+            acc.juegos.push(row.juego);
+          }
+        }
+        
+        // Convertir a array y ordenar
+        resultados = Array.from(acumulado.values());
+      }
+
       // Ordenar por premios
       resultados.sort((a, b) => parseFloat(b.total_premios) - parseFloat(a.total_premios));
 

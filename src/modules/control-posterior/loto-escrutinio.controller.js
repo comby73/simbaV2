@@ -15,6 +15,7 @@
 
 const { query } = require('../../config/database');
 const { successResponse, errorResponse } = require('../../shared/helpers');
+const { guardarPremiosPorAgencia } = require('../../shared/escrutinio.helper');
 
 const BINARY_CODE = {
   'A': '0000', 'B': '0001', 'C': '0010', 'D': '0011',
@@ -182,6 +183,37 @@ function validarPremiosXML(datosControlPrevio) {
 const ejecutar = async (req, res) => {
   const { registrosNTF, extracto, datosControlPrevio } = req.body;
 
+  console.log(`\n${'*'.repeat(60)}`);
+  console.log(`*** ESCRUTINIO LOTO - RECIBIENDO DATOS ***`);
+  console.log(`${'*'.repeat(60)}`);
+  console.log(`Registros NTF recibidos: ${registrosNTF ? registrosNTF.length : 'NULL'}`);
+  console.log(`Extracto recibido:`, JSON.stringify(extracto));
+  
+  // DEBUG: Verificar estructura de datosControlPrevio y premios
+  console.log(`\n📋 DEBUG datosControlPrevio:`);
+  console.log(`  - datosOficiales existe: ${!!datosControlPrevio?.datosOficiales}`);
+  console.log(`  - modalidades existe: ${!!datosControlPrevio?.datosOficiales?.modalidades}`);
+  if (datosControlPrevio?.datosOficiales?.modalidades) {
+    const mods = datosControlPrevio.datosOficiales.modalidades;
+    for (const mod of ['Tradicional', 'Match', 'Desquite', 'Sale o Sale']) {
+      const modData = mods[mod];
+      console.log(`  - ${mod}:`);
+      console.log(`      premios existe: ${!!modData?.premios}`);
+      console.log(`      agenciero: ${JSON.stringify(modData?.premios?.agenciero)}`);
+      console.log(`      primerPremio: ${JSON.stringify(modData?.premios?.primerPremio)}`);
+    }
+  }
+  
+  if (registrosNTF && registrosNTF.length > 0) {
+    console.log(`Primer registro:`, JSON.stringify(registrosNTF[0]));
+    // Verificar que tiene secuencia
+    if (registrosNTF[0].secuencia) {
+      const numsDecodificados = decodificarNumerosLoto(registrosNTF[0].secuencia);
+      console.log(`  → Secuencia: "${registrosNTF[0].secuencia}"`);
+      console.log(`  → Números decodificados: [${numsDecodificados.join(', ')}]`);
+    }
+  }
+
   if (!registrosNTF || !extracto) {
     return errorResponse(res, 'Faltan datos para ejecutar el escrutinio', 400);
   }
@@ -307,6 +339,57 @@ function runScrutiny(registrosNTF, extracto, datosControlPrevio) {
     'Sale o Sale': new Set(extracto.saleOSale.map(n => parseInt(n)))
   };
 
+  console.log(`\n${'='.repeat(60)}`);
+  console.log(`=== INICIO runScrutiny ===`);
+  console.log(`Registros recibidos en runScrutiny: ${registrosNTF.length}`);
+  console.log(`Extractos usados:`);
+  console.log(`  Tradicional: [${[...extractoPorModalidad['Tradicional']].join(', ')}]`);
+  console.log(`  Match: [${[...extractoPorModalidad['Match']].join(', ')}]`);
+  console.log(`  Desquite: [${[...extractoPorModalidad['Desquite']].join(', ')}]`);
+  console.log(`  Sale o Sale: [${[...extractoPorModalidad['Sale o Sale']].join(', ')}]`);
+  console.log(`  PLUS: ${numeroPLUS}`);
+  
+  // ANÁLISIS: Buscar si hay ALGÚN registro que pueda ser ganador de Tradicional
+  console.log(`\n📊 ANÁLISIS DE GANADORES POTENCIALES:`);
+  const extractoTrad = extractoPorModalidad['Tradicional'];
+  let mejorMatchTrad = 0;
+  let registroMejorMatch = null;
+  
+  for (let idx = 0; idx < Math.min(registrosNTF.length, 100000); idx++) {
+    const reg = registrosNTF[idx];
+    if (reg.cancelado || reg.isCanceled) continue;
+    
+    let betNumbers = [];
+    if (reg.numeros && Array.isArray(reg.numeros)) {
+      betNumbers = reg.numeros.map(n => parseInt(n));
+    } else if (reg.secuencia) {
+      betNumbers = decodificarNumerosLoto(reg.secuencia);
+    }
+    if (betNumbers.length < 6) continue;
+    
+    let hits = 0;
+    for (const num of betNumbers) {
+      if (extractoTrad.has(num)) hits++;
+    }
+    
+    if (hits > mejorMatchTrad) {
+      mejorMatchTrad = hits;
+      registroMejorMatch = { idx, betNumbers, ticket: reg.ticket, agencia: reg.agenciaCompleta };
+    }
+    
+    if (hits === 6) {
+      console.log(`   🏆 ENCONTRADO GANADOR idx=${idx}: nums=[${betNumbers.join(',')}], ticket=${reg.ticket}, agencia=${reg.agenciaCompleta}`);
+      break; // Solo reportar el primero
+    }
+  }
+  
+  if (mejorMatchTrad < 6) {
+    console.log(`   ❌ NO se encontró ganador de 6 en Tradicional. Mejor match: ${mejorMatchTrad} aciertos`);
+    if (registroMejorMatch) {
+      console.log(`      Mejor registro (idx=${registroMejorMatch.idx}): nums=[${registroMejorMatch.betNumbers.join(',')}]`);
+    }
+  }
+
   // Premios del XML (datosOficiales.modalidades)
   const premiosXML = datosControlPrevio?.datosOficiales?.modalidades || {};
 
@@ -316,6 +399,7 @@ function runScrutiny(registrosNTF, extracto, datosControlPrevio) {
 
   for (const mod of modalidades4) {
     porModalidad[mod] = {
+      modalidad: mod,  // Agregar nombre para debug
       registros: 0,
       apuestas: 0,
       recaudacion: 0,
@@ -347,10 +431,20 @@ function runScrutiny(registrosNTF, extracto, datosControlPrevio) {
   // Primero: recopilar todos los registros válidos
   const registrosValidos = [];
   
+  // Debug: contar registros por tipo para entender la estructura
+  const conteoTipos = {};
+  const conteoGameCodes = {};
+  
   for (const reg of registrosNTF) {
-    // Filtrar por tipo de juego (flexible)
+    // Filtrar por tipo de juego (flexible) - incluir Loto y Multiplicador
     const tipoJuego = (reg.tipoJuego || '').toLowerCase();
-    if (tipoJuego && tipoJuego !== 'loto') continue;
+    const gameCode = reg.gameCode || 'sin-codigo';
+    
+    // Conteo para debug
+    conteoTipos[tipoJuego || 'sin-tipo'] = (conteoTipos[tipoJuego || 'sin-tipo'] || 0) + 1;
+    conteoGameCodes[gameCode] = (conteoGameCodes[gameCode] || 0) + 1;
+    
+    if (tipoJuego && tipoJuego !== 'loto' && tipoJuego !== 'multiplicador') continue;
     if (reg.cancelado || reg.isCanceled) continue;
 
     // Decodificar números del registro
@@ -366,6 +460,12 @@ function runScrutiny(registrosNTF, extracto, datosControlPrevio) {
     const nroApuestas = COMBINACIONES_LOTO[cantNum] || combinaciones(cantNum, 6);
     const importe = parseFloat(reg.importe || 0);
 
+    // Si tiene apuesta al Multiplicador (código 11 o tiene numeroPlus), guardar para evaluar PLUS
+    if (reg.gameCode === '11' || reg.numeroPlus != null) {
+      registrosMultiplicador.push({ ...reg, betNumbers, cantNum });
+    }
+
+    // TODOS los registros se procesan para calcular ganadores (incluyendo código 11)
     totalRegistros++;
     totalApuestas += nroApuestas;
     totalRecaudacion += importe;
@@ -376,27 +476,51 @@ function runScrutiny(registrosNTF, extracto, datosControlPrevio) {
       cantNum,
       nroApuestas
     });
-
-    // Si tiene apuesta al multiplicador (código 11 o tiene numeroPlus)
-    if (reg.gameCode === '11' || reg.numeroPlus != null) {
-      registrosMultiplicador.push({ ...reg, betNumbers, cantNum });
+    
+    // Log de los primeros 3 registros para verificar decodificación
+    if (registrosValidos.length <= 3) {
+      console.log(`📋 Registro ${registrosValidos.length}: gameCode=${reg.gameCode}, tipo=${reg.tipoJuego}, cantNum=${cantNum}, nums=[${betNumbers.join(',')}]`);
     }
   }
 
   console.log(`📊 Registros válidos para escrutinio: ${registrosValidos.length}`);
+  console.log(`📊 Registros con apuesta al Multiplicador: ${registrosMultiplicador.length}`);
+  console.log(`📊 Conteo por tipoJuego:`, JSON.stringify(conteoTipos));
+  console.log(`📊 Conteo por gameCode:`, JSON.stringify(conteoGameCodes));
+  
+  // Mostrar un ejemplo de los números decodificados vs extracto para verificar
+  if (registrosValidos.length > 0) {
+    const ejemplo = registrosValidos[0];
+    console.log(`📋 Ejemplo registro: secuencia="${ejemplo.secuencia}", numeros=[${ejemplo.betNumbers.join(',')}]`);
+  }
 
   // === Procesar CADA registro contra CADA modalidad ===
   for (const mod of modalidades4) {
     const modResult = porModalidad[mod];
     const extractSet = extractoPorModalidad[mod];
+    console.log(`\n🎲 Procesando modalidad ${mod}: Extracto = [${[...extractSet].join(', ')}]`);
 
     // Todos los registros participan en esta modalidad
     modResult.registros = totalRegistros;
     modResult.apuestas = totalApuestas;
     modResult.recaudacion = totalRecaudacion;
 
+    // Buscar si existe algún registro que coincida con el extracto
+    let encontrados6ac = 0;
+    let maxHits = 0;
     for (const reg of registrosValidos) {
       const { betNumbers, cantNum } = reg;
+      if (cantNum === 6) {
+        const hits = countHits(betNumbers, extractSet);
+        if (hits > maxHits) maxHits = hits;
+        if (hits === 6) encontrados6ac++;
+      }
+    }
+    console.log(`   → Max aciertos encontrados: ${maxHits}, Ganadores de 6: ${encontrados6ac}`);
+
+    for (const reg of registrosValidos) {
+      const { betNumbers, cantNum } = reg;
+      const ticketNormalizado = (reg.ticket || '').trim();
 
       // Calcular aciertos contra el extracto de ESTA modalidad
       if (cantNum === 6) {
@@ -404,10 +528,11 @@ function runScrutiny(registrosNTF, extracto, datosControlPrevio) {
         if (hits >= 1 && modResult.porNivel[hits]) {
           modResult.porNivel[hits].ganadores++;
           if (hits === 6) {
+            console.log(`🏆 GANADOR 6 ACIERTOS en ${mod}: Ticket ${ticketNormalizado}, Agencia ${(reg.agenciaCompleta || '').trim()}, Nums: ${betNumbers.join(',')}`);
             modResult.porNivel[6].agenciasGanadoras.push({
-              agencia: reg.agencia || '',
-              agenciaCompleta: reg.agenciaCompleta || '',
-              ticket: reg.ticket || '',
+              agencia: (reg.agencia || '').trim(),
+              agenciaCompleta: (reg.agenciaCompleta || '').trim(),
+              ticket: ticketNormalizado,
               esVentaWeb: reg.esVentaWeb || false,
               importe: parseFloat(reg.importe || 0),
               numerosJugados: reg.betNumbers.slice()
@@ -424,9 +549,9 @@ function runScrutiny(registrosNTF, extracto, datosControlPrevio) {
         }
         if (ganadoresMultiples[6] > 0) {
           modResult.porNivel[6].agenciasGanadoras.push({
-            agencia: reg.agencia || '',
-            agenciaCompleta: reg.agenciaCompleta || '',
-            ticket: reg.ticket || '',
+            agencia: (reg.agencia || '').trim(),
+            agenciaCompleta: (reg.agenciaCompleta || '').trim(),
+            ticket: ticketNormalizado,
             esMultiple: true,
             cantidad: ganadoresMultiples[6],
             esVentaWeb: reg.esVentaWeb || false,
@@ -439,6 +564,12 @@ function runScrutiny(registrosNTF, extracto, datosControlPrevio) {
 
     // === Distribuir premios según modalidad ===
     const xmlPremios = premiosXML[mod]?.premios || {};
+    
+    // DEBUG: mostrar premios XML incluyendo agenciero
+    console.log(`📊 XML Premios ${mod}:`, {
+      primerPremio: xmlPremios.primerPremio?.totales,
+      agenciero: xmlPremios.agenciero
+    });
 
     if (mod === 'Tradicional' || mod === 'Match') {
       distribuirPremiosTradMatch(modResult, xmlPremios);
@@ -553,11 +684,12 @@ function distribuirPremiosTradMatch(modResult, xmlPremios) {
 
   for (const { nivel, pool } of niveles) {
     const nd = modResult.porNivel[nivel];
+    nd.pozoXml = pool; // Guardar siempre el pozo XML
     if (nd.ganadores > 0 && pool > 0) {
       nd.premioUnitario = pool / nd.ganadores;
       nd.totalPremios = pool;
       nd.pozoVacante = 0;
-    } else {
+    } else if (nd.ganadores === 0) {
       nd.pozoVacante = pool;
       nd.totalPremios = 0;
     }
@@ -566,23 +698,57 @@ function distribuirPremiosTradMatch(modResult, xmlPremios) {
   // Agenciero: pagado a agencias que vendieron tickets con 6 aciertos
   const agPool = xmlPremios.agenciero?.totales || 0;
   const gan6 = modResult.porNivel[6].ganadores;
-  if (gan6 > 0 && agPool > 0) {
+  
+  // DEBUG: log del agenciero
+  console.log(`🏪 AGENCIERO ${modResult.modalidad}: gan6=${gan6}, agPool=${agPool}, agenciasGanadoras=${modResult.porNivel[6].agenciasGanadoras.length}`);
+  if (modResult.porNivel[6].agenciasGanadoras.length > 0) {
+    console.log(`🏪 Agencias ganadoras de 6:`, modResult.porNivel[6].agenciasGanadoras.map(g => ({ ag: g.agenciaCompleta, esVentaWeb: g.esVentaWeb })));
+  }
+  
+  // Guardar siempre el pozo XML del agenciero
+  modResult.agenciero.pozoXml = agPool;
+  
+  if (gan6 > 0) {
     // Contar agencias únicas (excluyendo venta web LOTBA)
     const agenciasUnicas = [...new Set(
       modResult.porNivel[6].agenciasGanadoras
         .filter(g => !g.esVentaWeb)
         .map(g => g.agenciaCompleta)
     )];
-    const cantAg = agenciasUnicas.length || 1;
-    modResult.agenciero = {
-      ganadores: cantAg,
-      premioUnitario: agPool / cantAg,
-      totalPremios: agPool,
-      pozoVacante: 0,
-      agencias: agenciasUnicas
-    };
+    
+    // Si hay agencias físicas ganadoras, distribuir entre ellas
+    // Si todas son venta web, el agenciero queda vacante (LOTBA no tiene premio agenciero físico)
+    if (agenciasUnicas.length > 0 && agPool > 0) {
+      modResult.agenciero = {
+        ganadores: agenciasUnicas.length,
+        premioUnitario: agPool / agenciasUnicas.length,
+        totalPremios: agPool,
+        pozoVacante: 0,
+        pozoXml: agPool,
+        agencias: agenciasUnicas
+      };
+    } else {
+      // Hay ganadores de 6 pero todos son venta web, o no hay pozo
+      modResult.agenciero = {
+        ganadores: 0,
+        premioUnitario: 0,
+        totalPremios: 0,
+        pozoVacante: agPool,
+        pozoXml: agPool,
+        agencias: [],
+        nota: agenciasUnicas.length === 0 && gan6 > 0 ? 'Ganadores por venta web (sin premio agenciero)' : null
+      };
+    }
   } else {
-    modResult.agenciero.pozoVacante = agPool;
+    // No hay ganadores de 6 aciertos
+    modResult.agenciero = {
+      ganadores: 0,
+      premioUnitario: 0,
+      totalPremios: 0,
+      pozoVacante: agPool,
+      pozoXml: agPool,
+      agencias: []
+    };
   }
 }
 
@@ -596,12 +762,14 @@ function distribuirPremiosDesquite(modResult, xmlPremios) {
   const pool6 = xmlPremios.primerPremio?.totales || 0;
   const gan6 = modResult.porNivel[6].ganadores;
 
+  modResult.porNivel[6].pozoXml = pool6;
   if (gan6 > 0 && pool6 > 0) {
     modResult.porNivel[6].premioUnitario = pool6 / gan6;
     modResult.porNivel[6].totalPremios = pool6;
     modResult.porNivel[6].pozoVacante = 0;
   } else {
     modResult.porNivel[6].pozoVacante = pool6;
+    modResult.porNivel[6].totalPremios = 0;
   }
 
   // 5 y 4 no aplican en Desquite
@@ -610,22 +778,44 @@ function distribuirPremiosDesquite(modResult, xmlPremios) {
 
   // Agenciero
   const agPool = xmlPremios.agenciero?.totales || 0;
-  if (gan6 > 0 && agPool > 0) {
+  modResult.agenciero.pozoXml = agPool;
+  
+  if (gan6 > 0) {
     const agenciasUnicas = [...new Set(
       modResult.porNivel[6].agenciasGanadoras
         .filter(g => !g.esVentaWeb)
         .map(g => g.agenciaCompleta)
     )];
-    const cantAg = agenciasUnicas.length || 1;
-    modResult.agenciero = {
-      ganadores: cantAg,
-      premioUnitario: agPool / cantAg,
-      totalPremios: agPool,
-      pozoVacante: 0,
-      agencias: agenciasUnicas
-    };
+    
+    if (agenciasUnicas.length > 0 && agPool > 0) {
+      modResult.agenciero = {
+        ganadores: agenciasUnicas.length,
+        premioUnitario: agPool / agenciasUnicas.length,
+        totalPremios: agPool,
+        pozoVacante: 0,
+        pozoXml: agPool,
+        agencias: agenciasUnicas
+      };
+    } else {
+      modResult.agenciero = {
+        ganadores: 0,
+        premioUnitario: 0,
+        totalPremios: 0,
+        pozoVacante: agPool,
+        pozoXml: agPool,
+        agencias: [],
+        nota: agenciasUnicas.length === 0 && gan6 > 0 ? 'Ganadores por venta web (sin premio agenciero)' : null
+      };
+    }
   } else {
-    modResult.agenciero.pozoVacante = agPool;
+    modResult.agenciero = {
+      ganadores: 0,
+      premioUnitario: 0,
+      totalPremios: 0,
+      pozoVacante: agPool,
+      pozoXml: agPool,
+      agencias: []
+    };
   }
 }
 
@@ -647,11 +837,17 @@ function distribuirPremiosSaleOSale(modResult, xmlPremios) {
     }
   }
 
+  // Guardar pozo XML
+  modResult.porNivel[6].pozoXml = poolMayor;
+
   if (nivelGanador && poolMayor > 0) {
     modResult.porNivel[nivelGanador].premioUnitario = poolMayor / modResult.porNivel[nivelGanador].ganadores;
     modResult.porNivel[nivelGanador].totalPremios = poolMayor;
     modResult.porNivel[nivelGanador]._esSaleOSale = true;
     modResult.porNivel[nivelGanador].pozoVacante = 0;
+  } else if (!nivelGanador) {
+    // No hay ganadores en ningún nivel, el pozo queda vacante
+    modResult.porNivel[6].pozoVacante = poolMayor;
   }
 
   modResult.nivelGanadorSOS = nivelGanador;
@@ -664,22 +860,50 @@ function distribuirPremiosSaleOSale(modResult, xmlPremios) {
   }
 
   // Agenciero: SOLO cuando ganan con 6 aciertos
+  const agPool = nivelGanador === 6 ? poolMayor * 0.02 : 0;
+  modResult.agenciero.pozoXml = agPool;
+  modResult.agenciero.soloConSeisAciertos = true;
+  
   if (nivelGanador === 6) {
-    // Agenciero SOS = 2% del premio mayor (desde fondo reserva)
-    const agPool = poolMayor * 0.02;
     const agenciasUnicas = [...new Set(
       modResult.porNivel[6].agenciasGanadoras
         .filter(g => !g.esVentaWeb)
         .map(g => g.agenciaCompleta)
     )];
-    const cantAg = agenciasUnicas.length || 1;
+    
+    if (agenciasUnicas.length > 0 && agPool > 0) {
+      modResult.agenciero = {
+        ganadores: agenciasUnicas.length,
+        premioUnitario: agPool / agenciasUnicas.length,
+        totalPremios: agPool,
+        pozoVacante: 0,
+        pozoXml: agPool,
+        soloConSeisAciertos: true,
+        agencias: agenciasUnicas
+      };
+    } else {
+      modResult.agenciero = {
+        ganadores: 0,
+        premioUnitario: 0,
+        totalPremios: 0,
+        pozoVacante: agPool,
+        pozoXml: agPool,
+        soloConSeisAciertos: true,
+        agencias: [],
+        nota: agenciasUnicas.length === 0 && nivelGanador === 6 ? 'Ganadores por venta web (sin premio agenciero)' : null
+      };
+    }
+  } else {
+    // No hay ganadores de 6 aciertos - no aplica agenciero en SOS
     modResult.agenciero = {
-      ganadores: cantAg,
-      premioUnitario: agPool / cantAg,
-      totalPremios: agPool,
+      ganadores: 0,
+      premioUnitario: 0,
+      totalPremios: 0,
       pozoVacante: 0,
+      pozoXml: 0,
       soloConSeisAciertos: true,
-      agencias: agenciasUnicas
+      agencias: [],
+      nota: 'Solo aplica con 6 aciertos'
     };
   }
 }
@@ -699,14 +923,23 @@ function procesarMultiplicador(registrosMultiplicador, extractoPorModalidad, num
     numeroPLUS
   };
 
-  if (numeroPLUS == null) return resultado;
+  console.log(`\n🎰 PROCESANDO MULTIPLICADOR`);
+  console.log(`   Número PLUS sorteado: ${numeroPLUS}`);
+  console.log(`   Registros Multiplicador recibidos: ${registrosMultiplicador.length}`);
+
+  if (numeroPLUS == null) {
+    console.log(`   ⚠️ PLUS no definido, saltando Multiplicador`);
+    return resultado;
+  }
 
   // Crear mapa de tickets ganadores de 6 en cada modalidad
   const ganadoresDe6PorTicket = {};
+  let totalGan6 = 0;
   for (const mod of ['Tradicional', 'Match', 'Desquite', 'Sale o Sale']) {
     const agGanadoras = porModalidad[mod]?.porNivel[6]?.agenciasGanadoras || [];
     for (const g of agGanadoras) {
-      const ticketKey = g.ticket;
+      const ticketKey = (g.ticket || '').trim();
+      if (!ticketKey) continue;
       if (!ganadoresDe6PorTicket[ticketKey]) {
         ganadoresDe6PorTicket[ticketKey] = [];
       }
@@ -717,12 +950,19 @@ function procesarMultiplicador(registrosMultiplicador, extractoPorModalidad, num
         premioUnitario: porModalidad[mod].porNivel[6].premioUnitario,
         esVentaWeb: g.esVentaWeb
       });
+      totalGan6++;
     }
+  }
+  console.log(`   Tickets con 6 aciertos encontrados: ${Object.keys(ganadoresDe6PorTicket).length}`);
+  console.log(`   Total ganadores de 6 aciertos: ${totalGan6}`);
+  if (Object.keys(ganadoresDe6PorTicket).length > 0) {
+    console.log(`   Tickets: ${Object.keys(ganadoresDe6PorTicket).slice(0, 5).join(', ')}${Object.keys(ganadoresDe6PorTicket).length > 5 ? '...' : ''}`);
   }
 
   // Para Sale o Sale: si el nivel ganador no fue 6, no aplica multiplicador
   const sosNivelGanador = porModalidad['Sale o Sale']?.nivelGanadorSOS;
   if (sosNivelGanador && sosNivelGanador !== 6) {
+    console.log(`   Sale o Sale: nivel ganador = ${sosNivelGanador} (no 6), removiendo del mapa`);
     // Remover entries de SOS del mapa
     for (const ticketKey in ganadoresDe6PorTicket) {
       ganadoresDe6PorTicket[ticketKey] = ganadoresDe6PorTicket[ticketKey].filter(
@@ -734,17 +974,45 @@ function procesarMultiplicador(registrosMultiplicador, extractoPorModalidad, num
     }
   }
 
+  // Log registros Multiplicador
+  const regConPlusAcertado = registrosMultiplicador.filter(r => {
+    const regPlus = r.numeroPlus;
+    return regPlus === numeroPLUS || regPlus === String(numeroPLUS) || String(regPlus) === String(numeroPLUS);
+  });
+  console.log(`   Registros Multiplicador con PLUS acertado (${numeroPLUS}): ${regConPlusAcertado.length}`);
+  if (regConPlusAcertado.length > 0 && regConPlusAcertado.length <= 10) {
+    regConPlusAcertado.forEach(r => {
+      console.log(`     - Ticket: ${r.ticket}, Plus apostado: ${r.numeroPlus}, Agencia: ${r.agenciaCompleta}`);
+    });
+  }
+
   // Verificar registros multiplicador que coinciden con PLUS
   for (const reg of registrosMultiplicador) {
-    if (reg.numeroPlus !== numeroPLUS && reg.numeroPlus !== String(numeroPLUS)) continue;
+    const regPlus = reg.numeroPlus;
+    // Comparación flexible entre números y strings
+    const plusCoincide = regPlus === numeroPLUS || 
+                         regPlus === String(numeroPLUS) || 
+                         String(regPlus) === String(numeroPLUS) ||
+                         parseInt(regPlus) === parseInt(numeroPLUS);
+    
+    if (!plusCoincide) continue;
 
-    const ticketKey = reg.ticket;
+    const ticketKey = (reg.ticket || '').trim();
     const ganEnOtraMod = ganadoresDe6PorTicket[ticketKey];
-    if (!ganEnOtraMod || ganEnOtraMod.length === 0) continue;
+    
+    if (!ganEnOtraMod || ganEnOtraMod.length === 0) {
+      // Log para debug: ticket con PLUS correcto pero sin 6 aciertos
+      if (regConPlusAcertado.length > 0 && regConPlusAcertado.length <= 20) {
+        console.log(`     ⚠️ Ticket ${ticketKey} acertó PLUS pero NO está en ganadores de 6`);
+      }
+      continue;
+    }
+
+    console.log(`   ✓ GANADOR MULTIPLICADOR: Ticket ${ticketKey}, Plus: ${regPlus}`);
 
     // Este ticket ganó 6 aciertos en alguna modalidad Y acertó el PLUS
     for (const g of ganEnOtraMod) {
-      const premioExtra = g.premioUnitario * 2; // 2x adicional (total 3x)
+      const premioExtra = g.premioUnitario * 2; // 2x adicional (total percibe 3x)
       resultado.ganadores++;
       resultado.premioExtra += premioExtra;
       resultado.detalle.push({
@@ -760,6 +1028,7 @@ function procesarMultiplicador(registrosMultiplicador, extractoPorModalidad, num
         numerosJugados: reg.betNumbers ? reg.betNumbers.slice() : [],
         numeroPlus: reg.numeroPlus
       });
+      console.log(`       → ${g.modalidad}: Premio original $${g.premioUnitario.toLocaleString()}, Extra $${premioExtra.toLocaleString()}`);
     }
   }
 
@@ -781,29 +1050,180 @@ function procesarMultiplicador(registrosMultiplicador, extractoPorModalidad, num
 
 /**
  * Guarda los resultados del escrutinio de Loto en la BD
+ * Incluye: escrutinio_loto (resumen) + escrutinio_loto_ganadores (por modalidad/nivel)
  */
 async function guardarEscrutinioLoto(resultado, datosControlPrevio, user) {
   const sorteo = resultado.numeroSorteo || 'N/A';
+  const fecha = resultado.fechaSorteo || new Date().toISOString().split('T')[0];
+  
+  console.log(`📝 Guardando escrutinio LOTO: Sorteo ${sorteo}`);
 
+  // 1. Guardar/actualizar registro principal
   await query(`
     INSERT INTO escrutinio_loto
     (numero_sorteo, fecha_sorteo, total_ganadores, total_premios,
-     datos_json, usuario_id)
-    VALUES (?, ?, ?, ?, ?, ?)
+     extracto, datos_json, usuario_id)
+    VALUES (?, ?, ?, ?, ?, ?, ?)
     ON DUPLICATE KEY UPDATE
       total_ganadores = VALUES(total_ganadores),
       total_premios = VALUES(total_premios),
+      extracto = VALUES(extracto),
       datos_json = VALUES(datos_json),
       usuario_id = VALUES(usuario_id),
       updated_at = CURRENT_TIMESTAMP
   `, [
     sorteo,
-    resultado.fechaSorteo || new Date().toISOString().split('T')[0],
+    fecha,
     resultado.totalGanadores || 0,
     resultado.totalPremios || 0,
+    JSON.stringify(resultado.extractoUsado || {}),
     JSON.stringify(resultado),
     user?.id || null
   ]);
+
+  // 2. Obtener ID del escrutinio
+  const [escrutinioRow] = await query(
+    'SELECT id FROM escrutinio_loto WHERE numero_sorteo = ?',
+    [sorteo]
+  );
+  const escrutinioId = escrutinioRow?.id;
+
+  if (!escrutinioId) {
+    console.warn('⚠️ No se pudo obtener ID del escrutinio LOTO');
+    return;
+  }
+
+  // 3. Verificar si existe la tabla de ganadores (si no, solo guardar el JSON principal)
+  try {
+    // Limpiar ganadores anteriores
+    await query('DELETE FROM escrutinio_loto_ganadores WHERE escrutinio_id = ?', [escrutinioId]);
+
+    // 4. Guardar ganadores por modalidad y nivel
+    const modalidades = ['Tradicional', 'Match', 'Desquite', 'Sale o Sale'];
+    
+    for (const mod of modalidades) {
+      const modData = resultado.porModalidad?.[mod];
+      if (!modData) continue;
+
+      // Niveles de aciertos (6, 5, 4 para Trad/Match, solo 6 para Desquite)
+      const niveles = mod === 'Desquite' ? [6] : (mod === 'Sale o Sale' ? [6, 5, 4, 3, 2, 1] : [6, 5, 4]);
+      
+      for (const nivel of niveles) {
+        const nivelData = modData.porNivel?.[nivel];
+        if (nivelData && nivelData.ganadores > 0) {
+          await query(`
+            INSERT INTO escrutinio_loto_ganadores
+            (escrutinio_id, numero_sorteo, modalidad, aciertos, cantidad_ganadores,
+             premio_unitario, premio_total, pozo_xml, pozo_vacante)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+          `, [
+            escrutinioId,
+            sorteo,
+            mod.toUpperCase().replace(/ /g, '_'),
+            nivel,
+            nivelData.ganadores,
+            nivelData.premioUnitario || 0,
+            nivelData.totalPremios || 0,
+            nivelData.pozoXml || 0,
+            nivelData.pozoVacante || 0
+          ]);
+        }
+      }
+
+      // Guardar agenciero de la modalidad
+      const agenciero = modData.agenciero;
+      if (agenciero && (agenciero.ganadores > 0 || agenciero.pozoXml > 0)) {
+        await query(`
+          INSERT INTO escrutinio_loto_ganadores
+          (escrutinio_id, numero_sorteo, modalidad, aciertos, cantidad_ganadores,
+           premio_unitario, premio_total, pozo_xml, pozo_vacante)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        `, [
+          escrutinioId,
+          sorteo,
+          mod.toUpperCase().replace(/ /g, '_'),
+          0, // 0 = agenciero
+          agenciero.ganadores || 0,
+          agenciero.premioUnitario || 0,
+          agenciero.totalPremios || 0,
+          agenciero.pozoXml || 0,
+          agenciero.pozoVacante || 0
+        ]);
+      }
+    }
+
+    // 5. Guardar Multiplicador
+    const mult = resultado.multiplicador;
+    if (mult && mult.ganadores > 0) {
+      await query(`
+        INSERT INTO escrutinio_loto_ganadores
+        (escrutinio_id, numero_sorteo, modalidad, aciertos, cantidad_ganadores,
+         premio_unitario, premio_total, pozo_xml, pozo_vacante)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `, [
+        escrutinioId,
+        sorteo,
+        'MULTIPLICADOR',
+        6, // siempre 6 aciertos + PLUS
+        mult.ganadores,
+        mult.premioExtra / mult.ganadores,
+        mult.premioExtra,
+        0,
+        0
+      ]);
+    }
+
+    // 6. Guardar premios por agencia (acumulado)
+    // Construir ganadoresDetalle desde agenciasGanadoras de cada modalidad
+    const ganadoresDetalle = [];
+    for (const mod of modalidades) {
+      const modData = resultado.porModalidad?.[mod];
+      if (!modData) continue;
+      
+      const agGanadoras = modData.porNivel?.[6]?.agenciasGanadoras || [];
+      const premioUnit = modData.porNivel?.[6]?.premioUnitario || 0;
+      
+      for (const ag of agGanadoras) {
+        // Si es múltiple, tiene varias apuestas ganadoras
+        const cantidad = ag.cantidad || 1;
+        for (let i = 0; i < cantidad; i++) {
+          ganadoresDetalle.push({
+            agencia: ag.agenciaCompleta || ag.agencia,
+            premio: premioUnit
+          });
+        }
+      }
+      
+      // Agenciero de esta modalidad
+      const agencieroDet = modData.agenciero?.detalles || [];
+      const agencieroUnit = modData.agenciero?.premioUnitario || 0;
+      for (const det of agencieroDet) {
+        ganadoresDetalle.push({
+          agencia: det.agenciaCompleta || `${det.provincia || '51'}${(det.agencia || '').padStart(5, '0')}`,
+          premio: agencieroUnit
+        });
+      }
+    }
+    
+    // Limpiar premios por agencia anteriores
+    await query('DELETE FROM escrutinio_premios_agencia WHERE escrutinio_id = ? AND juego = ?', 
+      [escrutinioId, 'loto']);
+    
+    // Guardar
+    if (ganadoresDetalle.length > 0) {
+      await guardarPremiosPorAgencia(escrutinioId, 'loto', ganadoresDetalle);
+    }
+
+    console.log(`✅ Escrutinio LOTO guardado: Sorteo ${sorteo}, ${resultado.totalGanadores} ganadores, $${resultado.totalPremios?.toLocaleString('es-AR')} premios`);
+  } catch (errGanadores) {
+    // Si la tabla de ganadores no existe, solo loguear advertencia
+    if (errGanadores.code === 'ER_NO_SUCH_TABLE') {
+      console.warn('⚠️ Tabla escrutinio_loto_ganadores no existe. Solo se guardó el JSON principal.');
+      console.log('   Ejecute: node database/migration_loto_ganadores.js');
+    } else {
+      throw errGanadores;
+    }
+  }
 }
 
 module.exports = {

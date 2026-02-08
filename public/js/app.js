@@ -5921,36 +5921,26 @@ async function ejecutarEscrutinio() {
     if (cpstJuegoSeleccionado === 'Loto') {
       // Combinar los datos del XML del extracto con los datos del control previo
       // El backend espera: datosControlPrevio.datosOficiales.modalidades[mod].premios.{primerPremio,segundoPremio,tercerPremio,agenciero}.totales
+      // IMPORTANTE: Los premios vienen del XML del Control Previo (ZIP), NO del extracto
       const datosCP = {
         ...cpstDatosControlPrevio,
         datosOficiales: {
           ...(cpstDatosControlPrevio?.datosOficiales || {}),
-          modalidades: {...(cpstDatosControlPrevio?.datosOficiales?.modalidades || {})}
+          // Clonar profundamente las modalidades para no perder los premios del Control Previo
+          modalidades: JSON.parse(JSON.stringify(cpstDatosControlPrevio?.datosOficiales?.modalidades || {}))
         }
       };
 
-      // Agregar premios del XML si están disponibles
-      if (cpstLotoXmlData?.pozos) {
-        const pozos = cpstLotoXmlData.pozos;
-        const mapMod = ['Tradicional', 'Match', 'Desquite', 'Sale o Sale'];
-        
-        console.log('[CPST-LOTO] Premios XML cargados:', pozos);
-        
-        for (const mod of mapMod) {
-          if (pozos[mod]) {
-            datosCP.datosOficiales.modalidades[mod] = {
-              premios: {
-                primerPremio: { totales: pozos[mod].premio01 || 0 },
-                segundoPremio: { totales: pozos[mod].premio02 || 0 },
-                tercerPremio: { totales: pozos[mod].premio03 || 0 },
-                agenciero: { totales: pozos[mod].agenciero || 0 },
-                fondoReserva: { monto: pozos[mod].fondoReserva || 0 }
-              }
-            };
-          }
-        }
-      } else {
-        console.warn('[CPST-LOTO] ⚠️ No hay datos de pozos XML cargados - los premios se mostrarán como vacantes');
+      // Los premios ya vienen del Control Previo (ZIP XML)
+      // El extracto XML solo tiene los números sorteados, los pozos son informativos
+      // NO sobrescribimos los premios del Control Previo con los del extracto
+      const mapMod = ['Tradicional', 'Match', 'Desquite', 'Sale o Sale'];
+      
+      // Log para debug: verificar que tenemos los premios del Control Previo
+      for (const mod of mapMod) {
+        const modData = datosCP.datosOficiales?.modalidades?.[mod];
+        const agencieroTotal = modData?.premios?.agenciero?.totales || 0;
+        console.log(`[CPST-LOTO] ${mod} - Agenciero del Control Previo: $${agencieroTotal.toLocaleString()}`);
       }
 
       // Ejecutar escrutinio de Loto
@@ -6885,27 +6875,40 @@ function mostrarResultadosEscrutinioLoto(resultado) {
           </tr>`;
       }
 
-      // Agenciero para esta modalidad
+      // Agenciero para esta modalidad - siempre mostrar
       if (modData.agenciero) {
-        const agPozo = modData.xmlPremios?.agenciero?.totales || 0;
+        const ag = modData.agenciero;
+        const agPozo = ag.pozoXml || modData.xmlPremios?.agenciero?.totales || 0;
+        const agGanadores = ag.ganadores || 0;
+        const esVacante = agGanadores === 0 && ag.pozoVacante > 0;
+        const esVentaWeb = ag.nota && ag.nota.includes('venta web');
+        
+        let ganadoresText = formatNumber(agGanadores);
+        if (esVentaWeb) {
+          ganadoresText = '<span class="text-warning" title="Ganadores por venta web sin premio agenciero">0 <i class="fas fa-info-circle"></i></span>';
+        } else if (esVacante) {
+          ganadoresText = '<span class="text-muted">VACANTE</span>';
+        }
+        
         tbodyLoto.innerHTML += `
           <tr style="background: var(--surface-hover);">
             <td><span class="badge badge-${badges[mod]}">${mod}</span></td>
             <td><span class="badge badge-info">AGENCIERO</span></td>
-            <td>${formatNumber(modData.agenciero.ganadores)}</td>
+            <td>${ganadoresText}</td>
             <td>${agPozo ? '$' + formatNumber(agPozo) : '-'}</td>
-            <td>$${formatNumber(modData.agenciero.premioUnitario)}</td>
-            <td>$${formatNumber(modData.agenciero.totalPremios)}</td>
-            <td>-</td>
+            <td>${agGanadores > 0 ? '$' + formatNumber(ag.premioUnitario) : '-'}</td>
+            <td>${agGanadores > 0 ? '$' + formatNumber(ag.totalPremios) : '-'}</td>
+            <td>${esVacante ? '$' + formatNumber(ag.pozoVacante) : '-'}</td>
           </tr>`;
       }
     }
 
     // Multiplicador - SIEMPRE mostrar con el número PLUS sorteado
     const mult = resultado.multiplicador || {};
-    const plusNumero = mult.numero != null ? mult.numero : (resultado.extractoUsado?.plus ?? 'N/A');
+    const plusNumero = mult.numeroPLUS != null ? mult.numeroPLUS : (mult.numero != null ? mult.numero : (resultado.extractoUsado?.plus ?? 'N/A'));
     const multGanadores = mult.ganadores || 0;
     const multPremio = mult.premioExtra || 0;
+    const multAgenciero = mult.agenciero?.totalPremios || 0;
     
     tbodyLoto.innerHTML += `
       <tr style="background: rgba(234, 179, 8, 0.15);">
@@ -6913,10 +6916,26 @@ function mostrarResultadosEscrutinioLoto(resultado) {
         <td>PLUS: <strong>${plusNumero}</strong></td>
         <td>${multGanadores > 0 ? formatNumber(multGanadores) : '<span class="text-muted">Sin ganadores</span>'}</td>
         <td>-</td>
-        <td>-</td>
+        <td>${multGanadores > 0 ? '$' + formatNumber(multPremio / multGanadores) : '-'}</td>
         <td>${multGanadores > 0 ? '$' + formatNumber(multPremio) : '-'}</td>
         <td>-</td>
       </tr>`;
+    
+    // Agenciero del Multiplicador si hay ganadores
+    if (multGanadores > 0 && mult.agenciero) {
+      const multAg = mult.agenciero;
+      tbodyLoto.innerHTML += `
+        <tr style="background: rgba(234, 179, 8, 0.1);">
+          <td><span class="badge badge-danger">Multiplicador</span></td>
+          <td><span class="badge badge-info">AGENCIERO</span></td>
+          <td>${formatNumber(multAg.ganadores || 0)}</td>
+          <td>$${formatNumber(multAg.premioUnitario || 500000)}/agencia</td>
+          <td>$${formatNumber(multAg.premioUnitario || 500000)}</td>
+          <td>$${formatNumber(multAg.totalPremios || 0)}</td>
+          <td>-</td>
+        </tr>`;
+    }
+
 
     // Total
     tbodyLoto.innerHTML += `
@@ -7258,17 +7277,28 @@ function mostrarResultadosEscrutinioLoto5(resultado) {
 
     // Agenciero
     const agenciero = resultado.agenciero || { ganadores: 0, premioUnitario: 0, totalPremios: 0 };
-    if (agenciero.ganadores > 0 || agenciero.pozoXml > 0) {
-      tbodyLoto5.innerHTML += `
-        <tr style="background: var(--surface-hover);">
-          <td><span class="badge badge-info">AGENCIERO</span></td>
-          <td>${formatNumber(agenciero.ganadores)}</td>
-          <td style="color: var(--text-secondary);">$${formatNumber(agenciero.pozoXml || 0)}</td>
-          <td>$${formatNumber(agenciero.premioUnitario)}</td>
-          <td>$${formatNumber(agenciero.totalPremios)}</td>
-          <td>-</td>
-        </tr>`;
+    const agPozoXml = agenciero.pozoXml || 0;
+    const agGanadores = agenciero.ganadores || 0;
+    const agEsVacante = agGanadores === 0 && agenciero.pozoVacante > 0;
+    const agEsVentaWeb = agenciero.nota && agenciero.nota.includes('venta web');
+    
+    let agGanadoresText = formatNumber(agGanadores);
+    if (agEsVentaWeb) {
+      agGanadoresText = '<span class="text-warning" title="Ganadores por venta web sin premio agenciero">0 <i class="fas fa-info-circle"></i></span>';
+    } else if (agEsVacante) {
+      agGanadoresText = '<span class="text-muted">VACANTE</span>';
     }
+    
+    // Siempre mostrar el agenciero
+    tbodyLoto5.innerHTML += `
+      <tr style="background: var(--surface-hover);">
+        <td><span class="badge badge-info">AGENCIERO</span></td>
+        <td>${agGanadoresText}</td>
+        <td style="color: var(--text-secondary);">$${formatNumber(agPozoXml)}</td>
+        <td>${agGanadores > 0 ? '$' + formatNumber(agenciero.premioUnitario) : '-'}</td>
+        <td>${agGanadores > 0 ? '$' + formatNumber(agenciero.totalPremios) : '-'}</td>
+        <td>${agEsVacante ? '$' + formatNumber(agenciero.pozoVacante) : '-'}</td>
+      </tr>`;
 
     // Fondo de reserva (informativo)
     if (resultado.fondoReserva > 0) {

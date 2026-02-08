@@ -248,7 +248,7 @@ Columnas en BD: `recaudacion_caba`, `recaudacion_provincias`, `recaudacion_web`
 - **Letras**: Premio fijo $1000 por 4 letras exactas (solo si no ganó por números)
 - **Estímulo agenciero**: 1% sobre premios pagados
 
-#### Loto Plus (`loto-escrutinio.controller.js` - 816 líneas)
+#### Loto Plus (`loto-escrutinio.controller.js` - 1100+ líneas)
 - **5 modalidades**: Tradicional, Match, Desquite, Sale o Sale, Multiplicador
 - **Todas las apuestas participan** en todas las modalidades
 - **Premios del XML**: Se leen montos del archivo XML oficial
@@ -256,12 +256,17 @@ Columnas en BD: `recaudacion_caba`, `recaudacion_provincias`, `recaudacion_web`
   - Tradicional/Match: 65%/15%/3% por 6/5/4 aciertos
   - Desquite: 80% solo 6 aciertos
   - Sale o Sale: 85% cascada 6→1
-  - Multiplicador: 2x premio extra
+  - Multiplicador: 2x premio extra, agenciero $500.000/agencia
+- **Agenciero vacante**: Cuando ganadores son de venta web (5188880), el premio queda vacante
+- **Número PLUS**: Decodificación mejorada (dígito directo, letra A-J, o formato A-P)
+- **Logging detallado**: Debug de ganadores por modalidad y multiplicador
 
-#### Loto 5 (`loto5-escrutinio.controller.js` - 391 líneas)
+#### Loto 5 (`loto5-escrutinio.controller.js` - 450+ líneas)
 - **3 niveles**: 5 aciertos (1er), 4 aciertos (2do), 3 aciertos (devolución apuesta)
-- **Agenciero**: 1% del total premios
+- **Agenciero**: 1% del total premios (1er + 2do), a agencias que vendieron tickets ganadores de 5 aciertos
+- **Agenciero vacante**: Si ganadores de 5 son todos de venta web, el premio queda vacante con nota explicativa
 - **Rango**: 0-36, 5 números por apuesta
+- **Campo `esVentaWeb`**: Agregado a cada ganador para tracking de venta web
 
 #### BRINCO (`brinco-escrutinio.controller.js` - 755 líneas)
 - **Decodificación binaria** de números (letras A-P = 4 bits)
@@ -294,8 +299,10 @@ Columnas en BD: `recaudacion_caba`, `recaudacion_provincias`, `recaudacion_web`
 | Proveedor | Modelo | Estado | Prioridad |
 |-----------|--------|--------|-----------|
 | **GROQ** | meta-llama/llama-4-scout-17b-16e-instruct | ✅ Activo | 1 (primario) |
-| **MISTRAL** | mistral-small-latest | ❌ Deshabilitado (rate limits) | - |
+| **MISTRAL** | mistral-small-2506 | ❌ Deshabilitado (rate limits) | - |
 | **OPENAI** | gpt-4o | ✅ Activo | 2 (fallback) |
+
+**Nota:** El modelo Groq se actualizó de `llama-3.2-90b-vision-preview` a `llama-4-scout-17b-16e-instruct` en febrero 2026.
 
 **API keys**: Almacenadas en `public/js/config.local.js` (gitignored). Se mezclan en `CONFIG` al cargar.
 
@@ -813,6 +820,8 @@ Dev: nodemon
 
 | Versión | Fecha | Cambios Principales |
 |---------|-------|---------------------|
+| 3.5 | 8 Feb 2026 | Guardado premios por agencia para TODOS los juegos (LOTO, LOTO5, QUINI6, BRINCO), tablas `escrutinio_loto_ganadores` y `escrutinio_loto5_ganadores`, consulta acumulada "Todos los juegos" por cta_cte, fix bug agenciero LOTO $0 |
+| 3.4 | 8 Feb 2026 | Agenciero vacante/venta web para LOTO y LOTO5, Multiplicador debugging mejorado, modelo OCR actualizado a llama-4-scout |
 | 3.3 | 7 Feb 2026 | ctaCte formato unificado "5100011", Fecha Sorteo vs Fecha Control en historial, Premio Extra exclusión Art. 30°, Migraciones BD completas |
 | 3.2 | 7 Feb 2026 | Ticket display con premio (no importe) en Brinco/Quini6, Premio Extra pool manual, cleanup display |
 | 3.1 | 6 Feb 2026 | OCR Poceada/Tombolina, persistencia BRINCO/QUINI6 en BD, reportes 7 juegos |
@@ -828,20 +837,20 @@ Dev: nodemon
 
 ---
 
-**Versión del Documento**: 3.3  
-**Última actualización**: 7 de Febrero, 2026
+**Versión del Documento**: 3.5  
+**Última actualización**: 8 de Febrero, 2026
 
 **Estado actual:**
-- ✅ **Quiniela**: Control Previo + Escrutinio completo y optimizado
-- ✅ **Poceada**: Control Previo + Escrutinio + Modal 4 Pozos de Arrastre + OCR
+- ✅ **Quiniela**: Control Previo + Escrutinio completo + Premios por agencia
+- ✅ **Poceada**: Control Previo + Escrutinio + Modal 4 Pozos + OCR + Premios por agencia
 - ✅ **Tombolina**: Control Previo + Escrutinio profesional + OCR
-- ✅ **Loto (6/45 + PLUS)**: Control Previo + Escrutinio (5 modalidades)
-- ✅ **Loto 5**: Control Previo + Escrutinio (3 niveles)
-- ✅ **BRINCO**: Control Previo + Escrutinio (Tradicional + Junior) + Persistencia BD
-- ✅ **QUINI 6**: Control Previo + Escrutinio (5 modalidades) + Premio Extra + Persistencia BD
-- ✅ **Hipicas (Turfito)**: Parser TXT + Facturación + Integrado en Reportes
-- ✅ **OCR**: Multi-proveedor (Groq → OpenAI) para todos los juegos
-- ✅ **Reportes**: Dashboard con 5 vistas, columnas condicionales, 7 juegos + Hipicas
+- ✅ **Loto (6/45 + PLUS)**: Control Previo + Escrutinio (5 modalidades) + Agenciero vacante/venta web + Multiplicador + Premios por agencia
+- ✅ **Loto 5**: Control Previo + Escrutinio (3 niveles) + Agenciero vacante/venta web + Premios por agencia
+- ✅ **BRINCO**: Control Previo + Escrutinio (Tradicional + Junior) + Persistencia BD + Premios por agencia
+- ✅ **QUINI 6**: Control Previo + Escrutinio (5 modalidades) + Premio Extra + Persistencia BD + Premios por agencia
+- ✅ **Hipicas (Turfito)**: Parser TXT + Facturación + Integrado en Reportes + Premios por agencia
+- ✅ **OCR**: Multi-proveedor (Groq llama-4-scout → OpenAI GPT-4o) para todos los juegos
+- ✅ **Reportes**: Dashboard con vista "Todos los juegos" acumulado por cta_cte, columnas condicionales, 7 juegos + Hipicas
 - ✅ **Programación**: Carga Excel, filtro por mes, verificación de sorteo
 - ✅ **Agencias**: Carga Excel, búsqueda, validación de amigas
 - ✅ **Actas PDF**: Control previo, notarial, control posterior (todos los juegos)
