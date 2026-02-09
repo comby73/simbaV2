@@ -820,6 +820,7 @@ Dev: nodemon
 
 | Versión | Fecha | Cambios Principales |
 |---------|-------|---------------------|
+| 3.6 | 9 Feb 2026 | Dashboard Cuenta Corriente: cruce ventas + premios para TODOS los juegos (Tombolina, Quini6, Loto, Loto5, Brinco), columnas Ganadores/Premios/Anulados disponibles en todos los reportes, fix hipicas codigo_provincia '51' |
 | 3.5 | 8 Feb 2026 | Guardado premios por agencia para TODOS los juegos (LOTO, LOTO5, QUINI6, BRINCO), tablas `escrutinio_loto_ganadores` y `escrutinio_loto5_ganadores`, consulta acumulada "Todos los juegos" por cta_cte, fix bug agenciero LOTO $0 |
 | 3.4 | 8 Feb 2026 | Agenciero vacante/venta web para LOTO y LOTO5, Multiplicador debugging mejorado, modelo OCR actualizado a llama-4-scout |
 | 3.3 | 7 Feb 2026 | ctaCte formato unificado "5100011", Fecha Sorteo vs Fecha Control en historial, Premio Extra exclusión Art. 30°, Migraciones BD completas |
@@ -837,18 +838,19 @@ Dev: nodemon
 
 ---
 
-**Versión del Documento**: 3.5  
-**Última actualización**: 8 de Febrero, 2026
+**Versión del Documento**: 3.6  
+**Última actualización**: 9 de Febrero, 2026
 
 **Estado actual:**
-- ✅ **Quiniela**: Control Previo + Escrutinio completo + Premios por agencia
-- ✅ **Poceada**: Control Previo + Escrutinio + Modal 4 Pozos + OCR + Premios por agencia
-- ✅ **Tombolina**: Control Previo + Escrutinio profesional + OCR
-- ✅ **Loto (6/45 + PLUS)**: Control Previo + Escrutinio (5 modalidades) + Agenciero vacante/venta web + Multiplicador + Premios por agencia
-- ✅ **Loto 5**: Control Previo + Escrutinio (3 niveles) + Agenciero vacante/venta web + Premios por agencia
-- ✅ **BRINCO**: Control Previo + Escrutinio (Tradicional + Junior) + Persistencia BD + Premios por agencia
-- ✅ **QUINI 6**: Control Previo + Escrutinio (5 modalidades) + Premio Extra + Persistencia BD + Premios por agencia
-- ✅ **Hipicas (Turfito)**: Parser TXT + Facturación + Integrado en Reportes + Premios por agencia
+- ✅ **Quiniela**: Control Previo + Escrutinio completo + Premios por agencia + Cruce ventas/premios
+- ✅ **Poceada**: Control Previo + Escrutinio + Modal 4 Pozos + OCR + Premios por agencia + Cruce ventas/premios
+- ✅ **Tombolina**: Control Previo + Escrutinio profesional + OCR + Cruce ventas/premios
+- ✅ **Loto (6/45 + PLUS)**: Control Previo + Escrutinio (5 modalidades) + Agenciero vacante/venta web + Multiplicador + Premios por agencia + Cruce ventas/premios
+- ✅ **Loto 5**: Control Previo + Escrutinio (3 niveles) + Agenciero vacante/venta web + Premios por agencia + Cruce ventas/premios
+- ✅ **BRINCO**: Control Previo + Escrutinio (Tradicional + Junior) + Persistencia BD + Premios por agencia + Cruce ventas/premios
+- ✅ **QUINI 6**: Control Previo + Escrutinio (5 modalidades) + Premio Extra + Persistencia BD + Premios por agencia + Cruce ventas/premios
+- ✅ **Hipicas (Turfito)**: Parser TXT + Facturación + Integrado en Reportes + Premios/Cancelaciones/Devoluciones por agencia
+- ✅ **Dashboard Cta Cte**: Todos los juegos con cruce control_previo_agencias + escrutinio_premios_agencia
 - ✅ **OCR**: Multi-proveedor (Groq llama-4-scout → OpenAI GPT-4o) para todos los juegos
 - ✅ **Reportes**: Dashboard con vista "Todos los juegos" acumulado por cta_cte, columnas condicionales, 7 juegos + Hipicas
 - ✅ **Programación**: Carga Excel, filtro por mes, verificación de sorteo
