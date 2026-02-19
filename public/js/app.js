@@ -15,7 +15,8 @@ const PREFIJOS_JUEGOS = {
   'LTO': { nombre: 'Loto', api: 'procesarLoto' },
   'LOT': { nombre: 'Loto', api: 'procesarLoto' },
   'LT5': { nombre: 'Loto 5', api: 'procesarLoto5' },
-  'L5': { nombre: 'Loto 5', api: 'procesarLoto5' }
+  'L5': { nombre: 'Loto 5', api: 'procesarLoto5' },
+  'QYA': { nombre: 'Quiniela Ya', api: null }
 };
 
 
@@ -3128,6 +3129,7 @@ let cpstExtractoLoto = null; // {tradicional: [6], match: [6], desquite: [6], sa
 let cpstExtractoLoto5 = null; // {numeros: [5 nums 0-36]}
 let cpstExtractoBrinco = null; // {tradicional: {numeros: [6], premios: {}}, junior: {numeros: [6], premios: {}, aciertosRequeridos: 5}}
 let cpstExtractoQuini6 = null; // {tradicional: {primera: [6], segunda: [6]}, revancha: [6], siempreSale: [6], premioExtra: [6], siempreSaleAciertos: 6}
+let cpstQuinielaYaZipFile = null; // Archivo ZIP cargado para Quiniela Ya
 
 // Mapeo de códigos de modalidad a nombres
 const MODALIDADES_NOMBRE = {
@@ -3157,6 +3159,8 @@ function seleccionarJuegoPosterior(juego) {
   // Normalizar nombre del juego (ajustar si viene del backend con variaciones)
   if (juego === 'poceada') juego = 'Poceada';
   if (juego === 'quiniela') juego = 'Quiniela';
+  if (juego === 'quinielaya') juego = 'Quiniela Ya';
+  if (juego === 'quiniela ya') juego = 'Quiniela Ya';
   if (juego === 'tombolina') juego = 'Tombolina';
   if (juego === 'loto' || juego === 'LOTO') juego = 'Loto';
 
@@ -3176,6 +3180,8 @@ function seleccionarJuegoPosterior(juego) {
       subtitulo.textContent = 'Escrutinio Loto: 4 modalidades (Tradicional, Match, Desquite, Sale o Sale)';
     } else if (juego === 'Loto 5') {
       subtitulo.textContent = 'Escrutinio Loto 5: 5 números (0-36), niveles 5/4/3 aciertos';
+    } else if (juego === 'Quiniela Ya') {
+      subtitulo.textContent = 'Carga y consolidación por agencia/provincia sin extractos';
     } else if (['Quini 6', 'Brinco'].includes(juego)) {
       subtitulo.textContent = `Escrutinio de ganadores para ${juego}`;
     } else {
@@ -3229,6 +3235,15 @@ function seleccionarJuegoPosterior(juego) {
   if (juego === 'Quiniela') {
     extractoQuiniela?.classList.remove('hidden');
     detalleQuiniela?.classList.remove('hidden');
+  } else if (juego === 'Quiniela Ya') {
+    // Quiniela Ya no usa extractos; solo requiere carga de ZIP y procesamiento directo
+    detalleQuiniela?.classList.add('hidden');
+    detallePoceada?.classList.add('hidden');
+    detalleLoto?.classList.add('hidden');
+    detalleLoto5?.classList.add('hidden');
+    document.getElementById('cpst-detalle-tombolina')?.classList.add('hidden');
+    document.getElementById('cpst-detalle-brinco')?.classList.add('hidden');
+    document.getElementById('cpst-detalle-quini6')?.classList.add('hidden');
   } else if (juego === 'Loto') {
     extractoLoto?.classList.remove('hidden');
     detalleLoto?.classList.remove('hidden');
@@ -3270,6 +3285,7 @@ function seleccionarJuegoPosterior(juego) {
   const hintModalidad = document.getElementById('cpst-hint-modalidad');
   if (hintModalidad) {
     if (juego === 'Poceada') hintModalidad.textContent = '💡 Para Poceada solo se procesarán registros de tipo POC';
+    else if (juego === 'Quiniela Ya') hintModalidad.textContent = '💡 Quiniela Ya no usa extractos: cargue ZIP y ejecute. Si el sorteo existe, se pedirá confirmación para sobrescribir.';
     else if (juego === 'Loto') hintModalidad.textContent = '💡 Loto: ingrese 4 extractos de 6 números (0-45) y opcionalmente el número PLUS (0-9)';
     else if (juego === 'Loto 5') hintModalidad.textContent = '💡 Loto 5: ingrese 5 números (0-36)';
     else hintModalidad.textContent = '💡 Al cargar XMLs, solo se procesarán los de la modalidad detectada';
@@ -4259,6 +4275,25 @@ async function cargarZipPosterior(input) {
 
   const file = input.files[0];
 
+  if (cpstJuegoSeleccionado === 'Quiniela Ya') {
+    cpstQuinielaYaZipFile = file;
+    cpstDatosControlPrevio = null;
+    cpstRegistrosNTF = [];
+    cpstNumeroSorteo = '';
+
+    document.getElementById('cpst-datos-cargados')?.classList.remove('hidden');
+    document.getElementById('cpst-sorteo').textContent = 'Pendiente';
+    document.getElementById('cpst-registros').textContent = '-';
+    document.getElementById('cpst-recaudacion').textContent = '-';
+    const juegoBadge = document.getElementById('cpst-juego-badge');
+    if (juegoBadge) juegoBadge.textContent = 'Quiniela Ya';
+    const modalidadBadge = document.getElementById('cpst-modalidad-badge');
+    if (modalidadBadge) modalidadBadge.textContent = 'Sin extracto';
+
+    showToast(`ZIP cargado para Quiniela Ya: ${file.name}`, 'success');
+    return;
+  }
+
   // Detectar tipo de juego por nombre del archivo
   const juegoConfig = detectarTipoJuego(file.name);
   if (!juegoConfig) {
@@ -4880,8 +4915,20 @@ async function cargarExtractoImagen(input) {
 
   } catch (error) {
     console.error('Error OCR:', error);
-    showToast('Error procesando imagen: ' + error.message, 'error');
-    status.classList.add('hidden');
+
+    // Fallback automático a Tesseract cuando falla el OCR con IA
+    try {
+      mensaje.textContent = 'OCR IA falló. Intentando OCR alternativo...';
+      progress.style.width = '30%';
+      await usarTesseractOCR(file, status, mensaje, progress);
+      showToast('Se procesó la imagen con OCR alternativo', 'warning');
+      setTimeout(() => status.classList.add('hidden'), 2000);
+      return;
+    } catch (fallbackError) {
+      console.error('Error OCR alternativo:', fallbackError);
+      showToast('Error procesando imagen: ' + error.message, 'error');
+      status.classList.add('hidden');
+    }
   }
 }
 
@@ -5082,7 +5129,16 @@ async function cargarExtractoPDF(input) {
 
   } catch (error) {
     console.error('Error PDF:', error);
-    showToast('Error procesando PDF: ' + error.message, 'error');
+
+    // Fallback a OCR alternativo para PDF
+    try {
+      showToast('OCR IA falló en PDF. Intentando OCR alternativo...', 'warning');
+      await procesarPDFconOCR(file);
+      return;
+    } catch (fallbackError) {
+      console.error('Error OCR alternativo PDF:', fallbackError);
+      showToast('Error procesando PDF: ' + error.message, 'error');
+    }
   } finally {
     status.classList.add('hidden');
   }
@@ -5549,18 +5605,26 @@ async function procesarArchivoXMLInteligente(archivo) {
 
 // Procesar imagen con OCR inteligente
 async function procesarArchivoImagenInteligente(archivo) {
-  if (!window.OCRExtractos || !OCRExtractos.hasApiKey()) {
-    throw new Error('OCR no configurado. Configure la API key de Groq.');
+  let data = null;
+
+  // Intento principal: OCR con proveedores API
+  if (window.OCRExtractos && OCRExtractos.hasApiKey()) {
+    try {
+      const { base64, mimeType } = await OCRExtractos.imageToBase64(archivo);
+      const resultado = await OCRExtractos.procesarImagenQuiniela(base64, mimeType, '');
+
+      if (resultado.success && resultado.data) {
+        data = resultado.data;
+      }
+    } catch (errorOCR) {
+      console.warn(`[OCR] Falló OCR API para imagen ${archivo.name}, usando fallback:`, errorOCR.message);
+    }
   }
 
-  const { base64, mimeType } = await OCRExtractos.imageToBase64(archivo);
-  const resultado = await OCRExtractos.procesarImagenQuiniela(base64, mimeType, '');
-
-  if (!resultado.success || !resultado.data) {
-    throw new Error('OCR no pudo extraer datos de la imagen');
+  // Fallback: OCR local con Tesseract
+  if (!data) {
+    data = await extraerDatosQuinielaFallback(archivo, false);
   }
-
-  const data = resultado.data;
 
   // Mapear código de provincia a índice
   const codigoToIndex = {
@@ -5582,7 +5646,7 @@ async function procesarArchivoImagenInteligente(archivo) {
   const fecha = data.fecha || cpResultadosActuales?.sorteo?.fecha || new Date().toISOString().split('T')[0];
   const modalidad = modalidadDetectada || cpstModalidadSorteo || 'M';
 
-  if (provinciaIdx !== null && provinciaIdx !== undefined && data.numeros) {
+  if (provinciaIdx !== null && provinciaIdx !== undefined && data.numeros && data.numeros.length > 0) {
     try {
       const response = await extractosAPI.guardar({
         provincia: data.provincia,
@@ -5635,21 +5699,26 @@ async function procesarArchivoImagenInteligente(archivo) {
 
 // Procesar PDF con OCR
 async function procesarArchivoPDFInteligente(archivo) {
-  if (!window.OCRExtractos || !OCRExtractos.hasApiKey()) {
-    throw new Error('OCR no configurado. Configure la API key de Groq.');
+  let data = null;
+
+  // Intento principal: OCR con proveedores API
+  if (window.OCRExtractos && OCRExtractos.hasApiKey()) {
+    try {
+      const { base64, mimeType } = await OCRExtractos.pdfToImage(archivo);
+      const resultado = await OCRExtractos.procesarImagenQuiniela(base64, mimeType, '');
+
+      if (resultado.success && resultado.data) {
+        data = resultado.data;
+      }
+    } catch (errorOCR) {
+      console.warn(`[OCR] Falló OCR API para PDF ${archivo.name}, usando fallback:`, errorOCR.message);
+    }
   }
 
-  // Convertir PDF a imagen usando el método del módulo OCR
-  const { base64, mimeType } = await OCRExtractos.pdfToImage(archivo);
-
-  // Procesar con OCR
-  const resultado = await OCRExtractos.procesarImagenQuiniela(base64, mimeType, '');
-
-  if (!resultado.success || !resultado.data) {
-    throw new Error('OCR no pudo extraer datos del PDF');
+  // Fallback: OCR local con Tesseract
+  if (!data) {
+    data = await extraerDatosQuinielaFallback(archivo, true);
   }
-
-  const data = resultado.data;
 
   const codigoToIndex = {
     '51': 0, '53': 1, '55': 2, '72': 3, '00': 4, '64': 5, '59': 6
@@ -5669,7 +5738,7 @@ async function procesarArchivoPDFInteligente(archivo) {
   const fecha = data.fecha || cpResultadosActuales?.sorteo?.fecha || new Date().toISOString().split('T')[0];
   const modalidad = modalidadDetectada || cpstModalidadSorteo || 'M';
 
-  if (provinciaIdx !== null && provinciaIdx !== undefined && data.numeros) {
+  if (provinciaIdx !== null && provinciaIdx !== undefined && data.numeros && data.numeros.length > 0) {
     try {
       const response = await extractosAPI.guardar({
         provincia: data.provincia,
@@ -5719,6 +5788,60 @@ async function procesarArchivoPDFInteligente(archivo) {
   } else {
     throw new Error(`No se pudo detectar provincia del PDF (detectada: ${data.provincia})`);
   }
+}
+
+// Fallback OCR local (sin API) para Quiniela en modo inteligente
+async function extraerDatosQuinielaFallback(archivo, esPDF = false) {
+  if (!window.Tesseract) {
+    await loadScript('https://cdn.jsdelivr.net/npm/tesseract.js@4/dist/tesseract.min.js');
+  }
+
+  let origenOCR = archivo;
+
+  // Para PDF necesitamos convertir la primera página a imagen
+  if (esPDF) {
+    if (!window.OCRExtractos) {
+      throw new Error('No se pudo convertir el PDF para OCR alternativo. Recargue la página.');
+    }
+    const { base64, mimeType } = await OCRExtractos.pdfToImage(archivo);
+    origenOCR = `data:${mimeType};base64,${base64}`;
+  }
+
+  const resultado = await Tesseract.recognize(origenOCR, 'spa');
+  const texto = resultado?.data?.text || '';
+
+  const numeros = extraerNumerosDeTexto(texto);
+  const letras = extraerLetrasDeTexto(texto);
+
+  if (!numeros || numeros.length === 0) {
+    throw new Error('OCR alternativo no pudo extraer números del archivo');
+  }
+
+  // Provincia fallback: usar la seleccionada en UI
+  const provinciaSelect = document.getElementById('cpst-extracto-provincia');
+  const indexToCodigoProvincia = {
+    0: '51',
+    1: '53',
+    2: '55',
+    3: '72',
+    4: '00',
+    5: '64',
+    6: '59'
+  };
+
+  let provincia = '51';
+  if (provinciaSelect) {
+    const idx = parseInt(provinciaSelect.value || '0');
+    provincia = indexToCodigoProvincia[idx] || '51';
+  }
+
+  return {
+    provincia,
+    modalidad: cpstModalidadSorteo || '',
+    fecha: cpResultadosActuales?.sorteo?.fecha || cpResultadosActuales?.fecha || new Date().toISOString().split('T')[0],
+    numeros,
+    letras
+  };
 }
 
 // Render mejorado de la lista de extractos
@@ -5858,6 +5981,41 @@ function showModalSimple(titulo, contenido) {
 // ============================================
 
 async function ejecutarEscrutinio() {
+  if (cpstJuegoSeleccionado === 'Quiniela Ya') {
+    if (!cpstQuinielaYaZipFile) {
+      showToast('Cargue el ZIP de Quiniela Ya en "Datos del Sorteo"', 'warning');
+      return;
+    }
+
+    try {
+      showToast('Procesando Quiniela Ya...', 'info');
+      let response;
+      try {
+        response = await controlPosteriorAPI.escrutinioQuinielaYa(cpstQuinielaYaZipFile, false);
+      } catch (error) {
+        if (error.status === 409 && error.payload?.code === 'OVERWRITE_REQUIRED') {
+          const sorteo = error.payload?.data?.sorteo;
+          const ok = confirm(`Ya existen datos para el sorteo ${sorteo}. ¿Desea sobrescribirlos?`);
+          if (!ok) {
+            showToast('Operación cancelada por el usuario', 'info');
+            return;
+          }
+          response = await controlPosteriorAPI.escrutinioQuinielaYa(cpstQuinielaYaZipFile, true);
+        } else {
+          throw error;
+        }
+      }
+
+      cpstResultados = response.data;
+      mostrarResultadosEscrutinioQuinielaYa(cpstResultados);
+      showToast('Quiniela Ya procesada correctamente', 'success');
+    } catch (error) {
+      console.error('Error Quiniela Ya:', error);
+      showToast(error.message || 'Error procesando Quiniela Ya', 'error');
+    }
+    return;
+  }
+
   // Validaciones según el juego
   if (cpstJuegoSeleccionado === 'Quiniela') {
     if (cpstExtractos.length === 0) {
@@ -6086,6 +6244,112 @@ async function ejecutarEscrutinio() {
     console.error('Error:', error);
     showToast(error.message || 'Error ejecutando escrutinio', 'error');
   }
+}
+
+function mostrarResultadosEscrutinioQuinielaYa(resultado) {
+  document.getElementById('cpst-resultados')?.classList.remove('hidden');
+  document.getElementById('cpst-detalle-quiniela')?.classList.add('hidden');
+  document.getElementById('cpst-detalle-poceada')?.classList.add('hidden');
+  document.getElementById('cpst-detalle-loto')?.classList.add('hidden');
+  document.getElementById('cpst-detalle-loto5')?.classList.add('hidden');
+  document.getElementById('cpst-detalle-tombolina')?.classList.add('hidden');
+  document.getElementById('cpst-detalle-brinco')?.classList.add('hidden');
+  document.getElementById('cpst-detalle-quini6')?.classList.add('hidden');
+
+  const extractosCard = document.getElementById('cpst-extractos-sorteados');
+  if (extractosCard) extractosCard.classList.add('hidden');
+
+  const agencias = Array.isArray(resultado.agencias) ? resultado.agencias : [];
+  const totalTickets = Number(resultado.totalRegistros || 0);
+  const totalValidos = Number(resultado.totalApuestas || 0);
+  const totalAnulados = Number(resultado.totalAnulados || 0);
+  const recaudacionValida = Number(resultado.totalRecaudacion || 0);
+  const recaudacionAnulada = agencias.reduce((acc, ag) => acc + Number(ag.importe_cancelaciones || 0), 0);
+  const recaudacionTotal = recaudacionValida + recaudacionAnulada;
+  const totalGanadores = Number(resultado.totalGanadores || 0);
+  const totalPremios = Number(resultado.totalPremios || 0);
+  const tasaDevolucion = recaudacionValida > 0 ? ((totalPremios / recaudacionValida) * 100) : 0;
+
+  document.getElementById('cpst-tickets-total').textContent = formatNumber(totalTickets);
+  document.getElementById('cpst-tickets-validos').textContent = formatNumber(totalValidos);
+  document.getElementById('cpst-tickets-anulados').textContent = formatNumber(totalAnulados);
+  document.getElementById('cpst-recaudacion-total').textContent = '$' + formatNumber(recaudacionTotal);
+  document.getElementById('cpst-recaudacion-valida').textContent = '$' + formatNumber(recaudacionValida);
+  document.getElementById('cpst-recaudacion-anulada').textContent = '$' + formatNumber(recaudacionAnulada);
+  document.getElementById('cpst-total-ganadores').textContent = formatNumber(totalGanadores);
+  document.getElementById('cpst-total-premios').textContent = '$' + formatNumber(totalPremios);
+  document.getElementById('cpst-tasa-devolucion').textContent = tasaDevolucion.toFixed(2) + '%';
+
+  const tbodyComparacion = document.querySelector('#cpst-tabla-comparacion tbody');
+  if (tbodyComparacion) {
+    tbodyComparacion.innerHTML = `
+      <tr>
+        <td colspan="4" class="text-center text-muted">
+          Quiniela Ya no usa Control Previo. El escrutinio se calcula directo desde el ZIP.
+        </td>
+      </tr>
+    `;
+  }
+
+  const ventasAgencia = agencias.map((a) => ({
+    prov: a.provincia || '-',
+    ag: a.agency || '-',
+    tickets: Number(a.registros_validados || 0) + Number(a.cantidad_cancelaciones || 0),
+    apuestas: Number(a.total_apuestas || 0),
+    recaudacion: Number(a.recaudacion_total || 0)
+  })).sort((a, b) => b.recaudacion - a.recaudacion);
+  window.cpstVentasAgenciaData = ventasAgencia;
+  renderVentasAgenciaPosterior(ventasAgencia);
+
+  const detalleTipos = document.getElementById('cpst-detalle-tipos');
+  if (!detalleTipos) return;
+
+  detalleTipos.innerHTML = `
+    <div class="card">
+      <div class="card-header">
+        <h3><i class="fas fa-bolt"></i> Quiniela Ya - Sorteo ${resultado.numeroSorteo || '-'}</h3>
+      </div>
+      <div class="card-body">
+        <div class="stats-grid mb-3" style="grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));">
+          <div class="stat-card"><div class="stat-value">${formatNumber(totalTickets)}</div><div class="stat-label">Tickets de Venta</div></div>
+          <div class="stat-card"><div class="stat-value">${formatNumber(totalValidos)}</div><div class="stat-label">Total Apuestas</div></div>
+          <div class="stat-card"><div class="stat-value">${formatNumber(totalGanadores)}</div><div class="stat-label">Total Ganadores</div></div>
+          <div class="stat-card"><div class="stat-value">$${formatNumber(totalPremios)}</div><div class="stat-label">Total Premios Pagados</div></div>
+          <div class="stat-card"><div class="stat-value">$${formatNumber(recaudacionValida)}</div><div class="stat-label">Recaudación Válida</div></div>
+          <div class="stat-card"><div class="stat-value">${tasaDevolucion.toFixed(2)}%</div><div class="stat-label">Tasa de Devolución</div></div>
+        </div>
+
+        <div class="table-container" style="max-height: 420px; overflow-y: auto;">
+          <table class="table table-sm">
+            <thead>
+              <tr>
+                <th>Provincia</th>
+                <th>Agencia / Agrupación</th>
+                <th class="text-end">Apuestas</th>
+                <th class="text-end">Cancel.</th>
+                <th class="text-end">Recaudación</th>
+                <th class="text-end">Premios</th>
+                <th class="text-end">Ganadores</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${agencias.map(a => `
+                <tr>
+                  <td>${a.provincia || '-'}</td>
+                  <td>${a.agency || '-'}</td>
+                  <td class="text-end">${formatNumber(a.total_apuestas || 0)}</td>
+                  <td class="text-end">${formatNumber(a.cantidad_cancelaciones || 0)}</td>
+                  <td class="text-end">$${formatNumber(a.recaudacion_total || 0)}</td>
+                  <td class="text-end">$${formatNumber(a.total_premios || 0)}</td>
+                  <td class="text-end">${formatNumber(a.total_ganadores || 0)}</td>
+                </tr>
+              `).join('')}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  `;
 }
 
 // Mostrar resultados específicos de Poceada
@@ -10694,6 +10958,7 @@ function verDetallesSorteo(numeroSorteo) {
 
 let dashboardData = [];
 let dashboardSelectedGames = ['todos'];
+let dashboardFiltrosInfo = null;
 let controlPrevioData = [];
 let escrutiniosData = [];
 
@@ -10756,7 +11021,7 @@ function toggleDashboardGame(gameType) {
 
   if (gameType === 'todos') {
     // Si se selecciona "todos", desmarcar los individuales
-    ['quiniela', 'poceada', 'tombolina', 'quini6', 'brinco', 'loto', 'loto5'].forEach(game => {
+    ['quiniela', 'quinielaya', 'poceada', 'tombolina', 'quini6', 'brinco', 'loto', 'loto5'].forEach(game => {
       const el = document.getElementById(`dash-game-${game}`);
       if (el) el.checked = false;
     });
@@ -10800,6 +11065,7 @@ function updateDashboardGameIndicator() {
     // Colores por juego
     const colors = {
       'quiniela': 'bg-primary',
+      'quinielaya': 'bg-secondary',
       'poceada': 'bg-warning',
       'tombolina': 'bg-success',
       'quini6': 'bg-info',
@@ -10831,6 +11097,7 @@ async function cargarFiltrosDashboard() {
     const filtrosData = await filtrosRes.json();
     if (filtrosData.success) {
       console.log('Filtros dashboard:', filtrosData.data);
+      dashboardFiltrosInfo = filtrosData.data;
     }
 
     // Poblar select de agencias
@@ -10921,6 +11188,19 @@ async function buscarDashboard() {
 
       if (dashboardData.length === 0) {
         document.getElementById('dash-no-data').classList.remove('hidden');
+        if (juego === 'quinielaya') {
+          const qy = dashboardFiltrosInfo?.rangosPorJuego?.quinielaya;
+          if (qy?.sorteos?.min != null && qy?.sorteos?.max != null) {
+            const fechaMin = qy?.fechas?.min ? formatDate(qy.fechas.min) : '-';
+            const fechaMax = qy?.fechas?.max ? formatDate(qy.fechas.max) : '-';
+            showToast(
+              `Sin datos para esos filtros. Quiniela Ya disponible en sorteos ${qy.sorteos.min}-${qy.sorteos.max} (fechas ${fechaMin} a ${fechaMax}).`,
+              'warning'
+            );
+          } else {
+            showToast('Sin datos de Quiniela Ya para los filtros actuales.', 'warning');
+          }
+        }
       } else {
         renderTablaDashboard(tipoConsulta);
       }
@@ -11298,6 +11578,7 @@ function getModalidadNombre(modalidad) {
     'M': 'Matutina',
     'V': 'Vespertina',
     'N': 'Nocturna',
+    'Y': 'Quiniela Ya',
     'H': 'Hipicas',
     'U': 'Única'
   };
@@ -11319,6 +11600,8 @@ function limpiarFiltrosDashboard() {
   // Resetear juegos
   document.getElementById('dash-game-todos').checked = true;
   document.getElementById('dash-game-quiniela').checked = false;
+  const qyaEl = document.getElementById('dash-game-quinielaya');
+  if (qyaEl) qyaEl.checked = false;
   document.getElementById('dash-game-poceada').checked = false;
   dashboardSelectedGames = ['todos'];
   updateDashboardGameIndicator();

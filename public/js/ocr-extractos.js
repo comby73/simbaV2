@@ -208,26 +208,33 @@ Responde SOLO con este JSON (INCLUIR SIEMPRE EL CAMPO "letras"):
 
   // Procesar respuesta de la API
   procesarRespuesta(content) {
-    let jsonStr = content.trim();
+    let jsonStr = this.normalizarTextoJSON(content);
 
-    // Eliminar bloques de código markdown
-    if (jsonStr.startsWith('```json')) {
-      jsonStr = jsonStr.replace(/^```json\s*/, '').replace(/\s*```$/, '');
-    } else if (jsonStr.startsWith('```')) {
-      jsonStr = jsonStr.replace(/^```\s*/, '').replace(/\s*```$/, '');
+    if (!jsonStr) {
+      throw new Error('Respuesta OCR vacía');
     }
 
+    const candidatos = this.generarCandidatosJSON(jsonStr);
     let parsed;
-    try {
-      parsed = JSON.parse(jsonStr);
-    } catch (e) {
-      // Intentar extraer JSON de texto mixto
-      const jsonMatch = jsonStr.match(/\{[\s\S]*\}/);
-      if (jsonMatch) {
-        parsed = JSON.parse(jsonMatch[0]);
-      } else {
-        throw new Error('No se pudo parsear la respuesta como JSON');
+
+    for (const candidato of candidatos) {
+      const valor = this.intentarParseJSON(candidato);
+      if (valor !== undefined) {
+        parsed = valor;
+        break;
       }
+    }
+
+    // Algunos proveedores devuelven un JSON serializado como string
+    if (typeof parsed === 'string') {
+      const reparsed = this.intentarParseJSON(this.normalizarTextoJSON(parsed));
+      if (reparsed !== undefined) {
+        parsed = reparsed;
+      }
+    }
+
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+      throw new Error('No se pudo parsear la respuesta como JSON');
     }
 
     // Normalizar datos extraídos
@@ -265,6 +272,107 @@ Responde SOLO con este JSON (INCLUIR SIEMPRE EL CAMPO "letras"):
       success: true,
       data: parsed
     };
+  },
+
+  normalizarTextoJSON(texto) {
+    if (texto === null || texto === undefined) return '';
+
+    return String(texto)
+      .replace(/^\uFEFF/, '')
+      .replace(/```json/gi, '```')
+      .replace(/```/g, '')
+      .replace(/[“”]/g, '"')
+      .replace(/[‘’]/g, "'")
+      .trim();
+  },
+
+  intentarParseJSON(texto) {
+    if (!texto || typeof texto !== 'string') return undefined;
+
+    try {
+      return JSON.parse(texto);
+    } catch (error) {
+      return undefined;
+    }
+  },
+
+  limpiarComasFinales(texto) {
+    return texto.replace(/,\s*([}\]])/g, '$1');
+  },
+
+  extraerBloqueJSONBalanceado(texto) {
+    const inicio = texto.indexOf('{');
+    if (inicio === -1) return null;
+
+    let profundidad = 0;
+    let enString = false;
+    let escape = false;
+
+    for (let i = inicio; i < texto.length; i++) {
+      const char = texto[i];
+
+      if (escape) {
+        escape = false;
+        continue;
+      }
+
+      if (char === '\\') {
+        escape = true;
+        continue;
+      }
+
+      if (char === '"') {
+        enString = !enString;
+        continue;
+      }
+
+      if (enString) continue;
+
+      if (char === '{') profundidad++;
+      if (char === '}') {
+        profundidad--;
+        if (profundidad === 0) {
+          return texto.slice(inicio, i + 1);
+        }
+      }
+    }
+
+    return null;
+  },
+
+  generarCandidatosJSON(texto) {
+    const candidatos = [];
+    const agregar = (valor) => {
+      if (!valor || typeof valor !== 'string') return;
+      const limpio = valor.trim();
+      if (!limpio) return;
+      if (!candidatos.includes(limpio)) candidatos.push(limpio);
+
+      const sinComasFinales = this.limpiarComasFinales(limpio);
+      if (sinComasFinales !== limpio && !candidatos.includes(sinComasFinales)) {
+        candidatos.push(sinComasFinales);
+      }
+    };
+
+    agregar(texto);
+
+    const bloqueBalanceado = this.extraerBloqueJSONBalanceado(texto);
+    if (bloqueBalanceado) {
+      agregar(bloqueBalanceado);
+    }
+
+    const matchGreedy = texto.match(/\{[\s\S]*\}/);
+    if (matchGreedy?.[0]) {
+      agregar(matchGreedy[0]);
+    }
+
+    // Caso: string JSON envuelto en comillas
+    if ((texto.startsWith('"') && texto.endsWith('"')) || (texto.startsWith("'") && texto.endsWith("'"))) {
+      const descomillado = texto.slice(1, -1);
+      agregar(descomillado);
+    }
+
+    return candidatos;
   },
 
   /**
