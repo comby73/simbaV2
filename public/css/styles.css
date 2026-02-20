@@ -1933,6 +1933,13 @@ body {
   box-shadow: 0 4px 15px rgba(243, 156, 18, 0.4);
 }
 
+.game-checkbox input:checked+.checkmark.game-quinielaya {
+  background: linear-gradient(135deg, #8e44ad, #6c3483);
+  border: 2px solid #6c3483;
+  color: white;
+  box-shadow: 0 4px 15px rgba(142, 68, 173, 0.4);
+}
+
 .game-checkbox:hover .checkmark {
   transform: translateY(-2px);
 }
@@ -2022,6 +2029,16 @@ span.game-quiniela {
 .badge.game-poceada,
 span.game-poceada {
   background: #f39c12;
+  color: white;
+  padding: 0.25rem 0.5rem;
+  border-radius: 4px;
+  font-size: 0.75rem;
+  font-weight: 600;
+}
+
+.badge.game-quinielaya,
+span.game-quinielaya {
+  background: #8e44ad;
   color: white;
   padding: 0.25rem 0.5rem;
   border-radius: 4px;

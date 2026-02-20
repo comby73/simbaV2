@@ -251,6 +251,26 @@ const controlPosteriorAPI = {
     body: JSON.stringify(datos)
   }),
 
+  escrutinioQuinielaYa: async (file, overwrite = false) => {
+    const formData = new FormData();
+    formData.append('archivo', file);
+    formData.append('overwrite', overwrite ? 'true' : 'false');
+    const token = getToken();
+    const response = await fetch(`${API_BASE}/control-posterior/quinielaya/escrutinio`, {
+      method: 'POST',
+      headers: { 'Authorization': `Bearer ${token}` },
+      body: formData
+    });
+    const data = await response.json();
+    if (!response.ok) {
+      const err = new Error(data.message || 'Error procesando Quiniela Ya');
+      err.status = response.status;
+      err.payload = data;
+      throw err;
+    }
+    return data;
+  },
+
   procesarXmlExtracto: async (file) => {
     const formData = new FormData();
     formData.append('archivo', file);

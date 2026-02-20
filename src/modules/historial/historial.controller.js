@@ -7,7 +7,7 @@
  * - Ver detalle de ganadores
  * - Ver premios por agencia/provincia
  * 
- * Juegos soportados: quiniela, poceada, tombolina, loto, loto5, brinco, quini6
+ * Juegos soportados: quiniela, quinielaya, poceada, tombolina, loto, loto5, brinco, quini6
  */
 
 const { query } = require('../../config/database');
@@ -67,7 +67,7 @@ const listarEscrutinios = async (req, res) => {
     const { juego } = req.params;
     const { fecha, desde, hasta, numeroSorteo, limit } = req.query;
 
-    const juegosValidos = ['quiniela', 'poceada', 'tombolina', 'loto', 'loto5', 'brinco', 'quini6'];
+    const juegosValidos = ['quiniela', 'poceada', 'tombolina', 'loto', 'loto5', 'brinco', 'quini6', 'quinielaya'];
     if (!juegosValidos.includes(juego)) {
       return errorResponse(res, `Juego inválido. Use uno de: ${juegosValidos.join(', ')}`, 400);
     }
@@ -104,7 +104,7 @@ const obtenerGanadores = async (req, res) => {
     const { juego, id } = req.params;
     const { limit, offset } = req.query;
 
-    const juegosValidos = ['quiniela', 'poceada', 'tombolina', 'loto', 'loto5', 'brinco', 'quini6'];
+    const juegosValidos = ['quiniela', 'poceada', 'tombolina', 'loto', 'loto5', 'brinco', 'quini6', 'quinielaya'];
     if (!juegosValidos.includes(juego)) {
       return errorResponse(res, 'Juego inválido', 400);
     }
@@ -169,7 +169,7 @@ const obtenerPremiosAgencias = async (req, res) => {
   try {
     const { juego, id } = req.params;
 
-    const juegosValidos = ['quiniela', 'poceada', 'tombolina', 'loto', 'loto5', 'brinco', 'quini6'];
+    const juegosValidos = ['quiniela', 'poceada', 'tombolina', 'loto', 'loto5', 'brinco', 'quini6', 'quinielaya'];
     if (!juegosValidos.includes(juego)) {
       return errorResponse(res, 'Juego inválido', 400);
     }
@@ -899,6 +899,29 @@ const listarEscrutiniosGeneral = async (req, res) => {
       }
     }
 
+    // Obtener QUINIELA YA
+    if (!juego || juego === 'quinielaya') {
+      try {
+        let sqlQY = `
+          SELECT e.*, u.nombre as usuario_nombre, 'quinielaya' as juego
+          FROM escrutinio_quiniela_ya e
+          LEFT JOIN usuarios u ON e.usuario_id = u.id
+          WHERE 1=1
+        `;
+        const paramsQY = [];
+
+        if (fechaDesde) { sqlQY += ' AND e.fecha >= ?'; paramsQY.push(fechaDesde); }
+        if (fechaHasta) { sqlQY += ' AND e.fecha <= ?'; paramsQY.push(fechaHasta); }
+
+        sqlQY += ` ORDER BY e.fecha DESC, e.created_at DESC LIMIT ${maxLimit}`;
+
+        const quinielaYaData = await query(sqlQY, paramsQY);
+        resultados = resultados.concat(quinielaYaData);
+      } catch (e) {
+        console.log('Tabla escrutinio_quiniela_ya no disponible');
+      }
+    }
+
     // Ordenar por fecha y limitar
     resultados.sort((a, b) => new Date(b.fecha) - new Date(a.fecha));
     resultados = resultados.slice(0, maxLimit);
@@ -920,7 +943,7 @@ const obtenerDetalleEscrutinio = async (req, res) => {
     const { id } = req.params;
     const { juego } = req.query;
 
-    const juegosValidos = ['quiniela', 'poceada', 'tombolina', 'loto', 'loto5', 'brinco', 'quini6'];
+    const juegosValidos = ['quiniela', 'poceada', 'tombolina', 'loto', 'loto5', 'brinco', 'quini6', 'quinielaya'];
     if (!juego || !juegosValidos.includes(juego)) {
       return errorResponse(res, `Debe especificar juego válido: ${juegosValidos.join(', ')}`, 400);
     }
@@ -932,7 +955,8 @@ const obtenerDetalleEscrutinio = async (req, res) => {
       'loto': 'escrutinio_loto',
       'loto5': 'escrutinio_loto5',
       'brinco': 'escrutinio_brinco',
-      'quini6': 'escrutinio_quini6'
+      'quini6': 'escrutinio_quini6',
+      'quinielaya': 'escrutinio_quiniela_ya'
     };
     const tabla = tablaMap[juego];
 
@@ -964,7 +988,7 @@ const obtenerAgenciasEscrutinio = async (req, res) => {
     const { id } = req.params;
     const { juego } = req.query;
 
-    const juegosValidos = ['quiniela', 'poceada', 'tombolina', 'loto', 'loto5', 'brinco', 'quini6'];
+    const juegosValidos = ['quiniela', 'poceada', 'tombolina', 'loto', 'loto5', 'brinco', 'quini6', 'quinielaya'];
     if (!juego || !juegosValidos.includes(juego)) {
       return errorResponse(res, `Debe especificar juego válido: ${juegosValidos.join(', ')}`, 400);
     }
@@ -1323,6 +1347,41 @@ const obtenerDatosDashboard = async (req, res) => {
         `;
         const quini6Data = await query(sqlQ6, paramsQ6);
         resultados = resultados.concat(quini6Data);
+      }
+
+      // QUINIELA YA (sin control previo ni extracto)
+      if (!juego || juego === 'quinielaya') {
+        try {
+          const paramsQY = [];
+          let whereQY = '';
+          if (fechaDesde) { whereQY += ' AND e.fecha >= ?'; paramsQY.push(fechaDesde); }
+          if (fechaHasta) { whereQY += ' AND e.fecha <= ?'; paramsQY.push(fechaHasta); }
+          if (sorteoDesde) { whereQY += ' AND e.numero_sorteo >= ?'; paramsQY.push(sorteoDesde); }
+          if (sorteoHasta) { whereQY += ' AND e.numero_sorteo <= ?'; paramsQY.push(sorteoHasta); }
+
+          const sqlQY = `
+            SELECT
+              e.id, e.fecha, e.numero_sorteo as sorteo, 'Y' as modalidad,
+              e.total_registros,
+              e.total_tickets,
+              e.total_apuestas,
+              e.total_anulados,
+              e.total_recaudacion as recaudacion_total,
+              e.total_premios,
+              e.total_ganadores,
+              e.usuario_nombre,
+              e.created_at,
+              'quinielaya' as juego
+            FROM escrutinio_quiniela_ya e
+            WHERE 1=1 ${whereQY}
+            ORDER BY e.fecha DESC, e.numero_sorteo DESC
+            LIMIT ${maxLimit} OFFSET ${offsetNum}
+          `;
+          const quinielaYaData = await query(sqlQY, paramsQY);
+          resultados = resultados.concat(quinielaYaData);
+        } catch (e) {
+          console.log('Tabla escrutinio_quiniela_ya no disponible');
+        }
       }
 
       // BRINCO
@@ -1774,6 +1833,78 @@ const obtenerDatosDashboard = async (req, res) => {
           }
         });
         resultados = resultados.concat(quini6Data);
+      }
+
+      // QUINIELA YA: cruce de premios + ventas
+      if (!juego || juego === 'quinielaya') {
+        let sqlPremiosQY = buildTotalizadoQuery('escrutinio_quiniela_ya', 'quinielaya');
+        const paramsPremiosQY = [];
+        if (fechaDesde) { sqlPremiosQY += ' AND e.fecha >= ?'; paramsPremiosQY.push(fechaDesde); }
+        if (fechaHasta) { sqlPremiosQY += ' AND e.fecha <= ?'; paramsPremiosQY.push(fechaHasta); }
+        if (sorteoDesde) { sqlPremiosQY += ' AND e.numero_sorteo >= ?'; paramsPremiosQY.push(sorteoDesde); }
+        if (sorteoHasta) { sqlPremiosQY += ' AND e.numero_sorteo <= ?'; paramsPremiosQY.push(sorteoHasta); }
+        if (agencia) { sqlPremiosQY += ' AND epa.cta_cte LIKE ?'; paramsPremiosQY.push(`%${agencia}%`); }
+        sqlPremiosQY += ` GROUP BY
+          CASE WHEN epa.codigo_provincia = '51' THEN epa.cta_cte ELSE CONCAT('PROV-', epa.codigo_provincia) END,
+          CASE WHEN epa.codigo_provincia = '51' THEN epa.cta_cte ELSE epa.codigo_provincia END,
+          epa.codigo_provincia
+          ORDER BY total_premios DESC`;
+
+        let sqlVentasQY = buildVentaQuery('quinielaya');
+        const paramsVentasQY = [];
+        if (fechaDesde) { sqlVentasQY += ' AND cpa.fecha >= ?'; paramsVentasQY.push(fechaDesde); }
+        if (fechaHasta) { sqlVentasQY += ' AND cpa.fecha <= ?'; paramsVentasQY.push(fechaHasta); }
+        if (sorteoDesde) { sqlVentasQY += ' AND cpa.numero_sorteo >= ?'; paramsVentasQY.push(sorteoDesde); }
+        if (sorteoHasta) { sqlVentasQY += ' AND cpa.numero_sorteo <= ?'; paramsVentasQY.push(sorteoHasta); }
+        if (agencia) { sqlVentasQY += ' AND cpa.codigo_agencia LIKE ?'; paramsVentasQY.push(`%${agencia}%`); }
+        sqlVentasQY += ` GROUP BY CASE WHEN cpa.codigo_provincia = '51' THEN cpa.codigo_agencia ELSE CONCAT('PROV-', cpa.codigo_provincia) END`;
+
+        const [premiosQY, ventasQY] = await Promise.all([
+          query(sqlPremiosQY, paramsPremiosQY).catch(() => []),
+          query(sqlVentasQY, paramsVentasQY).catch(() => [])
+        ]);
+
+        const ventasMapQY = {};
+        ventasQY.forEach(v => { ventasMapQY[v.agencia_key] = v; });
+        const premiosMapQY = {};
+        premiosQY.forEach(p => { premiosMapQY[p.agencia] = p; });
+
+        const agenciasSetQY = new Set([
+          ...ventasQY.map(v => v.agencia_key),
+          ...premiosQY.map(p => p.agencia)
+        ]);
+
+        const quinielaYaData = [];
+        for (const agKey of agenciasSetQY) {
+          const venta = ventasMapQY[agKey] || {};
+          const premio = premiosMapQY[agKey] || {};
+          let codProv = '51';
+          if (agKey.startsWith('PROV-')) codProv = agKey.replace('PROV-', '');
+          else if (premio.codigo_provincia) codProv = premio.codigo_provincia;
+
+          quinielaYaData.push({
+            agencia: agKey,
+            codigo: agKey.startsWith('PROV-') ? agKey.replace('PROV-', '') : agKey,
+            codigo_provincia: codProv,
+            nombre: codProv !== '51' ? (PROVINCIAS_NOMBRES[codProv] || `Provincia ${codProv}`) : agKey,
+            total_ganadores: parseInt(premio.total_ganadores) || 0,
+            total_premios: parseFloat(premio.total_premios) || 0,
+            total_sorteos: parseInt(premio.total_sorteos) || 0,
+            total_tickets: parseInt(venta.total_tickets) || 0,
+            total_apuestas: parseInt(venta.total_apuestas) || 0,
+            total_anulados: parseInt(venta.total_anulados) || 0,
+            total_recaudacion: parseFloat(venta.total_recaudacion) || 0,
+            juego: 'quinielaya'
+          });
+        }
+
+        quinielaYaData.forEach(row => {
+          if (row.codigo_provincia !== '51') {
+            row.agencia = row.nombre;
+          }
+        });
+
+        resultados = resultados.concat(quinielaYaData);
       }
 
       // LOTO: Cruce de premios + ventas
@@ -2235,6 +2366,25 @@ const obtenerDatosDashboard = async (req, res) => {
         WHERE 1=1 ${whereC}
       `, paramsC);
 
+      let quinielaYaStats = null;
+      try {
+        [quinielaYaStats] = await query(`
+          SELECT
+            'quinielaya' as juego,
+            COUNT(*) as total_sorteos,
+            SUM(total_recaudacion) as total_recaudacion,
+            SUM(total_tickets) as total_tickets,
+            SUM(total_apuestas) as total_apuestas,
+            SUM(total_anulados) as total_anulados,
+            SUM(total_premios) as total_premios,
+            SUM(total_ganadores) as total_ganadores
+          FROM escrutinio_quiniela_ya
+          WHERE 1=1 ${whereC}
+        `, paramsC);
+      } catch (e) {
+        quinielaYaStats = null;
+      }
+
       resultados = [
         {
           juego: 'quiniela',
@@ -2255,6 +2405,16 @@ const obtenerDatosDashboard = async (req, res) => {
           total_anulados: poceadaStats?.total_anulados || 0,
           total_premios: poceadaPremios?.total_premios || 0,
           total_ganadores: poceadaPremios?.total_ganadores || 0
+        },
+        {
+          juego: 'quinielaya',
+          total_sorteos: quinielaYaStats?.total_sorteos || 0,
+          total_recaudacion: quinielaYaStats?.total_recaudacion || 0,
+          total_tickets: quinielaYaStats?.total_tickets || 0,
+          total_apuestas: quinielaYaStats?.total_apuestas || 0,
+          total_anulados: quinielaYaStats?.total_anulados || 0,
+          total_premios: quinielaYaStats?.total_premios || 0,
+          total_ganadores: quinielaYaStats?.total_ganadores || 0
         }
       ];
 
@@ -2379,7 +2539,10 @@ const obtenerStatsDashboard = async (req, res) => {
         INNER JOIN escrutinio_quiniela eq ON epa.escrutinio_id = eq.id AND epa.juego = 'quiniela'
         WHERE 1=1 ${whereQ}
       `, paramsQ);
-      agenciasQ.forEach(a => agenciasSet.add(a.cta_cte));
+      agenciasQ.forEach(a => {
+        const cta = String(a.cta_cte || '');
+        if (cta.startsWith('51') && cta.length >= 7) agenciasSet.add(cta);
+      });
 
       // Contar provincias activas desde control_previo_agencias (más preciso)
       const provinciasQ = await query(`
@@ -2421,7 +2584,10 @@ const obtenerStatsDashboard = async (req, res) => {
         INNER JOIN escrutinio_poceada ep ON epa.escrutinio_id = ep.id AND epa.juego = 'poceada'
         WHERE 1=1 ${whereP}
       `, paramsP);
-      agenciasP.forEach(a => agenciasSet.add(a.cta_cte));
+      agenciasP.forEach(a => {
+        const cta = String(a.cta_cte || '');
+        if (cta.startsWith('51') && cta.length >= 7) agenciasSet.add(cta);
+      });
 
       // Contar provincias activas desde control_previo_agencias
       const provsP = await query(`
@@ -2462,7 +2628,10 @@ const obtenerStatsDashboard = async (req, res) => {
         INNER JOIN escrutinio_tombolina et ON epa.escrutinio_id = et.id AND epa.juego = 'tombolina'
         WHERE 1=1 ${whereQ.replace(/fecha/g, 'et.fecha').replace(/numero_sorteo/g, 'et.numero_sorteo')}
       `, paramsQ);
-      agenciasT.forEach(a => agenciasSet.add(a.cta_cte));
+      agenciasT.forEach(a => {
+        const cta = String(a.cta_cte || '');
+        if (cta.startsWith('51') && cta.length >= 7) agenciasSet.add(cta);
+      });
 
       const provinciasT = await query(`
         SELECT DISTINCT codigo_provincia
@@ -2473,7 +2642,7 @@ const obtenerStatsDashboard = async (req, res) => {
     }
 
     // BLOQUE GENÉRICO PARA OTROS JUEGOS (Quini 6, Brinco, Loto, etc.)
-    const otrosJuegosStats = ['quini6', 'brinco', 'loto', 'loto5'];
+    const otrosJuegosStats = ['quini6', 'brinco', 'loto', 'loto5', 'quinielaya'];
     for (const j of otrosJuegosStats) {
       if (!juego || juego === j) {
         // Ventas desde control_previo_agencias
@@ -2487,16 +2656,33 @@ const obtenerStatsDashboard = async (req, res) => {
           WHERE juego = ? ${whereQ}
         `, [j, ...paramsQ]);
 
-        // Premios desde escrutinio_premios_agencia
-        // Para juegos genéricos, como no tenemos tabla de escrutinio principal con fecha,
-        // no podemos filtrar premios por fecha fácilmente sin un join complejo.
-        // Por ahora, si hay filtro de fecha, intentamos no romper la consulta.
-        const [escGen] = await query(`
-          SELECT 
-            COALESCE(SUM(total_premios), 0) as premios
-          FROM escrutinio_premios_agencia
-          WHERE juego = ? 
-        `, [j]);
+        // Premios desde escrutinio_premios_agencia.
+        // Para Quiniela Ya sí aplicamos filtros de fecha/sorteo con join a su tabla principal.
+        let escGen = { premios: 0 };
+        if (j === 'quinielaya') {
+          const whereEscQY = whereQ
+            .replace(/\bfecha\b/g, 'e.fecha')
+            .replace(/\bnumero_sorteo\b/g, 'e.numero_sorteo');
+
+          [escGen] = await query(`
+            SELECT
+              COALESCE(SUM(epa.total_premios), 0) as premios
+            FROM escrutinio_premios_agencia epa
+            INNER JOIN escrutinio_quiniela_ya e
+              ON epa.escrutinio_id = e.id
+              AND epa.juego = 'quinielaya'
+            WHERE 1=1 ${whereEscQY}
+          `, paramsQ);
+        } else {
+          // escrutinio_premios_agencia no tiene columnas fecha/numero_sorteo.
+          // Para estos juegos mantenemos el agregado general de premios sin filtro temporal.
+          [escGen] = await query(`
+            SELECT
+              COALESCE(SUM(total_premios), 0) as premios
+            FROM escrutinio_premios_agencia
+            WHERE juego = ?
+          `, [j]);
+        }
 
         stats.total_recaudacion += parseFloat(cpGen?.recaudacion || 0);
         stats.total_tickets += parseInt(cpGen?.tickets || 0);
@@ -2505,12 +2691,32 @@ const obtenerStatsDashboard = async (req, res) => {
         stats.total_premios += parseFloat(escGen?.premios || 0);
 
         // Agencias premiadas
-        const agenciasGen = await query(`
-          SELECT DISTINCT cta_cte
-          FROM escrutinio_premios_agencia
-          WHERE juego = ? 
-        `, [j]);
-        agenciasGen.forEach(a => agenciasSet.add(a.cta_cte));
+        let agenciasGen = [];
+        if (j === 'quinielaya') {
+          const whereEscQY = whereQ
+            .replace(/\bfecha\b/g, 'e.fecha')
+            .replace(/\bnumero_sorteo\b/g, 'e.numero_sorteo');
+
+          agenciasGen = await query(`
+            SELECT DISTINCT epa.cta_cte
+            FROM escrutinio_premios_agencia epa
+            INNER JOIN escrutinio_quiniela_ya e
+              ON epa.escrutinio_id = e.id
+              AND epa.juego = 'quinielaya'
+            WHERE 1=1 ${whereEscQY}
+          `, paramsQ);
+        } else {
+          // Idem: esta tabla no tiene fecha/numero_sorteo para filtrar directamente.
+          agenciasGen = await query(`
+            SELECT DISTINCT cta_cte
+            FROM escrutinio_premios_agencia
+            WHERE juego = ?
+          `, [j]);
+        }
+        agenciasGen.forEach(a => {
+          const cta = String(a.cta_cte || '');
+          if (cta.startsWith('51') && cta.length >= 7) agenciasSet.add(cta);
+        });
 
         // Provincias activas
         const provinciasGen = await query(`
@@ -2552,7 +2758,8 @@ const obtenerStatsDashboard = async (req, res) => {
         SELECT DISTINCT agency FROM facturacion_turfito
         WHERE total_premios > 0 ${whereH}
       `, paramsH);
-      agenciasH.forEach(a => agenciasSet.add('HIP-' + a.agency));
+      // No se suma a agenciasSet para mantener consistencia con el indicador de venta
+      // (que mide agencias CABA desde control_previo_agencias).
     }
 
     // Loto
@@ -2642,6 +2849,15 @@ const obtenerFiltrosDashboard = async (req, res) => {
       SELECT MIN(fecha) as min_fecha, MAX(fecha) as max_fecha
       FROM control_previo_poceada
     `);
+    let fechasQY = null;
+    try {
+      [fechasQY] = await query(`
+        SELECT MIN(fecha) as min_fecha, MAX(fecha) as max_fecha
+        FROM escrutinio_quiniela_ya
+      `);
+    } catch (e) {
+      fechasQY = null;
+    }
 
     // Obtener rango de sorteos
     const [sorteosQ] = await query(`
@@ -2652,12 +2868,21 @@ const obtenerFiltrosDashboard = async (req, res) => {
       SELECT MIN(numero_sorteo) as min_sorteo, MAX(numero_sorteo) as max_sorteo
       FROM control_previo_poceada
     `);
+    let sorteosQY = null;
+    try {
+      [sorteosQY] = await query(`
+        SELECT MIN(numero_sorteo) as min_sorteo, MAX(numero_sorteo) as max_sorteo
+        FROM escrutinio_quiniela_ya
+      `);
+    } catch (e) {
+      sorteosQY = null;
+    }
 
     // Calcular rangos combinados
-    const fechas = [fechasQ?.min_fecha, fechasP?.min_fecha].filter(Boolean);
-    const fechasMax = [fechasQ?.max_fecha, fechasP?.max_fecha].filter(Boolean);
-    const sorteos = [sorteosQ?.min_sorteo, sorteosP?.min_sorteo].filter(Boolean);
-    const sorteosMax = [sorteosQ?.max_sorteo, sorteosP?.max_sorteo].filter(Boolean);
+    const fechas = [fechasQ?.min_fecha, fechasP?.min_fecha, fechasQY?.min_fecha].filter(Boolean);
+    const fechasMax = [fechasQ?.max_fecha, fechasP?.max_fecha, fechasQY?.max_fecha].filter(Boolean);
+    const sorteos = [sorteosQ?.min_sorteo, sorteosP?.min_sorteo, sorteosQY?.min_sorteo].filter(Boolean);
+    const sorteosMax = [sorteosQ?.max_sorteo, sorteosP?.max_sorteo, sorteosQY?.max_sorteo].filter(Boolean);
 
     return successResponse(res, {
       fechas: {
@@ -2668,7 +2893,21 @@ const obtenerFiltrosDashboard = async (req, res) => {
         min: sorteos.length ? Math.min(...sorteos) : null,
         max: sorteosMax.length ? Math.max(...sorteosMax) : null
       },
-      juegos: ['quiniela', 'poceada'],
+      rangosPorJuego: {
+        quiniela: {
+          fechas: { min: fechasQ?.min_fecha || null, max: fechasQ?.max_fecha || null },
+          sorteos: { min: sorteosQ?.min_sorteo || null, max: sorteosQ?.max_sorteo || null }
+        },
+        poceada: {
+          fechas: { min: fechasP?.min_fecha || null, max: fechasP?.max_fecha || null },
+          sorteos: { min: sorteosP?.min_sorteo || null, max: sorteosP?.max_sorteo || null }
+        },
+        quinielaya: {
+          fechas: { min: fechasQY?.min_fecha || null, max: fechasQY?.max_fecha || null },
+          sorteos: { min: sorteosQY?.min_sorteo || null, max: sorteosQY?.max_sorteo || null }
+        }
+      },
+      juegos: ['quiniela', 'quinielaya', 'poceada', 'tombolina', 'loto', 'loto5', 'quini6', 'brinco', 'hipicas'],
       modalidades: ['R', 'P', 'M', 'V', 'N']
     });
 

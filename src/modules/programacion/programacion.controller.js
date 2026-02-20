@@ -35,6 +35,21 @@ const JUEGOS_CONFIG = {
   '0023': { nombre: 'Tombolina', nombreCorto: 'TMB', tipo: 'tombolina' }
 };
 
+function normalizarJuegoDashboard(juego) {
+  const value = String(juego || '').toLowerCase();
+
+  if (value.includes('quiniela ya')) return 'quinielaya';
+  if (value.includes('quiniela') && !value.includes('poceada')) return 'quiniela';
+  if (value.includes('poceada')) return 'poceada';
+  if (value.includes('tombolina')) return 'tombolina';
+  if (value.includes('quini 6') || value.includes('quini6')) return 'quini6';
+  if (value.includes('brinco')) return 'brinco';
+  if (value.includes('loto 5')) return 'loto5';
+  if (value.includes('loto')) return 'loto';
+
+  return value;
+}
+
 /**
  * Detectar el tipo de juego desde el valor de la columna "Juego"
  * @param {string} valorJuego - Valor de la celda (ej: "0069 QUINI 6")
@@ -1052,28 +1067,231 @@ const getSorteosDelDia = async (req, res) => {
       ORDER BY hora_sorteo ASC, juego ASC
     `, [fechaConsulta]);
 
-    // Buscar datos de Control Previo y Escrutinio para cada sorteo
-    const controlPrevioData = await query(`
-      SELECT numero_sorteo, modalidad, total_recaudacion, total_tickets, total_apuestas, total_anulados
-      FROM control_previo_quiniela
-      WHERE fecha = ? ORDER BY id DESC
-    `, [fechaConsulta]).catch(() => []);
+    // Buscar datos de Control Previo y Escrutinio para TODOS los juegos
+    const consultasControlPrevio = [
+      {
+        juego: 'quiniela',
+        sql: `
+          SELECT numero_sorteo, modalidad,
+                 total_recaudacion AS recaudacion,
+                 total_tickets AS tickets,
+                 total_apuestas AS apuestas,
+                 total_anulados AS anulados
+          FROM control_previo_quiniela
+          WHERE fecha = ?
+          ORDER BY id DESC
+        `
+      },
+      {
+        juego: 'poceada',
+        sql: `
+          SELECT numero_sorteo, 'N' AS modalidad,
+                 total_recaudacion AS recaudacion,
+                 total_tickets AS tickets,
+                 total_apuestas AS apuestas,
+                 total_anulados AS anulados
+          FROM control_previo_poceada
+          WHERE fecha = ?
+          ORDER BY id DESC
+        `
+      },
+      {
+        juego: 'tombolina',
+        sql: `
+          SELECT numero_sorteo, 'U' AS modalidad,
+                 total_recaudacion AS recaudacion,
+                 total_tickets AS tickets,
+                 total_apuestas AS apuestas,
+                 total_anulados AS anulados
+          FROM control_previo_tombolina
+          WHERE fecha = ?
+          ORDER BY id DESC
+        `
+      },
+      {
+        juego: 'loto',
+        sql: `
+          SELECT numero_sorteo, 'U' AS modalidad,
+                 recaudacion,
+                 (registros_validos + registros_anulados) AS tickets,
+                 apuestas_total AS apuestas,
+                 registros_anulados AS anulados
+          FROM control_previo_loto
+          WHERE fecha = ?
+          ORDER BY id DESC
+        `
+      },
+      {
+        juego: 'loto5',
+        sql: `
+          SELECT numero_sorteo, 'U' AS modalidad,
+                 recaudacion,
+                 (registros_validos + registros_anulados) AS tickets,
+                 apuestas_total AS apuestas,
+                 registros_anulados AS anulados
+          FROM control_previo_loto5
+          WHERE fecha = ?
+          ORDER BY id DESC
+        `
+      },
+      {
+        juego: 'brinco',
+        sql: `
+          SELECT numero_sorteo, 'U' AS modalidad,
+                 recaudacion,
+                 (registros_validos + registros_anulados) AS tickets,
+                 apuestas_total AS apuestas,
+                 registros_anulados AS anulados
+          FROM control_previo_brinco
+          WHERE fecha = ?
+          ORDER BY id DESC
+        `
+      },
+      {
+        juego: 'quini6',
+        sql: `
+          SELECT numero_sorteo, 'U' AS modalidad,
+                 recaudacion,
+                 (registros_validos + registros_anulados) AS tickets,
+                 apuestas_total AS apuestas,
+                 registros_anulados AS anulados
+          FROM control_previo_quini6
+          WHERE fecha = ?
+          ORDER BY id DESC
+        `
+      }
+    ];
 
-    const escrutinioData = await query(`
-      SELECT numero_sorteo, modalidad, total_premios, total_ganadores
-      FROM escrutinio_quiniela
-      WHERE fecha = ? ORDER BY id DESC
-    `, [fechaConsulta]).catch(() => []);
+    const cpResultados = await Promise.all(
+      consultasControlPrevio.map(async (c) => {
+        try {
+          const rows = await query(c.sql, [fechaConsulta]);
+          return rows.map(r => ({ ...r, _juego: c.juego }));
+        } catch (e) {
+          return [];
+        }
+      })
+    );
+    const controlPrevioData = cpResultados.flat();
 
-    // Indexar por número de sorteo
-    const cpMap = {};
-    controlPrevioData.forEach(cp => { if (!cpMap[cp.numero_sorteo]) cpMap[cp.numero_sorteo] = cp; });
-    const escMap = {};
-    escrutinioData.forEach(esc => { if (!escMap[esc.numero_sorteo]) escMap[esc.numero_sorteo] = esc; });
+    const consultasEscrutinio = [
+      {
+        juego: 'quiniela',
+        sql: `
+          SELECT numero_sorteo, modalidad, total_premios, total_ganadores
+          FROM escrutinio_quiniela
+          WHERE fecha = ?
+          ORDER BY id DESC
+        `
+      },
+      {
+        juego: 'poceada',
+        sql: `
+          SELECT numero_sorteo, 'N' AS modalidad, total_premios, total_ganadores
+          FROM escrutinio_poceada
+          WHERE fecha = ?
+          ORDER BY id DESC
+        `
+      },
+      {
+        juego: 'tombolina',
+        sql: `
+          SELECT numero_sorteo, 'U' AS modalidad, total_premios, total_ganadores
+          FROM escrutinio_tombolina
+          WHERE fecha = ?
+          ORDER BY id DESC
+        `
+      },
+      {
+        juego: 'loto',
+        sql: `
+          SELECT numero_sorteo, 'U' AS modalidad, total_premios, total_ganadores
+          FROM escrutinio_loto
+          WHERE fecha = ?
+          ORDER BY id DESC
+        `
+      },
+      {
+        juego: 'loto5',
+        sql: `
+          SELECT numero_sorteo, 'U' AS modalidad, total_premios, total_ganadores
+          FROM escrutinio_loto5
+          WHERE fecha = ?
+          ORDER BY id DESC
+        `
+      },
+      {
+        juego: 'brinco',
+        sql: `
+          SELECT numero_sorteo, 'U' AS modalidad, total_premios, total_ganadores
+          FROM escrutinio_brinco
+          WHERE fecha = ?
+          ORDER BY id DESC
+        `
+      },
+      {
+        juego: 'quini6',
+        sql: `
+          SELECT numero_sorteo, 'U' AS modalidad, total_premios, total_ganadores
+          FROM escrutinio_quini6
+          WHERE fecha = ?
+          ORDER BY id DESC
+        `
+      },
+      {
+        juego: 'quinielaya',
+        sql: `
+          SELECT numero_sorteo, 'Y' AS modalidad, total_premios, total_ganadores
+          FROM escrutinio_quiniela_ya
+          WHERE fecha = ?
+          ORDER BY id DESC
+        `
+      }
+    ];
+
+    const escResultados = await Promise.all(
+      consultasEscrutinio.map(async (c) => {
+        try {
+          const rows = await query(c.sql, [fechaConsulta]);
+          return rows.map(r => ({ ...r, _juego: c.juego }));
+        } catch (e) {
+          return [];
+        }
+      })
+    );
+    const escrutinioData = escResultados.flat();
+
+    const buildKey = (juego, numeroSorteo, modalidad) =>
+      `${normalizarJuegoDashboard(juego)}|${String(numeroSorteo)}|${String(modalidad || '').toUpperCase()}`;
+    const buildKeySimple = (juego, numeroSorteo) =>
+      `${normalizarJuegoDashboard(juego)}|${String(numeroSorteo)}`;
+
+    const cpMap = new Map();
+    const cpMapSimple = new Map();
+    controlPrevioData.forEach(cp => {
+      const key = buildKey(cp._juego, cp.numero_sorteo, cp.modalidad);
+      const keySimple = buildKeySimple(cp._juego, cp.numero_sorteo);
+      if (!cpMap.has(key)) cpMap.set(key, cp);
+      if (!cpMapSimple.has(keySimple)) cpMapSimple.set(keySimple, cp);
+    });
+
+    const escMap = new Map();
+    const escMapSimple = new Map();
+    escrutinioData.forEach(esc => {
+      const key = buildKey(esc._juego, esc.numero_sorteo, esc.modalidad);
+      const keySimple = buildKeySimple(esc._juego, esc.numero_sorteo);
+      if (!escMap.has(key)) escMap.set(key, esc);
+      if (!escMapSimple.has(keySimple)) escMapSimple.set(keySimple, esc);
+    });
 
     const sorteosConEstado = sorteos.map(s => {
-      const cp = cpMap[s.numero_sorteo] || null;
-      const esc = escMap[s.numero_sorteo] || null;
+      const juegoKey = normalizarJuegoDashboard(s.juego);
+      const modalidadKey = String(s.modalidad_codigo || '').toUpperCase();
+      const key = buildKey(juegoKey, s.numero_sorteo, modalidadKey);
+      const keySimple = buildKeySimple(juegoKey, s.numero_sorteo);
+
+      const cp = cpMap.get(key) || cpMapSimple.get(keySimple) || null;
+      const esc = escMap.get(key) || escMapSimple.get(keySimple) || null;
 
       let estado = 'pendiente';
       let estadoColor = 'secondary';
@@ -1110,10 +1328,10 @@ const getSorteosDelDia = async (req, res) => {
         estadoColor,
         estadoIcono,
         controlPrevio: cp ? {
-          recaudacion: parseFloat(cp.total_recaudacion) || 0,
-          tickets: cp.total_tickets || 0,
-          apuestas: cp.total_apuestas || 0,
-          anulados: cp.total_anulados || 0
+          recaudacion: parseFloat(cp.recaudacion) || 0,
+          tickets: cp.tickets || 0,
+          apuestas: cp.apuestas || 0,
+          anulados: cp.anulados || 0
         } : null,
         controlPosterior: esc ? {
           premiosPagados: parseFloat(esc.total_premios) || 0,

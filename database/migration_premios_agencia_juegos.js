@@ -1,6 +1,6 @@
 /**
  * Migración: Ampliar ENUM juego en escrutinio_premios_agencia
- * Agrega soporte para: loto, loto5, quini6, brinco, hipodromo
+ * Agrega soporte para: tombolina, loto, loto5, quini6, brinco, hipodromo, quinielaya
  * 
  * Uso: node database/migration_premios_agencia_juegos.js
  */
@@ -39,7 +39,7 @@ async function migrate() {
     // 1. Ampliar ENUM en escrutinio_premios_agencia
     await connection.execute(`
       ALTER TABLE escrutinio_premios_agencia 
-      MODIFY COLUMN juego ENUM('quiniela', 'poceada', 'loto', 'loto5', 'quini6', 'brinco', 'hipodromo') NOT NULL
+      MODIFY COLUMN juego ENUM('quiniela', 'poceada', 'tombolina', 'loto', 'loto5', 'quini6', 'brinco', 'hipodromo', 'quinielaya') NOT NULL
     `);
     console.log('✅ ENUM juego ampliado en escrutinio_premios_agencia');
 
@@ -52,7 +52,7 @@ async function migrate() {
     if (tables.length > 0) {
       await connection.execute(`
         ALTER TABLE escrutinio_ganadores 
-        MODIFY COLUMN juego ENUM('quiniela', 'poceada', 'loto', 'loto5', 'quini6', 'brinco', 'hipodromo') NOT NULL
+        MODIFY COLUMN juego ENUM('quiniela', 'poceada', 'tombolina', 'loto', 'loto5', 'quini6', 'brinco', 'hipodromo', 'quinielaya') NOT NULL
       `);
       console.log('✅ ENUM juego ampliado en escrutinio_ganadores');
     }

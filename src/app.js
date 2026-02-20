@@ -104,6 +104,14 @@ app.get('/api/health', (req, res) => {
   });
 });
 
+// Versión de la app (usado por frontend)
+app.get('/api/version', (req, res) => {
+  res.json({
+    version: process.env.APP_VERSION || 'dev',
+    environment: process.env.NODE_ENV || 'development'
+  });
+});
+
 // Manejo de errores
 app.use((err, req, res, next) => {
   console.error('Error:', err);

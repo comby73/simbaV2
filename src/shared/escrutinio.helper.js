@@ -441,7 +441,17 @@ async function guardarDetalleGanadores(escrutinioId, juego, ganadoresDetalle) {
  */
 async function obtenerHistorialEscrutinio(juego, filtros = {}) {
   try {
-    const tabla = juego === 'quiniela' ? 'escrutinio_quiniela' : 'escrutinio_poceada';
+    const tablaMap = {
+      quiniela: 'escrutinio_quiniela',
+      poceada: 'escrutinio_poceada',
+      tombolina: 'escrutinio_tombolina',
+      loto: 'escrutinio_loto',
+      loto5: 'escrutinio_loto5',
+      brinco: 'escrutinio_brinco',
+      quini6: 'escrutinio_quini6',
+      quinielaya: 'escrutinio_quiniela_ya'
+    };
+    const tabla = tablaMap[juego] || 'escrutinio_poceada';
     let sql = `SELECT * FROM ${tabla} WHERE 1=1`;
     const params = [];
 

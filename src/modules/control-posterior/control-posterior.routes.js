@@ -8,13 +8,14 @@ const lotoController = require('./loto-escrutinio.controller');
 const loto5Controller = require('./loto5-escrutinio.controller');
 const brincoController = require('./brinco-escrutinio.controller');
 const quini6Controller = require('./quini6-escrutinio.controller');
+const quinielaYaController = require('./quinielaya-escrutinio.controller');
 const extractoController = require('./extracto.controller');
 const { authenticate } = require('../../shared/middleware');
 
 // Configurar multer para uploads
 const upload = multer({
   storage: multer.memoryStorage(),
-  limits: { fileSize: 10 * 1024 * 1024 } // 10MB
+  limits: { fileSize: 100 * 1024 * 1024 } // 100MB
 });
 
 // Todas las rutas requieren autenticación
@@ -28,6 +29,7 @@ router.post('/loto/escrutinio', lotoController.ejecutar);
 router.post('/loto5/escrutinio', loto5Controller.ejecutar);
 router.post('/brinco/escrutinio', brincoController.ejecutar);
 router.post('/quini6/escrutinio', quini6Controller.ejecutar);
+router.post('/quinielaya/escrutinio', upload.single('archivo'), quinielaYaController.ejecutar);
 
 // BRINCO - Información adicional
 router.get('/brinco/ganadores/:sorteo', brincoController.obtenerGanadoresPrimerPremio);

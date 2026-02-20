@@ -1533,6 +1533,11 @@ const generarActaControlPosterior = async (req, res) => {
   try {
     const datos = req.body;
     const tipoJuego = datos.tipoJuego || 'Quiniela';
+    const tipoJuegoNormalizado = String(tipoJuego)
+      .toLowerCase()
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .replace(/\s+/g, '');
     
     // Crear documento PDF
     const doc = new PDFDocument({ 
@@ -2579,6 +2584,61 @@ const generarActaControlPosterior = async (req, res) => {
       doc.text(formatearMoneda(totalPremiosBrinco), 180, y + 22);
       y += 45;
 
+    } else if (tipoJuegoNormalizado === 'quinielaya') {
+      // ══════════════════════════════════════════════════════════════
+      // QUINIELA YA - Control posterior sin extractos
+      // ══════════════════════════════════════════════════════════════
+      const agencias = Array.isArray(resData.agencias) ? resData.agencias : [];
+      const totalTickets = Number(resData.totalRegistros || 0);
+      const totalApuestas = Number(resData.totalApuestas || 0);
+      const totalAnulados = Number(resData.totalAnulados || 0);
+      const recaudacionValida = Number(resData.totalRecaudacion || 0);
+      const recaudacionAnulada = agencias.reduce((acc, ag) => acc + Number(ag.importe_cancelaciones || 0), 0);
+      const recaudacionTotal = recaudacionValida + recaudacionAnulada;
+      const totalPremios = Number(resData.totalPremios || 0);
+      const tasaDevolucion = recaudacionValida > 0 ? (totalPremios / recaudacionValida) * 100 : 0;
+
+      doc.rect(50, y, 495, 22).fill('#1e3a5f');
+      doc.fillColor('#ffffff').fontSize(10).font('Helvetica-Bold')
+        .text('RESUMEN GENERAL QUINIELA YA', 60, y + 6);
+      y += 28;
+
+      const cards = [
+        { label: 'TICKETS VENTA', value: formatearNumero(totalTickets), colorBg: '#eff6ff', colorBorder: '#3b82f6', colorText: '#1d4ed8' },
+        { label: 'APUESTAS', value: formatearNumero(totalApuestas), colorBg: '#f5f3ff', colorBorder: '#8b5cf6', colorText: '#6d28d9' },
+        { label: 'ANULADOS', value: formatearNumero(totalAnulados), colorBg: '#fef2f2', colorBorder: '#ef4444', colorText: '#b91c1c' },
+        { label: 'PREMIOS', value: formatearMoneda(totalPremios), colorBg: '#ecfeff', colorBorder: '#06b6d4', colorText: '#0e7490' },
+        { label: 'RECAUD. VÁLIDA', value: formatearMoneda(recaudacionValida), colorBg: '#fffbeb', colorBorder: '#f59e0b', colorText: '#92400e' },
+        { label: 'TASA DEV.', value: `${tasaDevolucion.toFixed(2)}%`, colorBg: '#faf5ff', colorBorder: '#a855f7', colorText: '#7e22ce' }
+      ];
+
+      const cardW = 160;
+      const cardH = 45;
+      const gapX = 7;
+      const gapY = 8;
+      cards.forEach((card, idx) => {
+        const col = idx % 3;
+        const row = Math.floor(idx / 3);
+        const x = 50 + (col * (cardW + gapX));
+        const yy = y + (row * (cardH + gapY));
+        doc.rect(x, yy, cardW, cardH).fill(card.colorBg).stroke(card.colorBorder);
+        doc.fillColor(card.colorText).fontSize(7).font('Helvetica-Bold').text(card.label, x + 6, yy + 7);
+        doc.fontSize(11).font('Helvetica-Bold').text(card.value, x + 6, yy + 22, { width: cardW - 12 });
+      });
+      y += (cardH * 2) + gapY + 14;
+
+      doc.rect(50, y, 495, 18).fill('#334155');
+      doc.fillColor('#ffffff').fontSize(9).font('Helvetica-Bold')
+        .text('TOTALES DE RECAUDACIÓN', 60, y + 4);
+      y += 22;
+
+      doc.font('Helvetica').fontSize(9).fillColor('#333');
+      doc.text(`Recaudación Total: ${formatearMoneda(recaudacionTotal)}`, 60, y);
+      doc.text(`Recaudación Válida: ${formatearMoneda(recaudacionValida)}`, 250, y);
+      y += 14;
+      doc.text(`Recaudación Anulada: ${formatearMoneda(recaudacionAnulada)}`, 60, y);
+      doc.text(`Tickets Anulados: ${formatearNumero(totalAnulados)}`, 250, y);
+      y += 20;
     } else {
       // ══════════════════════════════════════════════════════════════
       // POCEADA / TOMBOLINA - Código existente
