@@ -3489,7 +3489,7 @@ async function procesarExtractoPoceadaOCR(file) {
   // Mostrar status OCR
   status?.classList.remove('hidden');
   fileInfo?.classList.add('hidden');
-  if (mensaje) mensaje.textContent = 'Procesando archivo con OCR...';
+  if (mensaje) mensaje.textContent = `Procesando archivo con OCR${getSufijoProveedorOCR()}...`;
   if (progress) progress.querySelector('div').style.width = '10%';
   
   try {
@@ -3505,7 +3505,7 @@ async function procesarExtractoPoceadaOCR(file) {
     
     // Si aún no tiene API Key, mostrar error
     if (!OCRExtractos.hasApiKey()) {
-      throw new Error('OCR no configurado. Configure la API Key en Configuración.');
+      throw new Error('OCR no configurado. Configure una API Key de OCR (Groq/OpenAI) en Configuración.');
     }
     
     if (progress) progress.querySelector('div').style.width = '20%';
@@ -3526,7 +3526,7 @@ async function procesarExtractoPoceadaOCR(file) {
     }
     
     if (progress) progress.querySelector('div').style.width = '50%';
-    if (mensaje) mensaje.textContent = 'Extrayendo datos con IA...';
+    if (mensaje) mensaje.textContent = `Extrayendo datos con IA${getSufijoProveedorOCR()}...`;
     
     // Procesar con OCR específico según el juego seleccionado
     let result;
@@ -3552,7 +3552,7 @@ async function procesarExtractoPoceadaOCR(file) {
           if (filename) filename.textContent = file.name;
         }, 500);
         
-        showToast(`Extracto ${cpstJuegoSeleccionado === 'Tombolina' ? 'TOMBOLINA' : 'POCEADA'} procesado correctamente con OCR`, 'success');
+        showToast(`Extracto ${cpstJuegoSeleccionado === 'Tombolina' ? 'TOMBOLINA' : 'POCEADA'} procesado correctamente con OCR${getSufijoProveedorOCR()}`, 'success');
       }
     } else {
       throw new Error(result.error || 'No se pudieron extraer los datos');
@@ -4859,14 +4859,14 @@ async function cargarExtractoImagen(input) {
   const mensaje = document.getElementById('cpst-ocr-mensaje');
   const progress = document.getElementById('cpst-ocr-progress');
   status.classList.remove('hidden');
-  mensaje.textContent = 'Procesando imagen con IA...';
+  mensaje.textContent = `Procesando imagen con IA${getSufijoProveedorOCR()}...`;
   progress.style.width = '20%';
 
   try {
     // Verificar si OCRExtractos está disponible y tiene API key
     if (window.OCRExtractos && OCRExtractos.hasApiKey()) {
-      // Usar OCR inteligente con Groq
-      mensaje.textContent = 'Analizando imagen con IA...';
+      // Usar OCR inteligente con proveedor activo
+      mensaje.textContent = `Analizando imagen con IA${getSufijoProveedorOCR()}...`;
       progress.style.width = '40%';
 
       const { base64, mimeType } = await OCRExtractos.imageToBase64(file);
@@ -4901,7 +4901,7 @@ async function cargarExtractoImagen(input) {
 
         progress.style.width = '100%';
         mensaje.textContent = '¡Completado!';
-        showToast(`OCR IA: ${data.numeros?.length || 0} números detectados. Provincia: ${data.provincia || 'No detectada'}`, 'success');
+        showToast(`OCR IA${getSufijoProveedorOCR()}: ${data.numeros?.length || 0} números detectados. Provincia: ${data.provincia || 'No detectada'}`, 'success');
       } else {
         throw new Error('No se pudieron extraer datos de la imagen');
       }
@@ -4918,7 +4918,7 @@ async function cargarExtractoImagen(input) {
 
     // Fallback automático a Tesseract cuando falla el OCR con IA
     try {
-      mensaje.textContent = 'OCR IA falló. Intentando OCR alternativo...';
+      mensaje.textContent = `OCR IA${getSufijoProveedorOCR()} falló. Intentando OCR alternativo...`;
       progress.style.width = '30%';
       await usarTesseractOCR(file, status, mensaje, progress);
       showToast('Se procesó la imagen con OCR alternativo', 'warning');
@@ -5069,7 +5069,7 @@ async function cargarExtractoPDF(input) {
   try {
     // Verificar si OCRExtractos está disponible con Groq API
     if (window.OCRExtractos && OCRExtractos.hasApiKey()) {
-      showToast('Procesando PDF con IA...', 'info');
+      showToast(`Procesando PDF con IA${getSufijoProveedorOCR()}...`, 'info');
 
       // Convertir PDF a imagen
       const { base64, mimeType } = await OCRExtractos.pdfToImage(file);
@@ -5100,7 +5100,7 @@ async function cargarExtractoPDF(input) {
           }
         }
 
-        showToast(`PDF procesado: ${data.numeros?.length || 0} números. Provincia: ${data.provincia || 'No detectada'}`, 'success');
+        showToast(`PDF procesado${getSufijoProveedorOCR()}: ${data.numeros?.length || 0} números. Provincia: ${data.provincia || 'No detectada'}`, 'success');
       } else {
         throw new Error('No se pudieron extraer datos del PDF');
       }
@@ -5132,7 +5132,7 @@ async function cargarExtractoPDF(input) {
 
     // Fallback a OCR alternativo para PDF
     try {
-      showToast('OCR IA falló en PDF. Intentando OCR alternativo...', 'warning');
+      showToast(`OCR IA${getSufijoProveedorOCR()} falló en PDF. Intentando OCR alternativo...`, 'warning');
       await procesarPDFconOCR(file);
       return;
     } catch (fallbackError) {
@@ -5610,6 +5610,7 @@ async function procesarArchivoImagenInteligente(archivo) {
   // Intento principal: OCR con proveedores API
   if (window.OCRExtractos && OCRExtractos.hasApiKey()) {
     try {
+      console.log(`[OCR] Procesando imagen ${archivo.name} con ${getProveedorOCRActivo() || 'proveedor no identificado'}`);
       const { base64, mimeType } = await OCRExtractos.imageToBase64(archivo);
       const resultado = await OCRExtractos.procesarImagenQuiniela(base64, mimeType, '');
 
@@ -5704,6 +5705,7 @@ async function procesarArchivoPDFInteligente(archivo) {
   // Intento principal: OCR con proveedores API
   if (window.OCRExtractos && OCRExtractos.hasApiKey()) {
     try {
+      console.log(`[OCR] Procesando PDF ${archivo.name} con ${getProveedorOCRActivo() || 'proveedor no identificado'}`);
       const { base64, mimeType } = await OCRExtractos.pdfToImage(archivo);
       const resultado = await OCRExtractos.procesarImagenQuiniela(base64, mimeType, '');
 
@@ -9109,7 +9111,7 @@ async function procesarExtractoQuini6OCR(file) {
   // Mostrar status OCR
   status?.classList.remove('hidden');
   fileInfo?.classList.add('hidden');
-  if (mensaje) mensaje.textContent = 'Procesando archivo con OCR...';
+  if (mensaje) mensaje.textContent = `Procesando archivo con OCR${getSufijoProveedorOCR()}...`;
   if (progress) progress.querySelector('div').style.width = '10%';
   
   try {
@@ -9125,7 +9127,7 @@ async function procesarExtractoQuini6OCR(file) {
     
     // Si aún no tiene API Key, mostrar error
     if (!OCRExtractos.hasApiKey()) {
-      throw new Error('OCR no configurado. Configure la API Key de Groq en Configuración.');
+      throw new Error('OCR no configurado. Configure una API Key de OCR (Groq/OpenAI) en Configuración.');
     }
     
     if (progress) progress.querySelector('div').style.width = '20%';
@@ -9146,7 +9148,7 @@ async function procesarExtractoQuini6OCR(file) {
     }
     
     if (progress) progress.querySelector('div').style.width = '50%';
-    if (mensaje) mensaje.textContent = 'Extrayendo datos con IA...';
+    if (mensaje) mensaje.textContent = `Extrayendo datos con IA${getSufijoProveedorOCR()}...`;
     
     // Procesar con OCR específico de Quini6
     const result = await OCRExtractos.procesarImagenQuini6(base64, mimeType);
@@ -9167,7 +9169,7 @@ async function procesarExtractoQuini6OCR(file) {
           if (filename) filename.textContent = file.name;
         }, 500);
         
-        showToast('Extracto QUINI 6 procesado correctamente con OCR', 'success');
+        showToast(`Extracto QUINI 6 procesado correctamente con OCR${getSufijoProveedorOCR()}`, 'success');
       }
     } else {
       throw new Error(result.error || 'No se pudieron extraer los datos');
@@ -9426,7 +9428,7 @@ async function procesarExtractoBrincoOCR(file) {
   // Mostrar status OCR
   status?.classList.remove('hidden');
   fileInfo?.classList.add('hidden');
-  if (mensaje) mensaje.textContent = 'Procesando archivo con OCR...';
+  if (mensaje) mensaje.textContent = `Procesando archivo con OCR${getSufijoProveedorOCR()}...`;
   if (progress) progress.querySelector('div').style.width = '10%';
   
   try {
@@ -9442,7 +9444,7 @@ async function procesarExtractoBrincoOCR(file) {
     
     // Si aún no tiene API Key, mostrar error
     if (!OCRExtractos.hasApiKey()) {
-      throw new Error('OCR no configurado. Configure la API Key de Groq en Configuración.');
+      throw new Error('OCR no configurado. Configure una API Key de OCR (Groq/OpenAI) en Configuración.');
     }
     
     if (progress) progress.querySelector('div').style.width = '20%';
@@ -9463,7 +9465,7 @@ async function procesarExtractoBrincoOCR(file) {
     }
     
     if (progress) progress.querySelector('div').style.width = '50%';
-    if (mensaje) mensaje.textContent = 'Extrayendo datos con IA...';
+    if (mensaje) mensaje.textContent = `Extrayendo datos con IA${getSufijoProveedorOCR()}...`;
     
     // Procesar con OCR específico de Brinco
     const result = await OCRExtractos.procesarImagenBrinco(base64, mimeType);
@@ -9484,7 +9486,7 @@ async function procesarExtractoBrincoOCR(file) {
           if (filename) filename.textContent = file.name;
         }, 500);
         
-        showToast('Extracto BRINCO procesado correctamente con OCR', 'success');
+        showToast(`Extracto BRINCO procesado correctamente con OCR${getSufijoProveedorOCR()}`, 'success');
       }
     } else {
       throw new Error(result.error || 'No se pudieron extraer los datos');
@@ -11699,9 +11701,47 @@ function cerrarModal(el) {
 let ocrImagenActual = null;
 let ocrPdfActual = null;
 let extractosPendientes = [];
+let ocrProviderListenerRegistrado = false;
+
+function getProveedorOCRActivo() {
+  if (!window.OCRExtractos) return null;
+
+  if (typeof OCRExtractos.getCurrentProviderName === 'function') {
+    return OCRExtractos.getCurrentProviderName();
+  }
+
+  if (typeof OCRExtractos.getAvailableProviders === 'function') {
+    const provider = OCRExtractos.getAvailableProviders()[0];
+    return provider?.name || null;
+  }
+
+  return null;
+}
+
+function getSufijoProveedorOCR() {
+  const provider = getProveedorOCRActivo();
+  return provider ? ` (${provider})` : '';
+}
+
+function actualizarIndicadorProveedorOCR(providerName = null) {
+  const indicator = document.getElementById('ocr-provider-indicator');
+  if (!indicator) return;
+
+  const provider = providerName || getProveedorOCRActivo();
+  const badgeClass = provider ? 'bg-success' : 'bg-secondary';
+  const providerText = provider || 'Sin configurar';
+  indicator.innerHTML = `<span class="badge ${badgeClass}">Proveedor OCR activo: ${providerText}</span>`;
+}
 
 // Inicializar OCR al cargar la vista de extractos
 function initOCRExtractos() {
+  if (!ocrProviderListenerRegistrado) {
+    window.addEventListener('ocr-provider-changed', (event) => {
+      actualizarIndicadorProveedorOCR(event?.detail?.provider || null);
+    });
+    ocrProviderListenerRegistrado = true;
+  }
+
   // Área Unificada (Smart Upload)
   const unifiedArea = document.getElementById('extracto-unified-area');
   const unifiedInput = document.getElementById('extracto-unified-input');
@@ -11743,6 +11783,8 @@ function initOCRExtractos() {
       }
     });
   }
+
+  actualizarIndicadorProveedorOCR();
 }
 
 // Lógica de detección de archivos
@@ -11852,7 +11894,7 @@ async function procesarPdfOCR_Simple(file) {
     document.getElementById('ocr-preview').classList.remove('hidden');
     document.getElementById('ocr-preview-img').src = `data:${mimeType};base64,${base64}`;
 
-    showToast('Listo para procesar con IA', 'success');
+    showToast(`Listo para procesar con IA${getSufijoProveedorOCR()}`, 'success');
   } catch (error) {
     showToast('Error procesando PDF: ' + error.message, 'error');
   }
@@ -12056,7 +12098,7 @@ async function procesarImagenOCR() {
 
     if (resultado.success) {
       mostrarResultadoOCR(resultado.data);
-      showToast('Imagen procesada correctamente', 'success');
+      showToast(`Imagen procesada correctamente${getSufijoProveedorOCR()}`, 'success');
       cancelarProcesamiento();
     } else {
       showToast('Error procesando imagen', 'error');
@@ -12365,14 +12407,15 @@ function guardarApiKey() {
     return;
   }
 
-  OCRExtractos.setApiKey(key);
+  const provider = OCRExtractos.setApiKey(key);
   actualizarEstadoApiKey();
-  showToast('API key guardada', 'success');
+  actualizarIndicadorProveedorOCR(provider || null);
+  showToast(`API key guardada${provider ? ` (${provider})` : ''}`, 'success');
 }
 
 async function testApiKey() {
   const resultEl = document.getElementById('api-test-result');
-  resultEl.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Probando conexión...';
+  resultEl.innerHTML = `<i class="fas fa-spinner fa-spin"></i> Probando conexión${getSufijoProveedorOCR()}...`;
 
   try {
     // Crear una imagen de prueba simple (1x1 pixel blanco)

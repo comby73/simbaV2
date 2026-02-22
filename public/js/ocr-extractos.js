@@ -5,6 +5,12 @@
 // ============================================
 
 const OCRExtractos = {
+  STORAGE_KEYS: {
+    GROQ: 'groq_api_key',
+    OPENAI: 'openai_api_key',
+    MISTRAL: 'mistral_api_key'
+  },
+
   // Configuración principal (Groq por defecto, compatible con versión anterior)
   CONFIG: {
     API_URL: 'https://api.groq.com/openai/v1/chat/completions',
@@ -14,13 +20,15 @@ const OCRExtractos = {
 
   // Lista de proveedores para fallback
   PROVIDERS: [],
+  CURRENT_PROVIDER: null,
 
   // Inicializar con config global o localStorage
   init() {
     // 1. Cargar proveedores desde config.js
     if (window.SIMBA_CONFIG && window.SIMBA_CONFIG.OCR_PROVIDERS) {
-      this.PROVIDERS = window.SIMBA_CONFIG.OCR_PROVIDERS.filter(p => p.enabled && p.API_KEY);
-      console.log('[OCR] Proveedores configurados:', this.PROVIDERS.map(p => p.name).join(' → '));
+      this.PROVIDERS = window.SIMBA_CONFIG.OCR_PROVIDERS
+        .filter(p => p.enabled)
+        .map(p => ({ ...p, API_KEY: (p.API_KEY || '').trim() }));
     }
 
     // 2. Fallback a configuración legacy (solo Groq)
@@ -31,38 +39,129 @@ const OCRExtractos = {
       this.PROVIDERS = [{
         name: 'GROQ',
         enabled: true,
-        API_KEY: this.CONFIG.API_KEY,
+        API_KEY: (this.CONFIG.API_KEY || '').trim(),
         API_URL: this.CONFIG.API_URL,
         MODEL: this.CONFIG.MODEL
       }];
     }
 
     // 3. Sobrescribir con localStorage si existe (preferencia del usuario)
-    const savedKey = localStorage.getItem('groq_api_key');
-    if (savedKey && this.PROVIDERS.length > 0) {
-      // Actualizar la key de Groq si existe en providers
-      const groqProvider = this.PROVIDERS.find(p => p.name === 'GROQ');
-      if (groqProvider) {
-        groqProvider.API_KEY = savedKey;
+    if (this.PROVIDERS.length > 0) {
+      this.PROVIDERS.forEach(provider => {
+        const storageKey = this.STORAGE_KEYS[provider.name];
+        const savedKey = storageKey ? localStorage.getItem(storageKey) : '';
+        if (savedKey && savedKey.trim()) {
+          provider.API_KEY = savedKey.trim();
+        }
+      });
+
+      // Compatibilidad legacy: si existe groq_api_key y no hay GROQ cargado, mantener CONFIG.API_KEY
+      const savedGroqKey = localStorage.getItem('groq_api_key');
+      if (savedGroqKey && savedGroqKey.trim()) {
+        const groqProvider = this.PROVIDERS.find(p => p.name === 'GROQ');
+        if (groqProvider) {
+          groqProvider.API_KEY = savedGroqKey.trim();
+        }
       }
-      this.CONFIG.API_KEY = savedKey;
     }
 
     const savedModel = localStorage.getItem('groq_model');
     if (savedModel) {
       this.CONFIG.MODEL = savedModel;
     }
+
+    const activo = this.getAvailableProviders()[0];
+    if (activo) {
+      this.CONFIG.API_KEY = activo.API_KEY;
+      this.CONFIG.API_URL = activo.API_URL;
+      this.CONFIG.MODEL = activo.MODEL;
+      this.CURRENT_PROVIDER = activo.name;
+    } else {
+      this.CURRENT_PROVIDER = null;
+    }
+
+    this.emitirCambioProveedor();
+
+    const resumen = this.PROVIDERS
+      .map(p => `${p.name}${p.API_KEY ? '✓' : '✗'}`)
+      .join(' → ');
+    console.log('[OCR] Proveedores habilitados:', resumen || 'ninguno');
   },
 
-  // Guardar API key (legacy)
-  setApiKey(key) {
-    this.CONFIG.API_KEY = key;
-    localStorage.setItem('groq_api_key', key);
+  getAvailableProviders() {
+    return this.PROVIDERS.filter(p => p.enabled !== false && !!(p.API_KEY && p.API_KEY.trim()));
+  },
+
+  getCurrentProviderName() {
+    if (this.CURRENT_PROVIDER) return this.CURRENT_PROVIDER;
+    const firstAvailable = this.getAvailableProviders()[0];
+    return firstAvailable ? firstAvailable.name : null;
+  },
+
+  emitirCambioProveedor() {
+    if (typeof window === 'undefined') return;
+    window.dispatchEvent(new CustomEvent('ocr-provider-changed', {
+      detail: { provider: this.getCurrentProviderName() }
+    }));
+  },
+
+  detectarProveedorPorKey(key) {
+    const normalized = (key || '').trim();
+    if (normalized.startsWith('gsk_')) return 'GROQ';
+    if (normalized.startsWith('sk-')) return 'OPENAI';
+    return 'GROQ';
+  },
+
+  // Guardar API key (con autodetección de proveedor)
+  setApiKey(key, providerName = 'AUTO') {
+    const normalizedKey = (key || '').trim();
+    if (!normalizedKey) return null;
+
+    const detectedProvider = providerName === 'AUTO'
+      ? this.detectarProveedorPorKey(normalizedKey)
+      : providerName;
+
+    let provider = this.PROVIDERS.find(p => p.name === detectedProvider);
+
+    if (!provider && detectedProvider === 'GROQ') {
+      provider = {
+        name: 'GROQ',
+        enabled: true,
+        API_KEY: '',
+        API_URL: this.CONFIG.API_URL,
+        MODEL: this.CONFIG.MODEL
+      };
+      this.PROVIDERS.unshift(provider);
+    }
+
+    if (provider) {
+      provider.API_KEY = normalizedKey;
+      this.CONFIG.API_KEY = normalizedKey;
+      this.CONFIG.API_URL = provider.API_URL || this.CONFIG.API_URL;
+      this.CONFIG.MODEL = provider.MODEL || this.CONFIG.MODEL;
+      this.CURRENT_PROVIDER = provider.name;
+      this.emitirCambioProveedor();
+
+      const storageKey = this.STORAGE_KEYS[provider.name] || 'groq_api_key';
+      localStorage.setItem(storageKey, normalizedKey);
+
+      if (provider.name === 'GROQ') {
+        localStorage.setItem('groq_api_key', normalizedKey);
+      }
+
+      return provider.name;
+    }
+
+    this.CONFIG.API_KEY = normalizedKey;
+    this.CURRENT_PROVIDER = this.detectarProveedorPorKey(normalizedKey);
+    this.emitirCambioProveedor();
+    localStorage.setItem('groq_api_key', normalizedKey);
+    return null;
   },
 
   // Verificar si hay API key configurada
   hasApiKey() {
-    return this.PROVIDERS.length > 0 || !!this.CONFIG.API_KEY;
+    return this.getAvailableProviders().length > 0 || !!(this.CONFIG.API_KEY && this.CONFIG.API_KEY.trim());
   },
 
   /**
@@ -107,7 +206,9 @@ Responde SOLO con este JSON (INCLUIR SIEMPRE EL CAMPO "letras"):
 
   // Llamar a la API con sistema de fallback (Groq → Mistral → OpenAI)
   async llamarAPI(imageBase64, mimeType, prompt) {
-    if (this.PROVIDERS.length === 0 && !this.CONFIG.API_KEY) {
+    const availableProviders = this.getAvailableProviders();
+
+    if (availableProviders.length === 0 && !this.CONFIG.API_KEY) {
       throw new Error('No hay API keys configuradas. Configurá al menos una clave en config.js');
     }
 
@@ -129,7 +230,7 @@ Responde SOLO con este JSON (INCLUIR SIEMPRE EL CAMPO "letras"):
     console.log('[OCR] Base64 length:', cleanBase64.length);
 
     // Intentar con cada proveedor en orden
-    const providers = this.PROVIDERS.length > 0 ? this.PROVIDERS : [{
+    const providers = availableProviders.length > 0 ? availableProviders : [{
       name: 'GROQ',
       API_KEY: this.CONFIG.API_KEY,
       API_URL: this.CONFIG.API_URL,
@@ -142,6 +243,8 @@ Responde SOLO con este JSON (INCLUIR SIEMPRE EL CAMPO "letras"):
       try {
         console.log(`[OCR] Intentando con ${provider.name}...`);
         const result = await this.llamarProviderAPI(provider, dataUrl, prompt);
+        this.CURRENT_PROVIDER = provider.name;
+        this.emitirCambioProveedor();
         console.log(`[OCR] ✓ ${provider.name} respondió correctamente`);
         return result;
       } catch (error) {
