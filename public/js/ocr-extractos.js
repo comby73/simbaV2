@@ -50,7 +50,7 @@ const OCRExtractos = {
       this.PROVIDERS.forEach(provider => {
         const storageKey = this.STORAGE_KEYS[provider.name];
         const savedKey = storageKey ? localStorage.getItem(storageKey) : '';
-        if (savedKey && savedKey.trim()) {
+        if ((!provider.API_KEY || !provider.API_KEY.trim()) && savedKey && savedKey.trim()) {
           provider.API_KEY = savedKey.trim();
         }
       });
@@ -59,7 +59,7 @@ const OCRExtractos = {
       const savedGroqKey = localStorage.getItem('groq_api_key');
       if (savedGroqKey && savedGroqKey.trim()) {
         const groqProvider = this.PROVIDERS.find(p => p.name === 'GROQ');
-        if (groqProvider) {
+        if (groqProvider && (!groqProvider.API_KEY || !groqProvider.API_KEY.trim())) {
           groqProvider.API_KEY = savedGroqKey.trim();
         }
       }
