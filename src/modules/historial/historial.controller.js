@@ -111,9 +111,22 @@ const obtenerGanadores = async (req, res) => {
 
     // Obtener ganadores con paginación
     let sql = `
-      SELECT * FROM escrutinio_ganadores 
-      WHERE escrutinio_id = ? AND juego = ?
-      ORDER BY premio DESC
+      SELECT
+        g.*,
+        a.nombre as agencia_nombre,
+        a.direccion as agencia_direccion,
+        a.localidad as agencia_localidad
+      FROM escrutinio_ganadores g
+      LEFT JOIN agencias a
+        ON (
+          a.numero = g.cta_cte
+          OR (
+            a.provincia = g.codigo_provincia
+            AND LPAD(CAST(a.cuenta_corriente AS CHAR), 5, '0') = LPAD(g.codigo_agencia, 5, '0')
+          )
+        )
+      WHERE g.escrutinio_id = ? AND g.juego = ?
+      ORDER BY g.premio DESC
     `;
     const params = [id, juego];
 
@@ -124,7 +137,14 @@ const obtenerGanadores = async (req, res) => {
       }
     }
 
-    const ganadores = await query(sql, params);
+    const ganadoresRaw = await query(sql, params);
+    const ganadores = ganadoresRaw.map(g => {
+      const codProv = String(g.codigo_provincia || '').padStart(2, '0');
+      return {
+        ...g,
+        provincia_nombre: PROVINCIAS[codProv] || codProv || '-'
+      };
+    });
 
     // Obtener total
     const [{ total }] = await query(

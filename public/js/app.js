@@ -13034,11 +13034,17 @@ async function buscarEscrutinios() {
 // Ver detalle de Escrutinio
 async function verDetalleEscrutinio(id, juego) {
   try {
-    const response = await fetch(`${API_BASE}/historial/escrutinios/${id}?juego=${juego}`, {
-      headers: { 'Authorization': `Bearer ${getToken()}` }
-    });
+    const [responseDetalle, responseGanadores] = await Promise.all([
+      fetch(`${API_BASE}/historial/escrutinios/${id}?juego=${juego}`, {
+        headers: { 'Authorization': `Bearer ${getToken()}` }
+      }),
+      fetch(`${API_BASE}/historial/escrutinio/juego/${juego}/${id}/ganadores?limit=5000`, {
+        headers: { 'Authorization': `Bearer ${getToken()}` }
+      })
+    ]);
 
-    const data = await response.json();
+    const data = await responseDetalle.json();
+    const dataGanadores = await responseGanadores.json();
 
     if (!data.success) {
       showToast('Error obteniendo detalle', 'error');
@@ -13046,6 +13052,13 @@ async function verDetalleEscrutinio(id, juego) {
     }
 
     const item = data.data;
+    const ganadores = dataGanadores?.success ? (dataGanadores.data?.ganadores || []) : [];
+    const ganadoresPrimerPremio = ganadores.filter(g => {
+      const tipo = String(g.tipo_premio || '').toUpperCase();
+      const pos = Number(g.posicion_ganadora || 0);
+      return tipo.includes('PRIMER') || tipo === '1' || pos === 1;
+    });
+
     let resumenPremios = {};
     try {
       resumenPremios = item.resumen_premios ? JSON.parse(item.resumen_premios) : {};
@@ -13075,6 +13088,30 @@ async function verDetalleEscrutinio(id, juego) {
             </div>
             <p><strong>Fecha Sorteo:</strong> ${formatDate(item.fecha)}</p>
             <p><strong>Modalidad:</strong> ${getModalidadNombre(item.modalidad || 'N')}</p>
+            ${ganadoresPrimerPremio.length > 0 ? `
+              <h4 class="mt-4">Primer Premio - Dónde se vendió</h4>
+              <div class="table-container" style="max-height: 220px; overflow-y: auto;">
+                <table class="table table-sm">
+                  <thead><tr><th>Cta Cte</th><th>Provincia</th><th>Dirección (CABA)</th><th>Premio</th></tr></thead>
+                  <tbody>
+                    ${ganadoresPrimerPremio.map(g => {
+                      const esCaba = String(g.codigo_provincia || '').padStart(2, '0') === '51';
+                      const direccion = esCaba
+                        ? [g.agencia_direccion, g.agencia_localidad].filter(Boolean).join(' - ') || '-'
+                        : '-';
+                      return `
+                        <tr>
+                          <td>${g.cta_cte || '-'}</td>
+                          <td>${g.provincia_nombre || g.codigo_provincia || '-'}</td>
+                          <td>${direccion}</td>
+                          <td>$${formatNumber(g.premio || 0)}</td>
+                        </tr>
+                      `;
+                    }).join('')}
+                  </tbody>
+                </table>
+              </div>
+            ` : ''}
             ${resumenPremios.porTipo ? `
               <h4 class="mt-4">Desglose por Tipo de Premio</h4>
               <table class="table table-sm">
@@ -13090,6 +13127,44 @@ async function verDetalleEscrutinio(id, juego) {
                 </tbody>
               </table>
             ` : ''}
+            ${ganadores.length > 0 ? `
+              <h4 class="mt-4">Ganadores individuales (todas las modalidades)</h4>
+              <div class="table-container" style="max-height: 340px; overflow-y: auto;">
+                <table class="table table-sm">
+                  <thead>
+                    <tr>
+                      <th>Tipo Premio</th>
+                      <th>Cta Cte</th>
+                      <th>Provincia</th>
+                      <th>Dirección (CABA)</th>
+                      <th>Aciertos/Pos.</th>
+                      <th class="text-end">Premio</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    ${ganadores.map(g => {
+                      const esCaba = String(g.codigo_provincia || '').padStart(2, '0') === '51';
+                      const direccion = esCaba
+                        ? [g.agencia_direccion, g.agencia_localidad].filter(Boolean).join(' - ') || '-'
+                        : '-';
+                      const aciertosPos = g.aciertos != null && g.aciertos !== ''
+                        ? `${g.aciertos} aciertos`
+                        : (g.posicion_ganadora ? `Pos ${g.posicion_ganadora}` : '-');
+                      return `
+                        <tr>
+                          <td>${g.tipo_premio || g.tipo_apuesta || '-'}</td>
+                          <td>${g.cta_cte || '-'}</td>
+                          <td>${g.provincia_nombre || g.codigo_provincia || '-'}</td>
+                          <td>${direccion}</td>
+                          <td>${aciertosPos}</td>
+                          <td class="text-end text-success"><strong>$${formatNumber(g.premio || 0)}</strong></td>
+                        </tr>
+                      `;
+                    }).join('')}
+                  </tbody>
+                </table>
+              </div>
+            ` : '<p class="mt-4 text-muted">No hay ganadores individuales registrados para este escrutinio.</p>'}
           </div>
         </div>
       </div>

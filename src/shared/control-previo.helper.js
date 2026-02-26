@@ -195,10 +195,14 @@ async function guardarControlPrevioQuiniela(resultado, usuario, nombreArchivo) {
       throw new Error(`No se pudo determinar fecha de sorteo para Quiniela (sorteo ${numeroSorteo}, modalidad ${modalidad})`);
     }
 
-    // Verificar si ya existe (para reemplazar)
+    // Verificar si ya existe por clave lógica de sorteo (numero + modalidad)
     const existe = await query(
-      'SELECT id FROM control_previo_quiniela WHERE fecha = ? AND numero_sorteo = ? AND modalidad = ?',
-      [fecha, numeroSorteo, modalidad]
+      `SELECT id
+       FROM control_previo_quiniela
+       WHERE numero_sorteo = ? AND modalidad = ?
+       ORDER BY id DESC
+       LIMIT 1`,
+      [numeroSorteo, modalidad]
     );
 
     const datosGuardar = {
@@ -341,10 +345,14 @@ async function guardarControlPrevioPoceada(resultado, usuario, nombreArchivo) {
       throw new Error(`No se pudo determinar fecha de sorteo para Poceada (sorteo ${numeroSorteo})`);
     }
 
-    // Verificar si ya existe (para reemplazar)
+    // Verificar si ya existe por clave lógica de sorteo (numero)
     const existe = await query(
-      'SELECT id FROM control_previo_poceada WHERE fecha = ? AND numero_sorteo = ?',
-      [fecha, numeroSorteo]
+      `SELECT id
+       FROM control_previo_poceada
+       WHERE numero_sorteo = ?
+       ORDER BY id DESC
+       LIMIT 1`,
+      [numeroSorteo]
     );
 
     const datosGuardar = {
@@ -515,10 +523,14 @@ async function guardarControlPrevioTombolina(resultado, usuario, nombreArchivo) 
       throw new Error(`No se pudo determinar fecha de sorteo para Tombolina (sorteo ${numeroSorteo})`);
     }
 
-    // Verificar si ya existe
+    // Verificar si ya existe por clave lógica de sorteo (numero)
     const existe = await query(
-      'SELECT id FROM control_previo_tombolina WHERE fecha = ? AND numero_sorteo = ?',
-      [fecha, numeroSorteo]
+      `SELECT id
+       FROM control_previo_tombolina
+       WHERE numero_sorteo = ?
+       ORDER BY id DESC
+       LIMIT 1`,
+      [numeroSorteo]
     );
 
     const datosGuardar = {
