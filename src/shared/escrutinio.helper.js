@@ -117,11 +117,28 @@ async function guardarEscrutinioQuiniela(resultado, datosControlPrevio, usuario)
  */
 async function guardarEscrutinioPoceada(resultado, datosControlPrevio, usuario) {
   try {
+    const resolverNumeroSorteo = () => {
+      const candidatos = [
+        datosControlPrevio?.sorteo?.numero,
+        datosControlPrevio?.sorteo,
+        datosControlPrevio?.numeroSorteo,
+        resultado?.numeroSorteo,
+        resultado?.sorteo
+      ];
+
+      for (const valor of candidatos) {
+        if (valor === null || valor === undefined || valor === '') continue;
+        const num = parseInt(String(valor), 10);
+        if (!Number.isNaN(num) && num > 0) return num;
+      }
+
+      return 0;
+    };
+
     const fecha = datosControlPrevio?.fechaSorteo ||
       datosControlPrevio?.fecha ||
       new Date().toISOString().split('T')[0];
-    const numeroSorteo = parseInt(datosControlPrevio?.sorteo ||
-      resultado?.numeroSorteo || 0);
+    const numeroSorteo = resolverNumeroSorteo();
 
     // Buscar control_previo_id
     let controlPrevioId = null;
@@ -206,6 +223,7 @@ async function guardarEscrutinioPoceada(resultado, datosControlPrevio, usuario) 
     if (resultado.ganadoresDetalle && resultado.ganadoresDetalle.length > 0) {
       // Si viene el detalle masivo (todos los aciertos 6, 7, 8)
       await guardarPremiosPorAgencia(escrutinioId, 'poceada', resultado.ganadoresDetalle);
+      await guardarDetalleGanadores(escrutinioId, 'poceada', resultado.ganadoresDetalle);
     } else if (agenciero?.detalles && agenciero.detalles.length > 0) {
       // Fallback: solo ganadores del 1er premio (agenciero)
       await guardarPremiosPorAgenciaPoceada(escrutinioId, agenciero);

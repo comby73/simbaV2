@@ -3887,6 +3887,19 @@ function cargarDatosControlPrevio() {
 
   cpstNumeroSorteo = cpstDatosControlPrevio.numeroSorteo || nroSorteo || '';
 
+  const fechaSorteoNormalizada =
+    cpResultadosActuales?.sorteo?.programacion?.fecha_sorteo ||
+    cpResultadosActuales?.fecha ||
+    cpResultadosActuales?.fechaSorteo ||
+    cpstDatosControlPrevio?.fecha ||
+    cpstDatosControlPrevio?.fechaSorteo ||
+    '';
+
+  cpstDatosControlPrevio.numeroSorteo = cpstDatosControlPrevio.numeroSorteo || cpstNumeroSorteo;
+  cpstDatosControlPrevio.sorteo = cpstDatosControlPrevio.sorteo || cpstNumeroSorteo;
+  cpstDatosControlPrevio.fechaSorteo = cpstDatosControlPrevio.fechaSorteo || fechaSorteoNormalizada;
+  cpstDatosControlPrevio.fecha = cpstDatosControlPrevio.fecha || fechaSorteoNormalizada;
+
   // Tomar modalidad SOLO de la programación (basado en número de sorteo)
   // NO usar el código del NTF (SR, etc.) - la programación ya tiene la modalidad correcta
   const modalidadInfo = cpResultadosActuales.sorteo?.modalidad || {};
