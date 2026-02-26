@@ -527,8 +527,7 @@ async function guardarControlPrevioLoto5(resultado, user, nombreArchivo) {
   if (fecha) {
     console.log(`📅 Loto5 sorteo ${sorteoNum}: fecha desde programación = ${fecha}`);
   } else {
-    fecha = new Date().toISOString().split('T')[0];
-    console.log(`⚠️ Loto5 sorteo ${sorteoNum}: usando fecha actual (no encontrada en programación)`);
+    throw new Error(`No se encontró fecha de sorteo para Loto 5 (${sorteoNum}) en programación`);
   }
 
   const insertResult = await query(`
@@ -569,19 +568,7 @@ async function guardarControlPrevioLoto5(resultado, user, nombreArchivo) {
   const registrosNTF = resultado.registrosNTF;
   if (registrosNTF && registrosNTF.length > 0 && controlPrevioId) {
     try {
-      // Obtener fecha del XML o usar hoy
-      let fecha = null;
-      if (resultado.datosOficiales?.fecha) {
-        const f = String(resultado.datosOficiales.fecha).replace(/[^0-9]/g, '');
-        if (f.length === 8) {
-          fecha = `${f.substring(0, 4)}-${f.substring(4, 6)}-${f.substring(6, 8)}`;
-        } else {
-          fecha = resultado.datosOficiales.fecha;
-        }
-      }
-      if (!fecha) {
-        fecha = new Date().toISOString().split('T')[0];
-      }
+      const fechaControl = fecha;
 
       // Agrupar por agencia
       const agenciasMap = new Map();
@@ -610,7 +597,7 @@ async function guardarControlPrevioLoto5(resultado, user, nombreArchivo) {
       for (const [codigo, ag] of agenciasMap) {
         placeholders.push('(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)');
         valores.push(
-          controlPrevioId, 'loto5', fecha, sorteo, 'U',
+          controlPrevioId, 'loto5', fechaControl, sorteo, 'U',
           codigo, ag.codigoProvincia,
           ag.ticketsSet.size, ag.totalApuestas, 0, ag.totalRecaudacion
         );

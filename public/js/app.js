@@ -3763,21 +3763,46 @@ function initControlPosterior() {
   renderExtractosList();
 }
 
+function normalizarModalidadASigla(modalidadRaw) {
+  if (!modalidadRaw) return null;
+
+  const texto = String(modalidadRaw)
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toUpperCase()
+    .replace(/[^A-Z0-9\s]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+
+  if (!texto) return null;
+  if (['R', 'P', 'M', 'V', 'N'].includes(texto)) return texto;
+
+  if (texto.includes('PREVIA')) return 'R';
+  if (texto.includes('PRIMERA')) return 'P';
+  if (texto.includes('MATUT')) return 'M';
+  if (texto.includes('VESPERT')) return 'V';
+  if (texto.includes('NOCTUR')) return 'N';
+
+  return null;
+}
+
+function notificarExtractoDescartadoPorModalidad(archivoNombre, modalidadDetectada, modalidadSorteo, tipoArchivo = 'Archivo') {
+  const detectada = modalidadDetectada || 'desconocida';
+  const actual = modalidadSorteo || 'no definida';
+  const nombre = archivoNombre || 'sin nombre';
+
+  const mensaje = `${tipoArchivo} ${nombre} descartado: modalidad detectada ${detectada}, sorteo actual ${actual}`;
+  console.warn(`[CPST] ${mensaje}`);
+  showToast(mensaje, 'warning');
+}
+
 
 // =============================================
 // CARGAR EXTRACTOS EXISTENTES DE LA BD
 // =============================================
 async function cargarExtractosExistentesBD(fecha, modalidad) {
   try {
-    // Mapear código de modalidad a letra
-    const modalidadMap = {
-      'LA PREVIA': 'R', 'PREVIA': 'R', 'R': 'R',
-      'LA PRIMERA': 'P', 'PRIMERA': 'P', 'P': 'P',
-      'MATUTINA': 'M', 'MATUTINO': 'M', 'M': 'M',
-      'VESPERTINA': 'V', 'VESPERTINO': 'V', 'V': 'V',
-      'NOCTURNA': 'N', 'NOCTURNO': 'N', 'N': 'N'
-    };
-    const modalidadCodigo = modalidadMap[modalidad?.toUpperCase()] || modalidad;
+    const modalidadCodigo = normalizarModalidadASigla(modalidad) || modalidad;
 
     const response = await extractosAPI.listar({ fecha, modalidad: modalidadCodigo });
 
@@ -3792,7 +3817,6 @@ async function cargarExtractosExistentesBD(fecha, modalidad) {
   }
 }
 
-// Verificar y cargar extractos existentes cuando se carga el ZIP
 async function verificarExtractosExistentes() {
   if (!cpstNumeroSorteo || !cpstModalidadSorteo) {
     console.log('[CPST] No hay sorteo cargado, no se pueden verificar extractos');
@@ -4658,15 +4682,7 @@ function extraerDatosXML(xmlString) {
     if (modalidadNode) {
       const modalidadTexto = modalidadNode.textContent.trim().toUpperCase();
       console.log(`[XML] Modalidad encontrada en XML: "${modalidadTexto}"`);
-      // Mapear nombre de modalidad a código
-      const modalidadMap = {
-        'LA PREVIA': 'R', 'PREVIA': 'R',
-        'LA PRIMERA': 'P', 'PRIMERA': 'P',
-        'MATUTINA': 'M',
-        'VESPERTINA': 'V',
-        'NOCTURNA': 'N'
-      };
-      modalidad = modalidadMap[modalidadTexto] || null;
+      modalidad = normalizarModalidadASigla(modalidadTexto);
       console.log(`[XML] Modalidad mapeada: ${modalidadTexto} -> ${modalidad}`);
     }
 
@@ -5227,6 +5243,8 @@ async function agregarExtracto() {
       provincia: codigoProvincia,
       modalidad: modalidad,
       fecha: fecha,
+      sorteo: cpstNumeroSorteo || cpResultadosActuales?.sorteo?.numero || null,
+      juego: 'Quiniela',
       numeros: numeros,
       letras: letras.filter(l => l), // Solo letras no vacías
       fuente: 'Control Posterior'
@@ -5333,6 +5351,276 @@ function limpiarExtractoPosterior() {
     const input = document.getElementById(`cpst-letra-${i}`);
     if (input) input.value = '';
   }
+}
+
+function intercambiarMitadesOrden20(numeros = []) {
+  if (!Array.isArray(numeros) || numeros.length < 20) return numeros;
+  return [...numeros.slice(10, 20), ...numeros.slice(0, 10)];
+}
+
+function abrirModalCorreccionOrdenQuiniela(idx = null) {
+  const esManual = idx === null || idx === undefined;
+  const contenido = `
+    <div style="padding: 1rem 1.25rem;">
+      <p style="margin: 0 0 0.75rem 0; color: var(--text-primary);">
+        Se va a intercambiar el orden <strong>1-10</strong> con <strong>11-20</strong>.
+      </p>
+      <p style="margin: 0 0 1rem 0; color: var(--text-muted); font-size: 0.9rem;">
+        ${esManual
+          ? 'Aplicará sobre los números cargados en el formulario manual.'
+          : 'Aplicará sobre el extracto seleccionado en la lista.'}
+      </p>
+      <div style="display: flex; justify-content: flex-end; gap: 0.5rem;">
+        <button class="btn btn-secondary btn-sm" onclick="document.getElementById('modal-simple')?.remove()">Cancelar</button>
+        <button class="btn btn-warning btn-sm" onclick="confirmarCorreccionOrdenQuiniela(${esManual ? 'null' : idx})">
+          <i class="fas fa-check"></i> Aplicar
+        </button>
+      </div>
+    </div>
+  `;
+
+  mostrarModalSimple('Corregir orden del extracto', contenido);
+}
+
+function confirmarCorreccionOrdenQuiniela(idx = null) {
+  const esManual = idx === null || idx === undefined || String(idx) === 'null';
+
+  if (esManual) {
+    corregirOrdenExtractoManualQuiniela();
+  } else {
+    aplicarCorreccionOrdenExtractoQuiniela(Number(idx));
+  }
+
+  document.getElementById('modal-simple')?.remove();
+}
+
+function aplicarCorreccionOrdenExtractoQuiniela(idx) {
+  const ex = cpstExtractos[idx];
+  if (!ex) {
+    showToast('No se encontró el extracto a corregir', 'warning');
+    return false;
+  }
+
+  if (!Array.isArray(ex.numeros) || ex.numeros.length < 20) {
+    showToast(`El extracto de ${ex.nombre} no tiene 20 números para corregir`, 'warning');
+    return false;
+  }
+
+  cpstExtractos[idx] = {
+    ...ex,
+    numeros: intercambiarMitadesOrden20(ex.numeros)
+  };
+
+  renderExtractosListInteligente();
+  showToast(`Orden corregido en ${ex.nombre}`, 'success');
+  return true;
+}
+
+function corregirOrdenExtractoManualQuiniela() {
+  const valores = [];
+  for (let i = 1; i <= 20; i++) {
+    const input = document.getElementById(`cpst-num-${i}`);
+    valores.push(input ? (input.value || '').trim() : '');
+  }
+
+  const tieneDatos = valores.some(v => v !== '');
+  if (!tieneDatos) {
+    showToast('No hay números cargados para corregir', 'warning');
+    return;
+  }
+
+  const corregidos = intercambiarMitadesOrden20(valores);
+  for (let i = 1; i <= 20; i++) {
+    const input = document.getElementById(`cpst-num-${i}`);
+    if (input) input.value = corregidos[i - 1];
+  }
+
+  showToast('Orden corregido: se intercambiaron posiciones 1-10 con 11-20', 'success');
+}
+
+function editarExtractoQuiniela(idx) {
+  const ex = cpstExtractos[idx];
+  if (!ex) {
+    showToast('No se encontró el extracto a editar', 'warning');
+    return;
+  }
+
+  const zonaInteligente = document.getElementById('cpst-zona-inteligente');
+  const modoManual = document.getElementById('cpst-modo-manual');
+  const btnModo = document.getElementById('btn-modo-manual');
+  if (zonaInteligente && modoManual && modoManual.classList.contains('hidden')) {
+    zonaInteligente.classList.add('hidden');
+    modoManual.classList.remove('hidden');
+    if (btnModo) btnModo.innerHTML = '<i class="fas fa-magic"></i> Zona Inteligente';
+  }
+
+  const provinciaSelect = document.getElementById('cpst-extracto-provincia');
+  if (provinciaSelect) provinciaSelect.value = String(ex.index ?? 0);
+
+  for (let i = 1; i <= 20; i++) {
+    const input = document.getElementById(`cpst-num-${i}`);
+    if (!input) continue;
+    const valor = ex.numeros?.[i - 1];
+    input.value = valor != null ? String(valor).replace(/\D/g, '') : '';
+  }
+
+  for (let i = 1; i <= 4; i++) {
+    const input = document.getElementById(`cpst-letra-${i}`);
+    if (!input) continue;
+    const letra = ex.letras?.[i - 1];
+    input.value = letra ? String(letra).toUpperCase().charAt(0) : '';
+  }
+
+  document.getElementById('cpst-modo-manual')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  document.getElementById('cpst-num-1')?.focus();
+  showToast(`Editando extracto de ${ex.nombre}`, 'info');
+}
+
+function abrirEditorExtractoActual() {
+  const juego = cpstJuegoSeleccionado;
+
+  if (juego === 'Quiniela') {
+    if (cpstExtractos.length === 0) {
+      showToast('No hay extractos de Quiniela para editar', 'warning');
+      return;
+    }
+
+    if (cpstExtractos.length === 1) {
+      editarExtractoQuiniela(0);
+      return;
+    }
+
+    document.getElementById('cpst-extractos-lista')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    showToast('Use el botón lápiz del extracto/provincia que quiere corregir', 'info');
+    return;
+  }
+
+  if (juego === 'Poceada' || juego === 'Tombolina') {
+    if (!cpstExtractoPoceada || !Array.isArray(cpstExtractoPoceada.numeros) || cpstExtractoPoceada.numeros.length === 0) {
+      showToast(`No hay extracto de ${juego} para editar`, 'warning');
+      return;
+    }
+
+    cambiarTabExtractoPoceada('manual');
+    generarInputsPoceadaManual();
+
+    const numerosInputs = document.querySelectorAll('#cpst-poceada-numeros-grid .poceada-numero');
+    numerosInputs.forEach((input, i) => {
+      input.value = cpstExtractoPoceada.numeros?.[i] ?? '';
+    });
+
+    const letrasInputs = document.querySelectorAll('#cpst-poceada-letras-grid .poceada-letra');
+    letrasInputs.forEach((input, i) => {
+      input.value = cpstExtractoPoceada.letras?.[i] ?? '';
+    });
+
+    document.getElementById('tab-poc-ext-manual')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    numerosInputs[0]?.focus();
+    showToast(`Edición manual habilitada para ${juego}`, 'info');
+    return;
+  }
+
+  if (juego === 'Loto') {
+    if (!cpstExtractoLoto) {
+      showToast('No hay extracto de Loto para editar', 'warning');
+      return;
+    }
+
+    const cargar = (prefijo, valores = []) => {
+      for (let i = 1; i <= 6; i++) {
+        const input = document.getElementById(`${prefijo}-${i}`);
+        if (input) input.value = valores[i - 1] ?? '';
+      }
+    };
+
+    cargar('cpst-loto-trad', cpstExtractoLoto.tradicional || []);
+    cargar('cpst-loto-match', cpstExtractoLoto.match || []);
+    cargar('cpst-loto-desq', cpstExtractoLoto.desquite || []);
+    cargar('cpst-loto-sos', cpstExtractoLoto.saleOSale || []);
+
+    const plusInput = document.getElementById('cpst-loto-plus');
+    if (plusInput) plusInput.value = cpstExtractoLoto.plus ?? '';
+
+    document.getElementById('cpst-extracto-loto-card')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    document.getElementById('cpst-loto-trad-1')?.focus();
+    showToast('Edición manual habilitada para Loto', 'info');
+    return;
+  }
+
+  if (juego === 'Loto 5') {
+    if (!cpstExtractoLoto5 || !Array.isArray(cpstExtractoLoto5.numeros) || cpstExtractoLoto5.numeros.length === 0) {
+      showToast('No hay extracto de Loto 5 para editar', 'warning');
+      return;
+    }
+
+    for (let i = 1; i <= 5; i++) {
+      const input = document.getElementById(`cpst-loto5-num-${i}`);
+      if (input) input.value = cpstExtractoLoto5.numeros?.[i - 1] ?? '';
+    }
+
+    document.getElementById('cpst-extracto-loto5-card')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    document.getElementById('cpst-loto5-num-1')?.focus();
+    showToast('Edición manual habilitada para Loto 5', 'info');
+    return;
+  }
+
+  if (juego === 'Brinco') {
+    if (!cpstExtractoBrinco) {
+      showToast('No hay extracto de Brinco para editar', 'warning');
+      return;
+    }
+
+    for (let i = 1; i <= 6; i++) {
+      const tradInput = document.getElementById(`cpst-brinco-trad-${i}`);
+      const juniorInput = document.getElementById(`cpst-brinco-junior-${i}`);
+      if (tradInput) tradInput.value = cpstExtractoBrinco.tradicional?.numeros?.[i - 1] ?? '';
+      if (juniorInput) juniorInput.value = cpstExtractoBrinco.junior?.numeros?.[i - 1] ?? '';
+    }
+
+    const aciertosInput = document.getElementById('cpst-brinco-junior-aciertos');
+    if (aciertosInput) aciertosInput.value = cpstExtractoBrinco.junior?.aciertosRequeridos ?? 5;
+
+    document.getElementById('cpst-extracto-brinco-card')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    document.getElementById('cpst-brinco-trad-1')?.focus();
+    showToast('Edición manual habilitada para Brinco', 'info');
+    return;
+  }
+
+  if (juego === 'Quini 6') {
+    if (!cpstExtractoQuini6) {
+      showToast('No hay extracto de Quini 6 para editar', 'warning');
+      return;
+    }
+
+    const cargar6 = (prefijo, valores = []) => {
+      for (let i = 1; i <= 6; i++) {
+        const input = document.getElementById(`${prefijo}-${i}`);
+        if (input) input.value = valores[i - 1] ?? '';
+      }
+    };
+
+    cargar6('cpst-quini6-trad1', cpstExtractoQuini6.tradicional?.primera || []);
+    cargar6('cpst-quini6-trad2', cpstExtractoQuini6.tradicional?.segunda || []);
+    cargar6('cpst-quini6-rev', cpstExtractoQuini6.revancha || []);
+    cargar6('cpst-quini6-ss', cpstExtractoQuini6.siempreSale || []);
+
+    const ssAciertos = document.getElementById('cpst-quini6-ss-aciertos');
+    if (ssAciertos) ssAciertos.value = cpstExtractoQuini6.siempreSaleAciertos ?? 6;
+
+    const pePool = document.getElementById('cpst-quini6-pe-pool');
+    if (pePool) {
+      pePool.value = Array.isArray(cpstExtractoQuini6.premioExtra)
+        ? cpstExtractoQuini6.premioExtra.map(n => String(n).padStart(2, '0')).join(', ')
+        : '';
+    }
+
+    document.getElementById('cpst-extracto-quini6-card')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    document.getElementById('cpst-quini6-trad1-1')?.focus();
+    showToast('Edición manual habilitada para Quini 6', 'info');
+    return;
+  }
+
+  showToast('Este juego no requiere edición manual de extracto', 'info');
 }
 
 function renderExtractosList() {
@@ -5498,7 +5786,7 @@ async function procesarArchivoXMLInteligente(archivo) {
 
         // Verificar que la modalidad coincida con la del sorteo actual
         if (modalidadFinal && cpstModalidadSorteo && modalidadFinal !== cpstModalidadSorteo) {
-          console.log(`XML ${archivo.name} es de modalidad ${modalidadFinal}, pero el sorteo actual es ${cpstModalidadSorteo}. Ignorando.`);
+          notificarExtractoDescartadoPorModalidad(archivo.name, modalidadFinal, cpstModalidadSorteo, 'XML');
           resolve(); // No es error, simplemente no corresponde
           return;
         }
@@ -5549,6 +5837,8 @@ async function procesarArchivoXMLInteligente(archivo) {
               provincia: provinciaDetectada,
               modalidad: modalidad,
               fecha: fecha,
+              sorteo: cpstNumeroSorteo || cpResultadosActuales?.sorteo?.numero || null,
+              juego: 'Quiniela',
               numeros: numeros,
               letras: letras.length > 0 ? letras : null,
               fuente: 'XML'
@@ -5636,24 +5926,31 @@ async function procesarArchivoImagenInteligente(archivo) {
   const provinciaNombres = ['CABA', 'Buenos Aires', 'Córdoba', 'Santa Fe', 'Montevideo', 'Mendoza', 'Entre Ríos'];
 
   // Verificar modalidad
-  const modalidadMap = { 'Previa': 'R', 'Primera': 'P', 'Matutina': 'M', 'Vespertina': 'V', 'Nocturna': 'N' };
-  const modalidadDetectada = modalidadMap[data.modalidad] || data.modalidad?.[0]?.toUpperCase();
+  const modalidadDetectada = normalizarModalidadASigla(data.modalidad);
 
   if (modalidadDetectada && cpstModalidadSorteo && modalidadDetectada !== cpstModalidadSorteo) {
-    console.log(`Imagen detectada como ${data.modalidad}, pero sorteo actual es ${cpstModalidadSorteo}. Ignorando.`);
+    notificarExtractoDescartadoPorModalidad(archivo.name, modalidadDetectada, cpstModalidadSorteo, 'Imagen');
     return;
   }
 
   const fecha = data.fecha || cpResultadosActuales?.sorteo?.fecha || new Date().toISOString().split('T')[0];
   const modalidad = modalidadDetectada || cpstModalidadSorteo || 'M';
+  const esEntreRios = String(data.provincia || '') === '59';
+  const numerosNormalizados = esEntreRios ? intercambiarMitadesOrden20(data.numeros || []) : (data.numeros || []);
 
-  if (provinciaIdx !== null && provinciaIdx !== undefined && data.numeros && data.numeros.length > 0) {
+  if (esEntreRios && Array.isArray(data.numeros) && data.numeros.length >= 20) {
+    console.log(`[OCR] Ajuste automático de orden aplicado a Entre Ríos (imagen): ${archivo.name}`);
+  }
+
+  if (provinciaIdx !== null && provinciaIdx !== undefined && numerosNormalizados && numerosNormalizados.length > 0) {
     try {
       const response = await extractosAPI.guardar({
         provincia: data.provincia,
         modalidad: modalidad,
         fecha: fecha,
-        numeros: data.numeros,
+        sorteo: cpstNumeroSorteo || cpResultadosActuales?.sorteo?.numero || null,
+        juego: 'Quiniela',
+        numeros: numerosNormalizados,
         letras: data.letras || null,
         fuente: 'OCR'
       });
@@ -5661,7 +5958,7 @@ async function procesarArchivoImagenInteligente(archivo) {
       const extracto = {
         index: provinciaIdx,
         nombre: provinciaNombres[provinciaIdx],
-        numeros: data.numeros,
+        numeros: numerosNormalizados,
         letras: data.letras || [],
         fuente: 'ocr',
         archivo: archivo.name,
@@ -5680,7 +5977,7 @@ async function procesarArchivoImagenInteligente(archivo) {
       const extracto = {
         index: provinciaIdx,
         nombre: provinciaNombres[provinciaIdx],
-        numeros: data.numeros,
+        numeros: numerosNormalizados,
         letras: data.letras || [],
         fuente: 'ocr',
         archivo: archivo.name
@@ -5729,24 +6026,31 @@ async function procesarArchivoPDFInteligente(archivo) {
   const provinciaIdx = data.provincia ? codigoToIndex[data.provincia] : null;
   const provinciaNombres = ['CABA', 'Buenos Aires', 'Córdoba', 'Santa Fe', 'Montevideo', 'Mendoza', 'Entre Ríos'];
 
-  const modalidadMap = { 'Previa': 'R', 'Primera': 'P', 'Matutina': 'M', 'Vespertina': 'V', 'Nocturna': 'N' };
-  const modalidadDetectada = modalidadMap[data.modalidad] || data.modalidad?.[0]?.toUpperCase();
+  const modalidadDetectada = normalizarModalidadASigla(data.modalidad);
 
   if (modalidadDetectada && cpstModalidadSorteo && modalidadDetectada !== cpstModalidadSorteo) {
-    console.log(`PDF detectado como ${data.modalidad}, pero sorteo actual es ${cpstModalidadSorteo}. Ignorando.`);
+    notificarExtractoDescartadoPorModalidad(archivo.name, modalidadDetectada, cpstModalidadSorteo, 'PDF');
     return;
   }
 
   const fecha = data.fecha || cpResultadosActuales?.sorteo?.fecha || new Date().toISOString().split('T')[0];
   const modalidad = modalidadDetectada || cpstModalidadSorteo || 'M';
+  const esEntreRios = String(data.provincia || '') === '59';
+  const numerosNormalizados = esEntreRios ? intercambiarMitadesOrden20(data.numeros || []) : (data.numeros || []);
 
-  if (provinciaIdx !== null && provinciaIdx !== undefined && data.numeros && data.numeros.length > 0) {
+  if (esEntreRios && Array.isArray(data.numeros) && data.numeros.length >= 20) {
+    console.log(`[OCR] Ajuste automático de orden aplicado a Entre Ríos (PDF): ${archivo.name}`);
+  }
+
+  if (provinciaIdx !== null && provinciaIdx !== undefined && numerosNormalizados && numerosNormalizados.length > 0) {
     try {
       const response = await extractosAPI.guardar({
         provincia: data.provincia,
         modalidad: modalidad,
         fecha: fecha,
-        numeros: data.numeros,
+        sorteo: cpstNumeroSorteo || cpResultadosActuales?.sorteo?.numero || null,
+        juego: 'Quiniela',
+        numeros: numerosNormalizados,
         letras: data.letras || null,
         fuente: 'PDF-OCR'
       });
@@ -5754,7 +6058,7 @@ async function procesarArchivoPDFInteligente(archivo) {
       const extracto = {
         index: provinciaIdx,
         nombre: provinciaNombres[provinciaIdx],
-        numeros: data.numeros,
+        numeros: numerosNormalizados,
         letras: data.letras || [],
         fuente: 'pdf',
         archivo: archivo.name,
@@ -5774,7 +6078,7 @@ async function procesarArchivoPDFInteligente(archivo) {
       const extracto = {
         index: provinciaIdx,
         nombre: provinciaNombres[provinciaIdx],
-        numeros: data.numeros,
+        numeros: numerosNormalizados,
         letras: data.letras || [],
         fuente: 'pdf',
         archivo: archivo.name
@@ -5898,6 +6202,12 @@ function renderExtractosListInteligente() {
           </div>
         </div>
         <div class="extracto-acciones">
+          <button class="btn btn-sm btn-info" onclick="abrirModalCorreccionOrdenQuiniela(${originalIdx})" title="Corregir orden 1-20">
+            <i class="fas fa-right-left"></i>
+          </button>
+          <button class="btn btn-sm btn-warning" onclick="editarExtractoQuiniela(${originalIdx})" title="Editar">
+            <i class="fas fa-pen"></i>
+          </button>
           <button class="btn btn-sm btn-secondary" onclick="verDetalleExtracto(${originalIdx})" title="Ver detalle">
             <i class="fas fa-eye"></i>
           </button>
@@ -10854,7 +11164,7 @@ async function cargarSorteosDelDia() {
   const tablaSorteos = document.getElementById('tabla-sorteos-dia');
 
   try {
-    tbody.innerHTML = '<tr><td colspan="8" class="text-center"><i class="fas fa-spinner fa-spin"></i> Cargando...</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="9" class="text-center"><i class="fas fa-spinner fa-spin"></i> Cargando...</td></tr>';
 
     const response = await fetch(`${API_BASE}/programacion/dia?fecha=${dashboardFechaActual}`, {
       headers: { 'Authorization': `Bearer ${getToken()}` }
@@ -11335,6 +11645,8 @@ function renderTablaDashboard(tipoConsulta) {
         : `<strong style="font-family: monospace; font-size: 0.95rem;">${ctaCtePura}</strong>`;
 
       const esHipicas = item.juego === 'hipicas';
+      const cancelaciones = Number(item.cancelaciones || 0);
+      const devoluciones = Number(item.devoluciones || 0);
 
       return `
         <tr>
@@ -11342,8 +11654,8 @@ function renderTablaDashboard(tipoConsulta) {
           <td><span class="badge game-${item.juego}">${(item.juego || '').toUpperCase()}</span></td>
           <td class="text-end">${formatNumber(item.total_sorteos || 0)}</td>
           <td class="text-end text-primary">$${formatNumber(item.total_recaudacion || 0)}</td>
-          <td class="text-end" style="color: #ff9800;">${esHipicas ? '$' + formatNumber(item.cancelaciones || 0) : '-'}</td>
-          <td class="text-end" style="color: #ff9800;">${esHipicas ? '$' + formatNumber(item.devoluciones || 0) : '-'}</td>
+          <td class="text-end" style="color: #ff9800;">${cancelaciones > 0 ? '$' + formatNumber(cancelaciones) : '-'}</td>
+          <td class="text-end" style="color: #ff9800;">${devoluciones > 0 ? '$' + formatNumber(devoluciones) : '-'}</td>
           <td class="text-end">${esHipicas ? '-' : formatNumber(item.total_tickets || 0)}</td>
           <td class="text-end">${esHipicas ? '-' : formatNumber(item.total_apuestas || 0)}</td>
           <td class="text-end text-warning">${esHipicas ? '-' : formatNumber(item.total_anulados || 0)}</td>
@@ -12368,6 +12680,8 @@ async function guardarExtractosPendientes() {
       provincia: ext.provincia,
       modalidad: ext.modalidad,
       fecha: ext.fecha,
+      sorteo: ext.sorteo || null,
+      juego: 'Quiniela',
       numeros: ext.numeros,
       letras: ext.letras || '',
       fuente: 'OCR'
@@ -12581,10 +12895,9 @@ async function verDetalleControlPrevio(id, juego) {
                 </div>
               </div>
             </div>
-            <p><strong>Fecha:</strong> ${formatDate(item.fecha)}</p>
+            <p><strong>Fecha Sorteo:</strong> ${formatDate(item.fecha)}</p>
             <p><strong>Modalidad:</strong> ${getModalidadNombre(item.modalidad || 'N')}</p>
             <p><strong>Archivo:</strong> ${item.nombre_archivo_zip || '-'}</p>
-            <p><strong>Procesado:</strong> ${formatDateTime(item.created_at)}</p>
             ${datosAdicionales.provincias ? `
               <h4 class="mt-4">Detalle por Provincia</h4>
               <table class="table table-sm">
@@ -12700,7 +13013,7 @@ async function buscarEscrutinios() {
         <td class="text-end">${formatNumber(item.total_ganadores)}</td>
         <td class="text-end text-success"><strong>$${formatNumber(item.total_premios)}</strong></td>
         <td>${item.usuario_nombre || '-'}</td>
-        <td>${formatDateTime(item.created_at)}</td>
+        <td>${formatDate(item.fecha)}</td>
         <td>
           <button class="btn btn-sm btn-secondary" onclick="verDetalleEscrutinio(${item.id}, '${item.juego}')" title="Ver detalle">
             <i class="fas fa-eye"></i>
@@ -12714,7 +13027,7 @@ async function buscarEscrutinios() {
 
   } catch (error) {
     console.error('Error cargando escrutinios:', error);
-    tbody.innerHTML = '<tr><td colspan="8" class="text-center text-danger">Error cargando datos</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="9" class="text-center text-danger">Error cargando datos</td></tr>';
   }
 }
 
@@ -12760,9 +13073,8 @@ async function verDetalleEscrutinio(id, juego) {
                 </div>
               </div>
             </div>
-            <p><strong>Fecha:</strong> ${formatDate(item.fecha)}</p>
+            <p><strong>Fecha Sorteo:</strong> ${formatDate(item.fecha)}</p>
             <p><strong>Modalidad:</strong> ${getModalidadNombre(item.modalidad || 'N')}</p>
-            <p><strong>Procesado:</strong> ${formatDateTime(item.created_at)}</p>
             ${resumenPremios.porTipo ? `
               <h4 class="mt-4">Desglose por Tipo de Premio</h4>
               <table class="table table-sm">

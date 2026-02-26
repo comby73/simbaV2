@@ -113,6 +113,7 @@ CREATE TABLE IF NOT EXISTS extractos (
   id INT PRIMARY KEY AUTO_INCREMENT,
   juego_id INT NOT NULL,
   sorteo_id INT NOT NULL,
+  numero_sorteo INT NOT NULL,
   fecha DATE NOT NULL,
   provincia_id INT,
   numeros JSON NOT NULL,
@@ -128,7 +129,7 @@ CREATE TABLE IF NOT EXISTS extractos (
   FOREIGN KEY (provincia_id) REFERENCES provincias(id),
   FOREIGN KEY (archivo_id) REFERENCES archivos_cargados(id),
   FOREIGN KEY (usuario_id) REFERENCES usuarios(id),
-  UNIQUE KEY unique_extracto (juego_id, sorteo_id, fecha, provincia_id)
+  UNIQUE KEY unique_extracto (juego_id, sorteo_id, fecha, provincia_id, numero_sorteo)
 );
 
 -- Tabla de Control Previo
@@ -235,6 +236,7 @@ CREATE TABLE IF NOT EXISTS auditoria (
 CREATE INDEX idx_archivos_fecha ON archivos_cargados(fecha_sorteo);
 CREATE INDEX idx_archivos_estado ON archivos_cargados(estado);
 CREATE INDEX idx_extractos_fecha ON extractos(fecha);
+CREATE INDEX idx_extractos_numero_sorteo ON extractos(numero_sorteo);
 CREATE INDEX idx_control_previo_fecha ON control_previo(fecha);
 CREATE INDEX idx_control_posterior_fecha ON control_posterior(fecha);
 CREATE INDEX idx_auditoria_fecha ON auditoria(created_at);

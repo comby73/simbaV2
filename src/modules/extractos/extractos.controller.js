@@ -1,6 +1,172 @@
 const { pool } = require('../../config/database');
 const { successResponse, errorResponse, PROVINCIAS } = require('../../shared/helpers');
 
+const MODALIDAD_MAP = {
+  R: { nombre: 'Previa', codigo: 'PREV' },
+  P: { nombre: 'Primera', codigo: 'PRIM' },
+  M: { nombre: 'Matutina', codigo: 'MAT' },
+  V: { nombre: 'Vespertina', codigo: 'VESP' },
+  N: { nombre: 'Nocturna', codigo: 'NOCT' }
+};
+
+function normalizarJuegoEntrada(juego) {
+  const val = String(juego || 'Quiniela').trim().toLowerCase();
+  if (val.includes('quiniela ya') || val.includes('quinielaya')) return 'quiniela ya';
+  if (val.includes('quiniela')) return 'quiniela';
+  if (val.includes('poceada')) return 'poceada';
+  if (val.includes('tombolina')) return 'tombolina';
+  if (val.includes('loto 5') || val.includes('loto5')) return 'loto 5';
+  if (val.includes('loto')) return 'loto';
+  if (val.includes('quini 6') || val.includes('quini6')) return 'quini 6';
+  if (val.includes('brinco')) return 'brinco';
+  return val;
+}
+
+async function resolverJuegoId(conn, juegoEntrada) {
+  const juego = normalizarJuegoEntrada(juegoEntrada);
+
+  const candidatos = {
+    quiniela: ['%Quiniela%', 'QUINIELA'],
+    'quiniela ya': ['%Quiniela Ya%', 'QUINIELAYA'],
+    poceada: ['%Poceada%', 'POCEADA'],
+    tombolina: ['%Tombolina%', 'TOMBOLINA'],
+    loto: ['%Loto%', 'LOTO'],
+    'loto 5': ['%Loto 5%', 'LOTO5'],
+    'quini 6': ['%Quini 6%', 'QUINI6'],
+    brinco: ['%Brinco%', 'BRINCO']
+  };
+
+  const [likeNombre, codigo] = candidatos[juego] || ['%Quiniela%', 'QUINIELA'];
+  const [rows] = await conn.query(
+    'SELECT id, nombre, codigo FROM juegos WHERE nombre LIKE ? OR codigo = ? ORDER BY id LIMIT 1',
+    [likeNombre, codigo]
+  );
+
+  if (rows.length > 0) return rows[0].id;
+
+  const [fallbackRows] = await conn.query(
+    'SELECT id FROM juegos WHERE nombre LIKE ? ORDER BY id LIMIT 1',
+    ['%Quiniela%']
+  );
+  return fallbackRows.length > 0 ? fallbackRows[0].id : 1;
+}
+
+async function resolverProvinciaId(conn, provincia) {
+  if (!provincia && provincia !== 0) return null;
+
+  const provinciaRaw = String(provincia).trim();
+  const provinciaSinCeros = provinciaRaw.replace(/^0+/, '') || '0';
+  const provinciaNombre = PROVINCIAS[provinciaRaw] || PROVINCIAS[provinciaSinCeros] || provinciaRaw;
+
+  const [rows] = await conn.query(
+    `SELECT id
+     FROM provincias
+     WHERE codigo = ? OR codigo_luba = ? OR codigo_luba = ? OR UPPER(nombre) = UPPER(?)
+     ORDER BY id LIMIT 1`,
+    [provinciaRaw, provinciaRaw, provinciaSinCeros, provinciaNombre]
+  );
+
+  return rows.length > 0 ? rows[0].id : null;
+}
+
+async function resolverFechaSorteo(conn, { juego, modalidad, sorteo, fecha }) {
+  const juegoNorm = normalizarJuegoEntrada(juego);
+
+  if (sorteo) {
+    const [rowsBySorteo] = await conn.query(
+      `SELECT fecha_sorteo
+       FROM programacion_sorteos
+       WHERE activo = 1
+         AND LOWER(juego) = LOWER(?)
+         AND numero_sorteo = ?
+       ORDER BY fecha_sorteo DESC
+       LIMIT 1`,
+      [juegoNorm, String(sorteo)]
+    );
+    if (rowsBySorteo.length > 0 && rowsBySorteo[0].fecha_sorteo) {
+      return rowsBySorteo[0].fecha_sorteo;
+    }
+  }
+
+  if (fecha && modalidad) {
+    const [rowsByFechaMod] = await conn.query(
+      `SELECT fecha_sorteo
+       FROM programacion_sorteos
+       WHERE activo = 1
+         AND LOWER(juego) = LOWER(?)
+         AND fecha_sorteo = ?
+         AND modalidad_codigo = ?
+       ORDER BY id DESC
+       LIMIT 1`,
+      [juegoNorm, fecha, String(modalidad).toUpperCase()]
+    );
+    if (rowsByFechaMod.length > 0 && rowsByFechaMod[0].fecha_sorteo) {
+      return rowsByFechaMod[0].fecha_sorteo;
+    }
+  }
+
+  return fecha;
+}
+
+async function resolverNumeroSorteo(conn, { juego, modalidad, sorteo, fecha }) {
+  const juegoNorm = normalizarJuegoEntrada(juego);
+
+  if (sorteo !== undefined && sorteo !== null && String(sorteo).trim() !== '') {
+    const num = parseInt(String(sorteo), 10);
+    if (!Number.isNaN(num) && num > 0) return num;
+  }
+
+  if (fecha) {
+    let sql = `
+      SELECT numero_sorteo
+      FROM programacion_sorteos
+      WHERE activo = 1
+        AND LOWER(juego) = LOWER(?)
+        AND fecha_sorteo = ?
+    `;
+    const params = [juegoNorm, fecha];
+
+    if (modalidad) {
+      sql += ' AND modalidad_codigo = ?';
+      params.push(String(modalidad).toUpperCase());
+    }
+
+    sql += ' ORDER BY id DESC LIMIT 1';
+
+    const [rows] = await conn.query(sql, params);
+    if (rows.length > 0 && rows[0].numero_sorteo) {
+      const num = parseInt(String(rows[0].numero_sorteo), 10);
+      if (!Number.isNaN(num) && num > 0) return num;
+    }
+  }
+
+  return null;
+}
+
+async function resolverSorteoId(conn, juegoId, modalidad) {
+  const modalidadInfo = MODALIDAD_MAP[modalidad] || { nombre: modalidad, codigo: modalidad };
+  const [rows] = await conn.query(
+    `SELECT id
+     FROM sorteos
+     WHERE juego_id = ? AND (nombre = ? OR codigo = ?)
+     ORDER BY id LIMIT 1`,
+    [juegoId, modalidadInfo.nombre, modalidadInfo.codigo]
+  );
+  if (rows.length > 0) return rows[0].id;
+
+  const [fallback] = await conn.query(
+    'SELECT id FROM sorteos WHERE juego_id = ? ORDER BY id LIMIT 1',
+    [juegoId]
+  );
+  return fallback.length > 0 ? fallback[0].id : 1;
+}
+
+function normalizarLetras(letras) {
+  if (!letras) return null;
+  const letrasArr = Array.isArray(letras) ? letras : (typeof letras === 'string' ? letras.split('') : []);
+  return letrasArr.length > 0 ? JSON.stringify(letrasArr) : null;
+}
+
 /**
  * Guardar un extracto (desde OCR, XML o manual)
  * POST /api/extractos
@@ -9,53 +175,42 @@ const guardarExtracto = async (req, res, next) => {
   let conn;
   try {
     const {
-      provincia, modalidad, fecha, numeros, letras, sorteo, fuente
+      provincia, modalidad, fecha, numeros, letras, sorteo, fuente, juego
     } = req.body;
 
-    if (!provincia || !modalidad || !fecha || !numeros) {
+    if (!modalidad || !fecha || !numeros) {
       return errorResponse(res, 'Faltan datos requeridos', 400);
     }
 
     conn = await pool.getConnection();
 
-    // 1. Provincia
-    const [provRows] = await conn.query(
-      'SELECT id FROM provincias WHERE codigo = ? OR codigo_luba = ? OR codigo_luba = ?',
-      [provincia, provincia, provincia.toString().replace(/^0+/, '') || '0']
-    );
-    const provinciaId = provRows.length > 0 ? provRows[0].id : null;
+    const juegoId = await resolverJuegoId(conn, juego);
+    const provinciaId = await resolverProvinciaId(conn, provincia);
+    const fechaSorteo = await resolverFechaSorteo(conn, {
+      juego: juego || 'Quiniela', modalidad, sorteo, fecha
+    });
+    const numeroSorteo = await resolverNumeroSorteo(conn, {
+      juego: juego || 'Quiniela', modalidad, sorteo, fecha: fechaSorteo || fecha
+    });
+    const sorteoId = await resolverSorteoId(conn, juegoId, modalidad);
+    const letrasJson = normalizarLetras(letras);
 
-    // 2. Juego
-    const [juegoRows] = await conn.query('SELECT id FROM juegos WHERE nombre LIKE ? OR codigo = ?', ['%Quiniela%', 'QUINIELA']);
-    const juegoId = juegoRows.length > 0 ? juegoRows[0].id : 1;
+    if (!fechaSorteo) {
+      return errorResponse(res, 'No se pudo determinar la fecha de sorteo', 400);
+    }
 
-    // 3. Sorteo - Mapeo de código de modalidad a nombre y código de sorteo
-    const modMap = {
-      'R': { nombre: 'Previa', codigo: 'PREV' },
-      'P': { nombre: 'Primera', codigo: 'PRIM' },
-      'M': { nombre: 'Matutina', codigo: 'MAT' },
-      'V': { nombre: 'Vespertina', codigo: 'VESP' },
-      'N': { nombre: 'Nocturna', codigo: 'NOCT' }
-    };
-    const modalidadInfo = modMap[modalidad] || { nombre: modalidad, codigo: modalidad };
-    const [sorteoRows] = await conn.query(
-      `SELECT id FROM sorteos WHERE juego_id = ? AND (nombre = ? OR codigo = ?)`,
-      [juegoId, modalidadInfo.nombre, modalidadInfo.codigo]
-    );
-    const sorteoId = sorteoRows.length > 0 ? sorteoRows[0].id : 1;
-    console.log(`[EXTRACTOS] Modalidad: ${modalidad} -> Buscando sorteo: nombre="${modalidadInfo.nombre}", codigo="${modalidadInfo.codigo}" -> sorteo_id=${sorteoId}`);
+    if (!numeroSorteo) {
+      return errorResponse(res, 'No se pudo determinar el número de sorteo', 400);
+    }
 
-    // 4. Letras
-    let letrasJson = null;
-    if (letras) {
-      const lArr = Array.isArray(letras) ? letras : (typeof letras === 'string' ? letras.split('') : []);
-      letrasJson = lArr.length > 0 ? JSON.stringify(lArr) : null;
+    if (normalizarJuegoEntrada(juego || 'Quiniela') === 'quiniela' && !provinciaId) {
+      return errorResponse(res, 'Para Quiniela debe informar una provincia válida', 400);
     }
 
     // 5. Guardar/Actualizar
     const [existente] = await conn.query(
-      `SELECT id FROM extractos WHERE juego_id = ? AND sorteo_id = ? AND fecha = ? AND (provincia_id = ? OR (provincia_id IS NULL AND ? IS NULL))`,
-      [juegoId, sorteoId, fecha, provinciaId, provinciaId]
+      `SELECT id FROM extractos WHERE juego_id = ? AND sorteo_id = ? AND fecha = ? AND numero_sorteo = ? AND (provincia_id = ? OR (provincia_id IS NULL AND ? IS NULL))`,
+      [juegoId, sorteoId, fechaSorteo, numeroSorteo, provinciaId, provinciaId]
     );
 
     if (existente.length > 0) {
@@ -67,9 +222,9 @@ const guardarExtracto = async (req, res, next) => {
     }
 
     const [result] = await conn.query(
-      `INSERT INTO extractos (juego_id, sorteo_id, fecha, provincia_id, numeros, letras, fuente, usuario_id)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-      [juegoId, sorteoId, fecha, provinciaId, JSON.stringify(numeros), letrasJson, fuente || 'OCR', req.user.id]
+      `INSERT INTO extractos (juego_id, sorteo_id, numero_sorteo, fecha, provincia_id, numeros, letras, fuente, usuario_id)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [juegoId, sorteoId, numeroSorteo, fechaSorteo, provinciaId, JSON.stringify(numeros), letrasJson, fuente || 'OCR', req.user.id]
     );
 
     return successResponse(res, { id: result.insertId, created: true }, 'Extracto guardado');
@@ -105,52 +260,47 @@ const guardarExtractosBulk = async (req, res, next) => {
 
     for (const ext of extractos) {
       try {
-        const { provincia, modalidad, fecha, numeros, letras, fuente } = ext;
+        const { provincia, modalidad, fecha, numeros, letras, fuente, sorteo, juego } = ext;
 
-        if (!provincia || !modalidad || !fecha || !numeros) {
+        if (!modalidad || !fecha || !numeros) {
           errores++;
           resultados.push({ error: 'Datos incompletos', extracto: ext });
           continue;
         }
 
-        // 1. Mapeo de Provincia (Soporta nombres 'CABA' o códigos '51')
-        const [provRows] = await conn.query(
-          'SELECT id FROM provincias WHERE codigo = ? OR codigo_luba = ? OR codigo_luba = ?',
-          [provincia, provincia, provincia.toString().replace(/^0+/, '') || '0']
-        );
-        const provinciaId = provRows.length > 0 ? provRows[0].id : null;
+        const juegoId = await resolverJuegoId(conn, juego);
+        const provinciaId = await resolverProvinciaId(conn, provincia);
+        const fechaSorteo = await resolverFechaSorteo(conn, {
+          juego: juego || 'Quiniela', modalidad, sorteo, fecha
+        });
+        const numeroSorteo = await resolverNumeroSorteo(conn, {
+          juego: juego || 'Quiniela', modalidad, sorteo, fecha: fechaSorteo || fecha
+        });
+        const sorteoId = await resolverSorteoId(conn, juegoId, modalidad);
+        const letrasJson = normalizarLetras(letras);
 
-        // 2. Mapeo de Juego
-        const [juegoRows] = await conn.query('SELECT id FROM juegos WHERE nombre LIKE ? OR codigo = ?', ['%Quiniela%', 'QUINIELA']);
-        const juegoId = juegoRows.length > 0 ? juegoRows[0].id : 1;
+        if (!fechaSorteo) {
+          errores++;
+          resultados.push({ error: 'No se pudo determinar fecha de sorteo', extracto: ext });
+          continue;
+        }
 
-        // 3. Mapeo de Sorteo - Búsqueda exacta por nombre o código
-        const modMap = {
-          'R': { nombre: 'Previa', codigo: 'PREV' },
-          'P': { nombre: 'Primera', codigo: 'PRIM' },
-          'M': { nombre: 'Matutina', codigo: 'MAT' },
-          'V': { nombre: 'Vespertina', codigo: 'VESP' },
-          'N': { nombre: 'Nocturna', codigo: 'NOCT' }
-        };
-        const modalidadInfo = modMap[modalidad] || { nombre: modalidad, codigo: modalidad };
+        if (!numeroSorteo) {
+          errores++;
+          resultados.push({ error: 'No se pudo determinar número de sorteo', extracto: ext });
+          continue;
+        }
 
-        const [sorteoRows] = await conn.query(
-          `SELECT id FROM sorteos WHERE juego_id = ? AND (nombre = ? OR codigo = ?)`,
-          [juegoId, modalidadInfo.nombre, modalidadInfo.codigo]
-        );
-        const sorteoId = sorteoRows.length > 0 ? sorteoRows[0].id : 1;
-
-        // 4. Preparar letras
-        let letrasJson = null;
-        if (letras) {
-          const lArr = Array.isArray(letras) ? letras : (typeof letras === 'string' ? letras.split('') : []);
-          letrasJson = lArr.length > 0 ? JSON.stringify(lArr) : null;
+        if (normalizarJuegoEntrada(juego || 'Quiniela') === 'quiniela' && !provinciaId) {
+          errores++;
+          resultados.push({ error: 'Quiniela requiere provincia válida', extracto: ext });
+          continue;
         }
 
         // 5. Verificar duplicado
         const [existente] = await conn.query(
-          `SELECT id FROM extractos WHERE juego_id = ? AND sorteo_id = ? AND fecha = ? AND (provincia_id = ? OR (provincia_id IS NULL AND ? IS NULL))`,
-          [juegoId, sorteoId, fecha, provinciaId, provinciaId]
+          `SELECT id FROM extractos WHERE juego_id = ? AND sorteo_id = ? AND fecha = ? AND numero_sorteo = ? AND (provincia_id = ? OR (provincia_id IS NULL AND ? IS NULL))`,
+          [juegoId, sorteoId, fechaSorteo, numeroSorteo, provinciaId, provinciaId]
         );
 
         if (existente.length > 0) {
@@ -159,15 +309,15 @@ const guardarExtractosBulk = async (req, res, next) => {
             [JSON.stringify(numeros), letrasJson, fuente || 'OCR', existente[0].id]
           );
           guardados++;
-          resultados.push({ id: existente[0].id, updated: true, provincia, modalidad, fecha });
+          resultados.push({ id: existente[0].id, updated: true, provincia, modalidad, fecha: fechaSorteo, numero_sorteo: numeroSorteo, juego: juego || 'Quiniela' });
         } else {
           const [result] = await conn.query(
-            `INSERT INTO extractos (juego_id, sorteo_id, fecha, provincia_id, numeros, letras, fuente, usuario_id)
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-            [juegoId, sorteoId, fecha, provinciaId, JSON.stringify(numeros), letrasJson, fuente || 'OCR', req.user.id]
+            `INSERT INTO extractos (juego_id, sorteo_id, numero_sorteo, fecha, provincia_id, numeros, letras, fuente, usuario_id)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+            [juegoId, sorteoId, numeroSorteo, fechaSorteo, provinciaId, JSON.stringify(numeros), letrasJson, fuente || 'OCR', req.user.id]
           );
           guardados++;
-          resultados.push({ id: result.insertId, created: true, provincia, modalidad, fecha });
+          resultados.push({ id: result.insertId, created: true, provincia, modalidad, fecha: fechaSorteo, numero_sorteo: numeroSorteo, juego: juego || 'Quiniela' });
         }
       } catch (err) {
         console.error('[EXTRACTOS] Error individual:', err.message);
@@ -198,11 +348,11 @@ const listarExtractos = async (req, res) => {
 
     let sql = `
       SELECT
-        e.id, e.fecha, e.numeros, e.letras, e.fuente, e.validado, e.created_at,
+        e.id, e.fecha, e.numero_sorteo, e.numeros, e.letras, e.fuente, e.validado, e.created_at,
         j.nombre as juego_nombre,
         s.nombre as sorteo_nombre, s.codigo as sorteo_codigo,
         p.nombre as provincia_nombre, p.codigo as provincia_codigo,
-        ps.numero_sorteo
+        ps.numero_sorteo as numero_sorteo_programado
       FROM extractos e
       JOIN juegos j ON e.juego_id = j.id
       JOIN sorteos s ON e.sorteo_id = s.id
@@ -254,6 +404,7 @@ const listarExtractos = async (req, res) => {
     // Parsear JSON
     const extractos = rows.map(row => ({
       ...row,
+      numero_sorteo: row.numero_sorteo || row.numero_sorteo_programado || null,
       numeros: typeof row.numeros === 'string' ? JSON.parse(row.numeros) : row.numeros,
       letras: row.letras ? (typeof row.letras === 'string' ? JSON.parse(row.letras) : row.letras) : null
     }));

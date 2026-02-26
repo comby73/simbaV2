@@ -313,6 +313,10 @@ const extractosAPI = {
     const query = new URLSearchParams(params).toString();
     return apiRequest(`/extractos${query ? `?${query}` : ''}`);
   },
+  guardar: (extracto) => apiRequest('/extractos', {
+    method: 'POST',
+    body: JSON.stringify(extracto)
+  }),
   guardarBulk: (extractos) => apiRequest('/extractos/bulk', {
     method: 'POST',
     body: JSON.stringify({ extractos })

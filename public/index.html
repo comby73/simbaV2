@@ -1227,6 +1227,9 @@
               <button class="btn btn-primary" onclick="agregarExtractoManual()">
                 <i class="fas fa-plus"></i> Agregar Extracto
               </button>
+              <button class="btn btn-warning" onclick="abrirModalCorreccionOrdenQuiniela()">
+                <i class="fas fa-right-left"></i> Corregir Orden 1-20
+              </button>
               <button class="btn btn-secondary" onclick="limpiarExtractoPosterior()">
                 <i class="fas fa-eraser"></i> Limpiar
               </button>
@@ -1887,9 +1890,15 @@
             <h3>3. Ejecutar Escrutinio</h3>
           </div>
 
-          <button class="btn btn-primary btn-lg" onclick="ejecutarEscrutinio()" style="width: 100%;">
-            <i class="fas fa-calculator"></i> Ejecutar Escrutinio
-          </button>
+          <div style="display: flex; gap: 0.75rem; margin-bottom: 0.75rem;">
+            <button class="btn btn-secondary" onclick="abrirEditorExtractoActual()" style="flex: 1;">
+              <i class="fas fa-pen"></i> Editar Extracto Cargado
+            </button>
+            <button class="btn btn-primary btn-lg" onclick="ejecutarEscrutinio()" style="flex: 2; width: auto;">
+              <i class="fas fa-calculator"></i> Ejecutar Escrutinio
+            </button>
+          </div>
+
         </div>
 
         <!-- Resultados -->
@@ -2994,7 +3003,7 @@
                       <th>Total Ganadores</th>
                       <th>Total Premios</th>
                       <th>Usuario</th>
-                      <th>Fecha Control</th>
+                      <th>Fecha Sorteo (Ref.)</th>
                       <th>Acciones</th>
                     </tr>
                   </thead>

@@ -19,6 +19,7 @@ const xml2js = require('xml2js');
 const crypto = require('crypto');
 const { query } = require('../../config/database');
 const { successResponse, errorResponse, PROVINCIAS } = require('../../shared/helpers');
+const { buscarFechaProgramacion } = require('../../shared/control-previo.helper');
 
 // ============================================================
 // CONFIGURACIÓN NTF QUINI 6
@@ -805,11 +806,14 @@ async function guardarControlPrevioQuini6DB(resultadoNTF, resultadoXML, user, no
     const sorteoStr = resultadoNTF.sorteo || 'N/A';
     const sorteo = parseInt(sorteoStr, 10) || 0; // Convertir a INT
     
-    // Obtener fecha: intentar del XML, luego del primer registro NTF, luego hoy
-    let fecha = null;
+    // Obtener fecha de sorteo: programación > XML > NTF
+    let fecha = await buscarFechaProgramacion('quini6', sorteo);
+    if (fecha) {
+      console.log(`📅 QUINI6 sorteo ${sorteo}: fecha desde programación = ${fecha}`);
+    }
     
     // 1. Intentar del XML
-    if (resultadoXML?.fecha) {
+    if (!fecha && resultadoXML?.fecha) {
       const f = String(resultadoXML.fecha).replace(/[^0-9]/g, '');
       if (f.length === 8) {
         fecha = `${f.substring(0, 4)}-${f.substring(4, 6)}-${f.substring(6, 8)}`;
@@ -826,10 +830,9 @@ async function guardarControlPrevioQuini6DB(resultadoNTF, resultadoXML, user, no
       }
     }
     
-    // 3. Fallback: fecha de hoy
+    // 3. Sin fallback a fecha de proceso
     if (!fecha) {
-      fecha = new Date().toISOString().split('T')[0];
-      console.log('⚠️ No se encontró fecha en XML ni NTF, usando fecha actual:', fecha);
+      throw new Error(`No se pudo determinar fecha de sorteo para QUINI 6 (${sorteo})`);
     }
     
     console.log('📅 Fecha control previo QUINI6:', fecha, '(sorteo:', sorteo, ')');

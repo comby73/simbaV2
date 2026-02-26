@@ -1257,14 +1257,14 @@ const obtenerDatosDashboard = async (req, res) => {
       if (!juego || juego === 'loto') {
         const paramsL = [];
         let whereL = '';
-        if (fechaDesde) { whereL += ' AND cp.created_at >= ?'; paramsL.push(fechaDesde); }
-        if (fechaHasta) { whereL += ' AND cp.created_at <= ?'; paramsL.push(fechaHasta + ' 23:59:59'); }
+        if (fechaDesde) { whereL += ' AND cp.fecha >= ?'; paramsL.push(fechaDesde); }
+        if (fechaHasta) { whereL += ' AND cp.fecha <= ?'; paramsL.push(fechaHasta); }
         if (sorteoDesde) { whereL += ' AND cp.numero_sorteo >= ?'; paramsL.push(sorteoDesde); }
         if (sorteoHasta) { whereL += ' AND cp.numero_sorteo <= ?'; paramsL.push(sorteoHasta); }
 
         const sqlL = `
           SELECT
-            cp.id, DATE(cp.created_at) as fecha, cp.numero_sorteo as sorteo, 'U' as modalidad,
+            cp.id, cp.fecha as fecha, cp.numero_sorteo as sorteo, 'U' as modalidad,
             cp.registros_validos as total_registros,
             (cp.registros_validos + cp.registros_anulados) as total_tickets,
             cp.apuestas_total as total_apuestas,
@@ -1276,9 +1276,9 @@ const obtenerDatosDashboard = async (req, res) => {
             cp.created_at,
             'loto' as juego
           FROM control_previo_loto cp
-          LEFT JOIN escrutinio_loto el ON cp.numero_sorteo = el.numero_sorteo
+          LEFT JOIN escrutinio_loto el ON cp.fecha = el.fecha AND cp.numero_sorteo = el.numero_sorteo
           WHERE 1=1 ${whereL}
-          ORDER BY cp.created_at DESC
+          ORDER BY cp.fecha DESC, cp.numero_sorteo DESC
           LIMIT ${maxLimit} OFFSET ${offsetNum}
         `;
         const lotoData = await query(sqlL, paramsL);
@@ -1289,14 +1289,14 @@ const obtenerDatosDashboard = async (req, res) => {
       if (!juego || juego === 'loto5') {
         const paramsL5 = [];
         let whereL5 = '';
-        if (fechaDesde) { whereL5 += ' AND cp.created_at >= ?'; paramsL5.push(fechaDesde); }
-        if (fechaHasta) { whereL5 += ' AND cp.created_at <= ?'; paramsL5.push(fechaHasta + ' 23:59:59'); }
+        if (fechaDesde) { whereL5 += ' AND cp.fecha >= ?'; paramsL5.push(fechaDesde); }
+        if (fechaHasta) { whereL5 += ' AND cp.fecha <= ?'; paramsL5.push(fechaHasta); }
         if (sorteoDesde) { whereL5 += ' AND cp.numero_sorteo >= ?'; paramsL5.push(sorteoDesde); }
         if (sorteoHasta) { whereL5 += ' AND cp.numero_sorteo <= ?'; paramsL5.push(sorteoHasta); }
 
         const sqlL5 = `
           SELECT
-            cp.id, DATE(cp.created_at) as fecha, cp.numero_sorteo as sorteo, 'U' as modalidad,
+            cp.id, cp.fecha as fecha, cp.numero_sorteo as sorteo, 'U' as modalidad,
             cp.registros_validos as total_registros,
             (cp.registros_validos + cp.registros_anulados) as total_tickets,
             cp.apuestas_total as total_apuestas,
@@ -1308,9 +1308,9 @@ const obtenerDatosDashboard = async (req, res) => {
             cp.created_at,
             'loto5' as juego
           FROM control_previo_loto5 cp
-          LEFT JOIN escrutinio_loto5 el5 ON cp.numero_sorteo = el5.numero_sorteo
+          LEFT JOIN escrutinio_loto5 el5 ON cp.fecha = el5.fecha AND cp.numero_sorteo = el5.numero_sorteo
           WHERE 1=1 ${whereL5}
-          ORDER BY cp.created_at DESC
+          ORDER BY cp.fecha DESC, cp.numero_sorteo DESC
           LIMIT ${maxLimit} OFFSET ${offsetNum}
         `;
         const loto5Data = await query(sqlL5, paramsL5);
@@ -2156,16 +2156,45 @@ const obtenerDatosDashboard = async (req, res) => {
       // Si no se especificó juego (todos), acumular por agencia sumando todos los juegos
       if (!juego || juego === 'todos') {
         const acumulado = new Map();
+
+        const normalizarCodigoProvincia = (codigo) => {
+          if (codigo === null || codigo === undefined) return null;
+          const limpio = String(codigo).trim();
+          if (!limpio) return null;
+          return limpio.padStart(2, '0');
+        };
+
+        const construirClaveAcumulado = (row) => {
+          const codProv = normalizarCodigoProvincia(row.codigo_provincia);
+          if (codProv && codProv !== '51') {
+            return `PROV-${codProv}`;
+          }
+
+          const agenciaRaw = String(row.agencia || row.codigo || row.cta_cte || '').trim();
+          const soloDigitos = agenciaRaw.replace(/\D/g, '');
+          if (soloDigitos) return soloDigitos;
+
+          return agenciaRaw || 'DESCONOCIDO';
+        };
+
+        const construirDisplayAgencia = (row, clave) => {
+          const codProv = normalizarCodigoProvincia(row.codigo_provincia);
+          if (codProv && codProv !== '51') {
+            return row.nombre || PROVINCIAS_NOMBRES[codProv] || `Provincia ${codProv}`;
+          }
+          return String(row.agencia || row.codigo || row.cta_cte || clave).replace(/\D/g, '') || (row.agencia || clave);
+        };
         
         for (const row of resultados) {
-          const clave = row.agencia || row.codigo || 'DESCONOCIDO';
+          const clave = construirClaveAcumulado(row);
+          const codigoProvincia = normalizarCodigoProvincia(row.codigo_provincia);
           
           if (!acumulado.has(clave)) {
             acumulado.set(clave, {
-              agencia: clave,
+              agencia: construirDisplayAgencia(row, clave),
               codigo: row.codigo,
-              codigo_provincia: row.codigo_provincia,
-              nombre: row.nombre || clave,
+              codigo_provincia: codigoProvincia || row.codigo_provincia,
+              nombre: construirDisplayAgencia(row, clave),
               total_ganadores: 0,
               total_premios: 0,
               total_sorteos: 0,
@@ -2173,12 +2202,17 @@ const obtenerDatosDashboard = async (req, res) => {
               total_apuestas: 0,
               total_anulados: 0,
               total_recaudacion: 0,
+              cancelaciones: 0,
+              devoluciones: 0,
               juegos: [], // Lista de juegos que aportaron
               juego: 'todos'
             });
           }
           
           const acc = acumulado.get(clave);
+          if (!acc.codigo_provincia && codigoProvincia) {
+            acc.codigo_provincia = codigoProvincia;
+          }
           acc.total_ganadores += parseInt(row.total_ganadores) || 0;
           acc.total_premios += parseFloat(row.total_premios) || 0;
           acc.total_sorteos += parseInt(row.total_sorteos) || 0;
@@ -2186,6 +2220,8 @@ const obtenerDatosDashboard = async (req, res) => {
           acc.total_apuestas += parseInt(row.total_apuestas) || 0;
           acc.total_anulados += parseInt(row.total_anulados) || 0;
           acc.total_recaudacion += parseFloat(row.total_recaudacion) || 0;
+          acc.cancelaciones += parseFloat(row.cancelaciones) || 0;
+          acc.devoluciones += parseFloat(row.devoluciones) || 0;
           
           if (row.juego && !acc.juegos.includes(row.juego)) {
             acc.juegos.push(row.juego);
@@ -2473,6 +2509,20 @@ const obtenerStatsDashboard = async (req, res) => {
   try {
     const { fechaDesde, fechaHasta, sorteoDesde, sorteoHasta, juego } = req.query;
 
+    const normalizarCodigoProvincia = (codigo) => {
+      if (codigo === null || codigo === undefined) return null;
+      const limpio = String(codigo).trim();
+      if (!limpio) return null;
+      return limpio.padStart(2, '0');
+    };
+
+    const provinciaCuentaComoActiva = (codigo) => {
+      const cod = normalizarCodigoProvincia(codigo);
+      if (!cod) return false;
+      if (cod === '51') return false;
+      return Boolean(PROVINCIAS[cod]);
+    };
+
     // Construir condiciones WHERE
     let whereQ = '', whereP = '';
     const paramsQ = [], paramsP = [];
@@ -2550,7 +2600,11 @@ const obtenerStatsDashboard = async (req, res) => {
         FROM control_previo_agencias
         WHERE juego = 'quiniela' ${whereQ}
       `, paramsQ);
-      provinciasQ.forEach(p => provinciasSet.add(String(p.codigo_provincia)));
+      provinciasQ.forEach(p => {
+        if (provinciaCuentaComoActiva(p.codigo_provincia)) {
+          provinciasSet.add(normalizarCodigoProvincia(p.codigo_provincia));
+        }
+      });
     }
 
     // Poceada
@@ -2595,7 +2649,11 @@ const obtenerStatsDashboard = async (req, res) => {
         FROM control_previo_agencias
         WHERE juego = 'poceada' ${whereP}
       `, paramsP);
-      provsP.forEach(p => provinciasSet.add(String(p.codigo_provincia)));
+      provsP.forEach(p => {
+        if (provinciaCuentaComoActiva(p.codigo_provincia)) {
+          provinciasSet.add(normalizarCodigoProvincia(p.codigo_provincia));
+        }
+      });
     }
 
     // Tombolina
@@ -2638,7 +2696,11 @@ const obtenerStatsDashboard = async (req, res) => {
         FROM control_previo_agencias
         WHERE juego = 'tombolina' ${whereQ}
       `, paramsQ);
-      provinciasT.forEach(p => provinciasSet.add(String(p.codigo_provincia)));
+      provinciasT.forEach(p => {
+        if (provinciaCuentaComoActiva(p.codigo_provincia)) {
+          provinciasSet.add(normalizarCodigoProvincia(p.codigo_provincia));
+        }
+      });
     }
 
     // BLOQUE GENÉRICO PARA OTROS JUEGOS (Quini 6, Brinco, Loto, etc.)
@@ -2724,7 +2786,11 @@ const obtenerStatsDashboard = async (req, res) => {
           FROM control_previo_agencias
           WHERE juego = ? ${whereQ}
         `, [j, ...paramsQ]);
-        provinciasGen.forEach(p => provinciasSet.add(String(p.codigo_provincia)));
+        provinciasGen.forEach(p => {
+          if (provinciaCuentaComoActiva(p.codigo_provincia)) {
+            provinciasSet.add(normalizarCodigoProvincia(p.codigo_provincia));
+          }
+        });
       }
     }
 

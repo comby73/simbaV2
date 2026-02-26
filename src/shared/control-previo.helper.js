@@ -182,10 +182,18 @@ async function guardarControlPrevioQuiniela(resultado, usuario, nombreArchivo) {
       seguridad
     } = resultado;
 
-    // Extraer datos
-    const fecha = sorteo?.programacion?.fecha_sorteo || new Date().toISOString().split('T')[0];
+    // Extraer datos: fecha de sorteo estricta
     const numeroSorteo = parseInt(sorteo?.numero || datosCalculados?.numeroSorteo || 0);
     const modalidad = sorteo?.modalidad?.codigo || 'M'; // Default Matutina
+
+    let fecha = sorteo?.programacion?.fecha_sorteo || null;
+    if (!fecha && numeroSorteo > 0) {
+      fecha = await buscarFechaProgramacion('quiniela', numeroSorteo, modalidad);
+    }
+
+    if (!fecha) {
+      throw new Error(`No se pudo determinar fecha de sorteo para Quiniela (sorteo ${numeroSorteo}, modalidad ${modalidad})`);
+    }
 
     // Verificar si ya existe (para reemplazar)
     const existe = await query(
@@ -329,10 +337,8 @@ async function guardarControlPrevioPoceada(resultado, usuario, nombreArchivo) {
       fecha = fechaSorteo;
     }
     
-    // 3. Último fallback: fecha actual
     if (!fecha) {
-      fecha = new Date().toISOString().split('T')[0];
-      console.log(`⚠️ Poceada sorteo ${numeroSorteo}: usando fecha actual (no encontrada en programación)`);
+      throw new Error(`No se pudo determinar fecha de sorteo para Poceada (sorteo ${numeroSorteo})`);
     }
 
     // Verificar si ya existe (para reemplazar)
@@ -505,10 +511,8 @@ async function guardarControlPrevioTombolina(resultado, usuario, nombreArchivo) 
       console.log(`📅 Tombolina sorteo ${numeroSorteo}: fecha desde programación = ${fecha}`);
     }
     
-    // 2. Último fallback: fecha actual
     if (!fecha) {
-      fecha = new Date().toISOString().split('T')[0];
-      console.log(`⚠️ Tombolina sorteo ${numeroSorteo}: usando fecha actual (no encontrada en programación)`);
+      throw new Error(`No se pudo determinar fecha de sorteo para Tombolina (sorteo ${numeroSorteo})`);
     }
 
     // Verificar si ya existe

@@ -16,6 +16,7 @@ const xml2js = require('xml2js');
 const crypto = require('crypto');
 const { query } = require('../../config/database');
 const { successResponse, errorResponse, PROVINCIAS } = require('../../shared/helpers');
+const { buscarFechaProgramacion } = require('../../shared/control-previo.helper');
 
 // ============================================================
 // CONFIGURACIÓN NTF BRINCO
@@ -578,23 +579,27 @@ async function guardarControlPrevioBrincoDB(logsTxt, datosXml, user, nombreArchi
     const sorteo = parseInt(sorteoStr, 10) || 0; // Convertir a INT
     const resumen = logsTxt.resumen || {};
     
-    // Obtener fecha: intentar del XML, luego del primer registro NTF
-    let fecha = null;
-    if (datosXml?.fecha) {
+    // Obtener fecha de sorteo: programación > XML > NTF
+    let fecha = await buscarFechaProgramacion('brinco', sorteo);
+    if (fecha) {
+      console.log(`📅 BRINCO sorteo ${sorteo}: fecha desde programación = ${fecha}`);
+    }
+
+    if (!fecha && datosXml?.fecha) {
       const f = datosXml.fecha.replace(/[^0-9]/g, '');
       if (f.length === 8) {
         fecha = `${f.substring(0, 4)}-${f.substring(4, 6)}-${f.substring(6, 8)}`;
       } else {
         fecha = datosXml.fecha;
       }
-    } else if (logsTxt.registros && logsTxt.registros.length > 0) {
+    } else if (!fecha && logsTxt.registros && logsTxt.registros.length > 0) {
       const fv = logsTxt.registros[0].fechaVenta;
       if (fv && fv.length === 8) {
         fecha = `${fv.substring(0, 4)}-${fv.substring(4, 6)}-${fv.substring(6, 8)}`;
       }
     }
     if (!fecha) {
-      fecha = new Date().toISOString().split('T')[0];
+      throw new Error(`No se pudo determinar fecha de sorteo para BRINCO (${sorteo})`);
     }
 
     // INSERT/UPDATE en control_previo_brinco
