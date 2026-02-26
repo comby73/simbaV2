@@ -1028,8 +1028,13 @@ function mostrarResultadosCP(data) {
     recAnuladaEl.textContent = '$' + formatNumber(calc.recaudacionAnulada || 0);
   }
 
-  // Badge de sorteo
-  document.getElementById('cp-sorteo-badge').textContent = `Sorteo: ${data.sorteo || calc.numeroSorteo}`;
+  // Badge de sorteo + fecha
+  const metaSorteo = resolverMetaSorteo(data, {
+    datosControlPrevio: calc,
+    numeroSorteo: data?.sorteo
+  });
+  document.getElementById('cp-sorteo-badge').textContent =
+    `Sorteo: ${metaSorteo.numero || '-'} • Fecha: ${metaSorteo.fecha || '-'}`;
 
   // Tablas según tipo de juego
   const isTombolina = data.tipoJuego === 'Tombolina';
@@ -3786,6 +3791,140 @@ function normalizarModalidadASigla(modalidadRaw) {
   return null;
 }
 
+function esSorteoValido(valor) {
+  if (valor === null || valor === undefined) return false;
+  const texto = String(valor).trim();
+  if (!texto) return false;
+  const invalido = ['0', '-', 'S/N', 'SN', 'N/A', 'NULL', 'UNDEFINED'];
+  return !invalido.includes(texto.toUpperCase());
+}
+
+function normalizarNumeroSorteo(valor) {
+  if (valor === null || valor === undefined) return '';
+  if (typeof valor === 'object') {
+    return normalizarNumeroSorteo(valor.numero || valor.numeroSorteo || valor.sorteo || '');
+  }
+  const texto = String(valor).trim();
+  return esSorteoValido(texto) ? texto : '';
+}
+
+function normalizarFechaSorteo(valor) {
+  if (!valor) return '';
+
+  if (valor instanceof Date && !Number.isNaN(valor.getTime())) {
+    return valor.toISOString().split('T')[0];
+  }
+
+  const texto = String(valor).trim();
+  if (!texto) return '';
+
+  if (/^\d{8}$/.test(texto)) {
+    return `${texto.slice(0, 4)}-${texto.slice(4, 6)}-${texto.slice(6, 8)}`;
+  }
+
+  if (/^\d{4}-\d{2}-\d{2}/.test(texto)) {
+    return texto.slice(0, 10);
+  }
+
+  const ddmmyyyy = texto.match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
+  if (ddmmyyyy) {
+    const [, dd, mm, yyyy] = ddmmyyyy;
+    return `${yyyy}-${mm}-${dd}`;
+  }
+
+  return texto;
+}
+
+function resolverMetaSorteo(base = {}, opciones = {}) {
+  const datosCP = opciones.datosControlPrevio || cpstDatosControlPrevio || {};
+  const resumen = base?.resumen || {};
+  const calculados = base?.datosCalculados || {};
+  const sorteoObj = base?.sorteo;
+  const programacion =
+    (typeof sorteoObj === 'object' ? sorteoObj?.programacion : null)
+    || base?.validacionProgramacion?.sorteo
+    || cpResultadosActuales?.sorteo?.programacion
+    || {};
+
+  const candidatosNumero = [
+    opciones.numeroSorteo,
+    base?.numeroSorteo,
+    base?.numero_sorteo,
+    resumen?.numeroSorteo,
+    resumen?.numero_sorteo,
+    calculados?.numeroSorteo,
+    calculados?.numero_sorteo,
+    (typeof sorteoObj === 'object' ? sorteoObj?.numero : sorteoObj),
+    programacion?.numero,
+    datosCP?.numeroSorteo,
+    datosCP?.numero_sorteo,
+    datosCP?.sorteo,
+    cpstNumeroSorteo,
+    opciones?.extracto?.sorteo,
+    opciones?.extracto?.sorteo_number
+  ];
+
+  const numero = candidatosNumero
+    .map(normalizarNumeroSorteo)
+    .find(esSorteoValido) || '';
+
+  const candidatosFecha = [
+    opciones.fechaSorteo,
+    base?.fechaSorteo,
+    base?.fecha_sorteo,
+    base?.fecha,
+    resumen?.fechaSorteo,
+    resumen?.fecha,
+    calculados?.fechaSorteo,
+    calculados?.fecha,
+    programacion?.fecha_sorteo,
+    programacion?.fecha,
+    (typeof sorteoObj === 'object' ? sorteoObj?.fecha : ''),
+    datosCP?.fechaSorteo,
+    datosCP?.fecha_sorteo,
+    datosCP?.fecha,
+    cpResultadosActuales?.fechaSorteo,
+    cpResultadosActuales?.fecha,
+    opciones?.extracto?.fecha
+  ];
+
+  const fecha = candidatosFecha
+    .map(normalizarFechaSorteo)
+    .find(Boolean) || '';
+
+  return { numero, fecha };
+}
+
+function sincronizarMetaSorteoPosterior(resultado, extracto = null) {
+  if (!resultado || typeof resultado !== 'object') return;
+
+  const meta = resolverMetaSorteo(resultado, {
+    datosControlPrevio: cpstDatosControlPrevio,
+    extracto
+  });
+
+  if (meta.numero) {
+    resultado.numeroSorteo = resultado.numeroSorteo || meta.numero;
+    cpstNumeroSorteo = meta.numero;
+    if (!cpstDatosControlPrevio) cpstDatosControlPrevio = {};
+    cpstDatosControlPrevio.numeroSorteo = cpstDatosControlPrevio.numeroSorteo || meta.numero;
+    cpstDatosControlPrevio.sorteo = cpstDatosControlPrevio.sorteo || meta.numero;
+  }
+
+  if (meta.fecha) {
+    resultado.fechaSorteo = resultado.fechaSorteo || meta.fecha;
+    if (!cpstDatosControlPrevio) cpstDatosControlPrevio = {};
+    cpstDatosControlPrevio.fechaSorteo = cpstDatosControlPrevio.fechaSorteo || meta.fecha;
+    cpstDatosControlPrevio.fecha = cpstDatosControlPrevio.fecha || meta.fecha;
+  }
+
+  const sorteoEl = document.getElementById('cpst-sorteo');
+  if (sorteoEl) {
+    const textoNumero = meta.numero || cpstNumeroSorteo || '-';
+    sorteoEl.textContent = meta.fecha ? `${textoNumero} • ${meta.fecha}` : textoNumero;
+  }
+}
+
 function notificarExtractoDescartadoPorModalidad(archivoNombre, modalidadDetectada, modalidadSorteo, tipoArchivo = 'Archivo') {
   const detectada = modalidadDetectada || 'desconocida';
   const actual = modalidadSorteo || 'no definida';
@@ -3881,24 +4020,16 @@ function cargarDatosControlPrevio() {
     comparacion: cpResultadosActuales.comparacion || null
   };
 
-  // Normalizar obtención del número de sorteo (Quiniela devuelve objeto, Poceada/Tombolina puede devolver string)
-  let nroSorteo = cpResultadosActuales.sorteo;
-  if (nroSorteo && typeof nroSorteo === 'object') nroSorteo = nroSorteo.numero;
+  const metaSorteo = resolverMetaSorteo(cpResultadosActuales, {
+    datosControlPrevio: cpstDatosControlPrevio
+  });
 
-  cpstNumeroSorteo = cpstDatosControlPrevio.numeroSorteo || nroSorteo || '';
-
-  const fechaSorteoNormalizada =
-    cpResultadosActuales?.sorteo?.programacion?.fecha_sorteo ||
-    cpResultadosActuales?.fecha ||
-    cpResultadosActuales?.fechaSorteo ||
-    cpstDatosControlPrevio?.fecha ||
-    cpstDatosControlPrevio?.fechaSorteo ||
-    '';
+  cpstNumeroSorteo = metaSorteo.numero || cpstDatosControlPrevio.numeroSorteo || '';
 
   cpstDatosControlPrevio.numeroSorteo = cpstDatosControlPrevio.numeroSorteo || cpstNumeroSorteo;
   cpstDatosControlPrevio.sorteo = cpstDatosControlPrevio.sorteo || cpstNumeroSorteo;
-  cpstDatosControlPrevio.fechaSorteo = cpstDatosControlPrevio.fechaSorteo || fechaSorteoNormalizada;
-  cpstDatosControlPrevio.fecha = cpstDatosControlPrevio.fecha || fechaSorteoNormalizada;
+  cpstDatosControlPrevio.fechaSorteo = cpstDatosControlPrevio.fechaSorteo || metaSorteo.fecha;
+  cpstDatosControlPrevio.fecha = cpstDatosControlPrevio.fecha || metaSorteo.fecha;
 
   // Tomar modalidad SOLO de la programación (basado en número de sorteo)
   // NO usar el código del NTF (SR, etc.) - la programación ya tiene la modalidad correcta
@@ -3942,7 +4073,9 @@ function cargarDatosControlPrevio() {
 
   // Mostrar datos cargados
   document.getElementById('cpst-datos-cargados').classList.remove('hidden');
-  document.getElementById('cpst-sorteo').textContent = cpstNumeroSorteo;
+  document.getElementById('cpst-sorteo').textContent = metaSorteo.fecha
+    ? `${cpstNumeroSorteo || '-'} • ${metaSorteo.fecha}`
+    : (cpstNumeroSorteo || '-');
   document.getElementById('cpst-registros').textContent = formatNumber(cpstDatosControlPrevio.registros || 0);
   document.getElementById('cpst-recaudacion').textContent = '$' + formatNumber(cpstDatosControlPrevio.recaudacion || 0);
 
@@ -6332,6 +6465,7 @@ async function ejecutarEscrutinio() {
       }
 
       cpstResultados = response.data;
+      sincronizarMetaSorteoPosterior(cpstResultados, null);
       mostrarResultadosEscrutinioQuinielaYa(cpstResultados);
       showToast('Quiniela Ya procesada correctamente', 'success');
     } catch (error) {
@@ -6445,6 +6579,7 @@ async function ejecutarEscrutinio() {
       if (!response.ok) throw new Error(data.message);
 
       cpstResultados = data.data;
+      sincronizarMetaSorteoPosterior(cpstResultados, cpstExtractoLoto);
       // Agregar datos del XML al resultado para mostrar en UI
       cpstResultados.xmlData = cpstLotoXmlData;
       mostrarResultadosEscrutinioLoto(cpstResultados);
@@ -6469,6 +6604,7 @@ async function ejecutarEscrutinio() {
       if (!response.ok) throw new Error(data.message);
 
       cpstResultados = data.data;
+      sincronizarMetaSorteoPosterior(cpstResultados, cpstExtractoLoto5);
       mostrarResultadosEscrutinioLoto5(cpstResultados);
       showToast('Escrutinio Loto 5 completado', 'success');
 
@@ -6492,6 +6628,7 @@ async function ejecutarEscrutinio() {
       if (!response.ok) throw new Error(data.message);
 
       cpstResultados = data.data;
+      sincronizarMetaSorteoPosterior(cpstResultados, cpstExtractoPoceada);
       mostrarResultadosEscrutinioPoceada(cpstResultados);
       showToast('Escrutinio Poceada completado', 'success');
 
@@ -6504,6 +6641,7 @@ async function ejecutarEscrutinio() {
       });
 
       cpstResultados = response.data;
+      sincronizarMetaSorteoPosterior(cpstResultados, cpstExtractoPoceada);
       mostrarResultadosEscrutinioTombolina(cpstResultados);
       showToast('Escrutinio Tombolina completado', 'success');
 
@@ -6517,6 +6655,7 @@ async function ejecutarEscrutinio() {
       });
 
       cpstResultados = response.data;
+      sincronizarMetaSorteoPosterior(cpstResultados, cpstExtractoBrinco);
       mostrarResultadosEscrutinioBrinco(cpstResultados);
       showToast('Escrutinio BRINCO completado', 'success');
 
@@ -6531,6 +6670,7 @@ async function ejecutarEscrutinio() {
       });
 
       cpstResultados = response.data;
+      sincronizarMetaSorteoPosterior(cpstResultados, cpstExtractoQuini6);
       mostrarResultadosEscrutinioQuini6(cpstResultados);
       showToast('Escrutinio QUINI 6 completado', 'success');
 
@@ -6561,6 +6701,7 @@ async function ejecutarEscrutinio() {
       if (!response.ok) throw new Error(data.message);
 
       cpstResultados = data.data;
+      sincronizarMetaSorteoPosterior(cpstResultados, null);
       mostrarResultadosEscrutinio(cpstResultados);
       showToast('Escrutinio completado', 'success');
     }
