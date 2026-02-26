@@ -548,7 +548,7 @@ const listarControlPrevioGeneral = async (req, res) => {
     // Obtener Poceada si no se especifica juego o es poceada
     if (!juego || juego === 'poceada') {
       let sqlP = `
-        SELECT cp.*, u.nombre as usuario_nombre, 'poceada' as juego
+        SELECT cp.*, 'U' as modalidad, u.nombre as usuario_nombre, 'poceada' as juego
         FROM control_previo_poceada cp
         LEFT JOIN usuarios u ON cp.usuario_id = u.id
         WHERE 1=1
@@ -568,7 +568,7 @@ const listarControlPrevioGeneral = async (req, res) => {
     if (!juego || juego === 'tombolina') {
       try {
         let sqlT = `
-          SELECT cp.*, u.nombre as usuario_nombre, 'tombolina' as juego
+          SELECT cp.*, 'U' as modalidad, u.nombre as usuario_nombre, 'tombolina' as juego
           FROM control_previo_tombolina cp
           LEFT JOIN usuarios u ON cp.usuario_id = u.id
           WHERE 1=1
@@ -592,7 +592,7 @@ const listarControlPrevioGeneral = async (req, res) => {
     if (!juego || juego === 'loto') {
       try {
         let sqlL = `
-          SELECT cp.*, u.nombre as usuario_nombre, 'loto' as juego
+          SELECT cp.*, 'U' as modalidad, u.nombre as usuario_nombre, 'loto' as juego
           FROM control_previo_loto cp
           LEFT JOIN usuarios u ON cp.usuario_id = u.id
           WHERE 1=1
@@ -621,6 +621,7 @@ const listarControlPrevioGeneral = async (req, res) => {
                  cp.apuestas_total as total_apuestas,
                  cp.registros_anulados as total_anulados,
                  cp.recaudacion as total_recaudacion,
+             'U' as modalidad,
                  cp.usuario_id, cp.created_at, cp.updated_at,
                  u.nombre as usuario_nombre, 'loto5' as juego
           FROM control_previo_loto5 cp
@@ -650,6 +651,7 @@ const listarControlPrevioGeneral = async (req, res) => {
                  cp.apuestas_total as total_apuestas,
                  cp.registros_anulados as total_anulados,
                  cp.recaudacion as total_recaudacion,
+             'U' as modalidad,
                  cp.usuario_id, cp.created_at, cp.updated_at,
                  u.nombre as usuario_nombre, 'brinco' as juego
           FROM control_previo_brinco cp
@@ -679,6 +681,7 @@ const listarControlPrevioGeneral = async (req, res) => {
                  cp.apuestas_total as total_apuestas,
                  cp.registros_anulados as total_anulados,
                  cp.recaudacion as total_recaudacion,
+             'U' as modalidad,
                  cp.usuario_id, cp.created_at, cp.updated_at,
                  u.nombre as usuario_nombre, 'quini6' as juego
           FROM control_previo_quini6 cp
@@ -725,23 +728,108 @@ const obtenerDetalleControlPrevio = async (req, res) => {
       return errorResponse(res, `Debe especificar juego válido: ${juegosValidos.join(', ')}`, 400);
     }
 
-    const tablaMap = {
-      'quiniela': 'control_previo_quiniela',
-      'poceada': 'control_previo_poceada',
-      'tombolina': 'control_previo_tombolina',
-      'loto': 'control_previo_loto',
-      'loto5': 'control_previo_loto5',
-      'brinco': 'control_previo_brinco',
-      'quini6': 'control_previo_quini6'
+    const detalleSqlByJuego = {
+      quiniela: `
+        SELECT cp.*, u.nombre as usuario_nombre
+        FROM control_previo_quiniela cp
+        LEFT JOIN usuarios u ON cp.usuario_id = u.id
+        WHERE cp.id = ?
+      `,
+      poceada: `
+        SELECT cp.*, 'U' as modalidad, u.nombre as usuario_nombre
+        FROM control_previo_poceada cp
+        LEFT JOIN usuarios u ON cp.usuario_id = u.id
+        WHERE cp.id = ?
+      `,
+      tombolina: `
+        SELECT cp.*, 'U' as modalidad, u.nombre as usuario_nombre
+        FROM control_previo_tombolina cp
+        LEFT JOIN usuarios u ON cp.usuario_id = u.id
+        WHERE cp.id = ?
+      `,
+      loto: `
+        SELECT
+          cp.id,
+          cp.numero_sorteo,
+          cp.fecha,
+          cp.archivo as nombre_archivo_zip,
+          cp.registros_validos as total_registros,
+          cp.apuestas_total as total_apuestas,
+          cp.registros_anulados as total_anulados,
+          cp.recaudacion as total_recaudacion,
+          cp.datos_json as datos_adicionales,
+          'U' as modalidad,
+          cp.usuario_id,
+          cp.created_at,
+          cp.updated_at,
+          u.nombre as usuario_nombre
+        FROM control_previo_loto cp
+        LEFT JOIN usuarios u ON cp.usuario_id = u.id
+        WHERE cp.id = ?
+      `,
+      loto5: `
+        SELECT
+          cp.id,
+          cp.numero_sorteo,
+          cp.fecha,
+          cp.archivo as nombre_archivo_zip,
+          cp.registros_validos as total_registros,
+          cp.apuestas_total as total_apuestas,
+          cp.registros_anulados as total_anulados,
+          cp.recaudacion as total_recaudacion,
+          cp.datos_json as datos_adicionales,
+          'U' as modalidad,
+          cp.usuario_id,
+          cp.created_at,
+          cp.updated_at,
+          u.nombre as usuario_nombre
+        FROM control_previo_loto5 cp
+        LEFT JOIN usuarios u ON cp.usuario_id = u.id
+        WHERE cp.id = ?
+      `,
+      brinco: `
+        SELECT
+          cp.id,
+          cp.numero_sorteo,
+          cp.fecha,
+          cp.archivo as nombre_archivo_zip,
+          cp.registros_validos as total_registros,
+          cp.apuestas_total as total_apuestas,
+          cp.registros_anulados as total_anulados,
+          cp.recaudacion as total_recaudacion,
+          cp.datos_json as datos_adicionales,
+          'U' as modalidad,
+          cp.usuario_id,
+          cp.created_at,
+          cp.updated_at,
+          u.nombre as usuario_nombre
+        FROM control_previo_brinco cp
+        LEFT JOIN usuarios u ON cp.usuario_id = u.id
+        WHERE cp.id = ?
+      `,
+      quini6: `
+        SELECT
+          cp.id,
+          cp.numero_sorteo,
+          cp.fecha,
+          cp.archivo as nombre_archivo_zip,
+          cp.registros_validos as total_registros,
+          cp.apuestas_total as total_apuestas,
+          cp.registros_anulados as total_anulados,
+          cp.recaudacion as total_recaudacion,
+          cp.datos_json as datos_adicionales,
+          'U' as modalidad,
+          cp.usuario_id,
+          cp.created_at,
+          cp.updated_at,
+          u.nombre as usuario_nombre
+        FROM control_previo_quini6 cp
+        LEFT JOIN usuarios u ON cp.usuario_id = u.id
+        WHERE cp.id = ?
+      `
     };
-    const tabla = tablaMap[juego];
 
-    const [registro] = await query(`
-      SELECT cp.*, u.nombre as usuario_nombre
-      FROM ${tabla} cp
-      LEFT JOIN usuarios u ON cp.usuario_id = u.id
-      WHERE cp.id = ?
-    `, [id]);
+    const [registro] = await query(detalleSqlByJuego[juego], [id]);
 
     if (!registro) {
       return errorResponse(res, 'Registro no encontrado', 404);
