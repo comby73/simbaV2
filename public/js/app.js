@@ -4714,6 +4714,10 @@ function detectarProvinciaCodigoDesdeNombreArchivo(filename) {
   const infoQnl = parsearNombreArchivoXML(filename);
   if (infoQnl?.codigoProvincia) return infoQnl.codigoProvincia;
 
+  // Formato numérico: PPNNNNN.ext donde PP = código de provincia (ej: 51977.pdf → CABA)
+  const matchNumerico = String(filename).match(/^(\d{2})\d{3,}(?:\.\w+)?$/);
+  if (matchNumerico && PROVINCIAS_XML[matchNumerico[1]]) return matchNumerico[1];
+
   const nombre = String(filename).toUpperCase()
     .normalize('NFD')
     .replace(/[\u0300-\u036f]/g, '');
@@ -5389,7 +5393,8 @@ function extraerNumerosDeTexto(texto, opciones = {}) {
 
   // Filtrar líneas que son cabecera/metadata (fechas, horas, sorteo) para evitar
   // falsas capturas como "Nro.1171" -> pos=1 num=171, "2026" -> pos=20 num=26, etc.
-  const REGEX_LINEA_METADATA = /(?:fecha|hora|sorteo|nro|núm|prescri|próximo|proximo|inicio|fin\b|\d{2}\/\d{2}\/\d{4}|\d{2}:\d{2})/i;
+  // nro/núm solo se filtran cuando van seguidos de un número grande (sorteo > 20), NO posiciones 1-20
+  const REGEX_LINEA_METADATA = /(?:fecha|hora|sorteo|\bnro\.?\s*\d{3,}|\bnum\.?\s*\d{3,}|prescri|próximo|proximo|inicio|fin\b|\d{2}\/\d{2}\/\d{4}|\d{2}:\d{2})/i;
 
   const txtFiltrado = txt
     .split('\n')
@@ -5404,9 +5409,6 @@ function extraerNumerosDeTexto(texto, opciones = {}) {
   while ((matchPos = regexPos.exec(txtFiltrado)) !== null) {
     const pos = parseInt(matchPos[1], 10);
     const numero = normalizarNumero(matchPos[2]);
-    // Descartar si el número capturado parece ser un año (2020-2030)
-    const numInt = parseInt(numero, 10);
-    if (numInt >= 2020 && numInt <= 2040) continue;
     if (pos >= 1 && pos <= 20 && !porPosicion.has(pos)) {
       porPosicion.set(pos, numero);
     }
