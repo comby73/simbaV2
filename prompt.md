@@ -1,5 +1,92 @@
 # Prompts de la Conversacion - SIMBA V2
 
+## Sesion: 26-27 de Febrero 2026 (Control Previo/Posterior + Deploy Web)
+
+### Prompt A1 - Dashboard TODOS no suma bien
+> "otro cosa aca cuando pongo todo no me salen tickets apuestas anulados y ganadores..."
+>
+> **Contexto:** En Reportes/Dashboard, el modo TODOS no acumulaba correctamente métricas por agencia/provincia y faltaban componentes de anulados/cancelaciones.
+
+### Prompt A2 - Publicación inmediata
+> "realicemos el commit y el push"
+>
+> **Contexto:** Se solicitó publicar de inmediato los cambios de dashboard en main.
+
+### Prompt A3 - Reproceso por sorteo (no por fecha)
+> "si reproceso... deberia tomar como busqueda de id el numero de sorteo"
+>
+> **Contexto:** Evitar reemplazos/duplicados por variaciones de fecha y usar clave lógica de sorteo (y modalidad cuando corresponda).
+
+### Prompt A4 - Enriquecer modal de escrutinio
+> "quiero que en el modal del ojo vea premios individuales... cta cte provincia y si es caba direccion"
+>
+> **Contexto:** Se pidió ampliar detalle de ganadores y localización de venta en modal de Historial.
+
+### Prompt A5 - Bug Poceada: sorteo 0 y sin detalle
+> "poceada no tiene numero de sorteo... no esta cargando los ganadores el detalle"
+>
+> **Contexto:** Poceada guardaba/surfaciaba sorteo incorrecto y faltaba persistencia de detalle individual de ganadores.
+
+### Prompt A6 - Bug modal CP Quini6 con ceros
+> "otro problema el modal del control previo del quini6 mira lo que me trae"
+>
+> **Contexto:** Desalineación de campos entre backend y frontend del modal detalle Control Previo para juegos de modalidad única.
+
+### Prompt A7 - Consistencia global de sorteo y fecha
+> "que en resultados cargue correctamente numero de sorteo y fecha de sorteo en control previo y posterior"
+>
+> **Contexto:** Se pidió consolidar para todos los juegos la misma lógica de metadatos en resultados.
+
+### Prompt A8 - Error 500 UPPER y web solo toma Buenos Aires
+> "Incorrect parameter count in the call to native function 'UPPER'... web solo me lee buenos aires"
+>
+> **Contexto:** Error en backend extractos al resolver provincia y fallo de guardado masivo en web.
+
+### Prompt A9 - Letras manuales y lógica Redoblona
+> "no me deja cargar todas las letras... son 26 letras... y redoblona no marca ganadora en superposición"
+>
+> **Contexto:** Ajustar validación de letras manuales y corregir asignación de aciertos en Redoblona cuando hay repeticiones y rangos superpuestos.
+
+### Prompt A10 - No se ve actualización en GitHub
+> "no se esta actualizando el commit"
+>
+> **Contexto:** Se detectó confusión entre ramas main y principal en la vista de GitHub.
+
+### Prompt A11 - Carga masiva web solo procesa uno
+> "en web me lee distinto y cuando paso todos los pdf juntos solo me lee uno"
+>
+> **Contexto:** Diferencias local/web en OCR batch, sobrescritura de provincia y fallback sesgado a CABA.
+
+### Prompt A12 - Duplicados CABA y regla de coincidencia archivo vs sorteo
+> "quedaron 2 caba grabados... la idea es validar provincia/modalidad/fecha y coincidir con sorteo"
+>
+> **Contexto:** Se pidió explicitamente validar metadata de archivo y depurar duplicados visibles en lista de extractos.
+
+### Prompt A13 - Actualización completa de documentación
+> "actualizame completo completo los md de siempre prompt y documentacion"
+>
+> **Contexto:** Consolidar trazabilidad de cambios recientes en prompt.md y DOCUMENTACION.md.
+
+---
+
+## Resumen de cambios pedidos en esta sesión
+
+| Bloque | Pedido funcional | Estado |
+|---|---|---|
+| Dashboard | Totales TODOS (tickets/apuestas/anulados/ganadores) | Completado |
+| Reproceso | Clave por sorteo (y modalidad para Quiniela) | Completado |
+| Historial | Modal de ganadores enriquecido (agencia/provincia/dirección) | Completado |
+| Poceada | Corrección sorteo y detalle individual de ganadores | Completado |
+| CP Modal | Normalización de detalle Quini6/juegos modalidad única | Completado |
+| Resultados | Unificación global de número/fecha de sorteo | Completado |
+| Extractos API | Fix SQL UPPER en resolución de provincia | Completado |
+| Letras | Validación manual ampliada (A-Z) | Completado |
+| Redoblona | Asignación correcta en superposición de rangos | Completado |
+| Batch Web | Detección robusta provincia/modalidad/fecha desde archivo | Completado |
+| UI Extractos | Depuración de duplicados por provincia en carga BD | Completado |
+
+---
+
 ## Sesion: 30 de Enero 2026
 
 ### Prompt 1 - Contexto Inicial (Recuperacion de sesion anterior)

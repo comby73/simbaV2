@@ -1,5 +1,103 @@
 # SIMBA V2 - Sistema de Control de Loterías
 
+## 🚀 Actualización Integral - 26/27 Febrero 2026
+
+### 1) Consistencia de metadatos de sorteo (todos los juegos)
+
+Se consolidó la normalización de numero de sorteo y fecha de sorteo en Control Previo y Control Posterior para evitar:
+- sorteo en 0 o vacío,
+- fecha inconsistente entre fuentes (programación, CP, extracto, escrutinio),
+- divergencias entre módulos al renderizar resultados.
+
+Implementación principal en frontend:
+- Resolver metadatos por prioridad de fuentes.
+- Sincronización al ejecutar escrutinio para Quiniela, Quiniela Ya, Poceada, Tombolina, Loto, Loto 5, Brinco y Quini 6.
+
+Resultado:
+- badges y payloads con sorteo/fecha consistentes,
+- menor riesgo de reproceso sobre claves equivocadas,
+- trazabilidad homogénea en reportes y actas.
+
+### 2) Reproceso por clave lógica de sorteo
+
+Se unificó la lógica de reemplazo de procesos para evitar depender de fecha:
+- Quiniela: numero_sorteo + modalidad.
+- Poceada/Tombolina: numero_sorteo.
+
+Impacto:
+- menos duplicados en reprocesos,
+- menor riesgo de sobrescritura incorrecta por diferencias de fecha operativa.
+
+### 3) Historial y modales de detalle
+
+Se ampliaron datos de ganadores en modal de escrutinio:
+- primer premio y ganadores individuales,
+- agencia, cuenta corriente, provincia,
+- dirección/localidad de agencia (especialmente útil en CABA).
+
+También se corrigió el detalle de Control Previo para juegos de modalidad única (ej. Quini 6) normalizando aliases de columnas esperados por frontend.
+
+### 4) Correcciones Poceada
+
+Se corrigió un caso de sorteo no resuelto (Sorteo 0) y se reforzó persistencia de detalle individual de ganadores para visualización confiable en modal/historial.
+
+### 5) Extractos Web: diferencias local vs producción (batch PDF/imagen)
+
+Se atacó un conjunto de causas que explicaban por qué en web “solo leía uno” o terminaba todo en CABA:
+
+1. Fix backend SQL en resolución de provincia
+- Error detectado: Incorrect parameter count in native function UPPER.
+- Causa: envío de objeto (no string) a UPPER en búsqueda de provincia.
+- Solución: normalización robusta a texto y ampliación de matching por código/nombre.
+
+2. Priorización de metadata del nombre de archivo en carga inteligente
+- En batch, provincia y modalidad se priorizan desde nombre de archivo (cuando existe señal confiable), para evitar sobrescrituras por detección OCR errática.
+
+3. Fallback OCR sin default forzado a CABA
+- Si OCR principal falla, el fallback ya no asigna CABA por defecto.
+- Prioridad: nombre de archivo → texto OCR → (opcional) UI en contexto manual.
+
+4. Validación contra sorteo cargado (regla operativa)
+- El archivo se procesa solo si coincide modalidad y fecha con el sorteo activo.
+- Si no coincide, se descarta con aviso.
+
+5. Depuración de duplicados en lista de extractos desde BD
+- En precarga, se deduplica por provincia y se conserva el registro más reciente.
+
+### 6) Letras manuales (Quiniela/Poceada/Tombolina)
+
+Se amplió validación de letras manuales para aceptar A-Z (26 letras), reemplazando restricciones anteriores a subconjuntos.
+
+### 7) Redoblona Quiniela (superposición de rangos)
+
+Se corrigió la asignación de aciertos cuando el mismo número aparece en ambas ventanas de búsqueda (rangos superpuestos):
+- se evita reutilizar indebidamente una misma posición para ambas fases,
+- se distribuyen coincidencias de forma válida,
+- se preserva el cálculo de tope y pago según reglas existentes.
+
+Caso típico cubierto:
+- número repetido en posición dentro de 1-10 y también 1-20,
+- ahora computa correctamente para ambas fases cuando corresponde.
+
+### 8) Commits relevantes de esta actualización
+
+- 7c6e877 Normalize sorteo and fecha metadata across control previo/posterior results
+- ce4ebcd Fix provincia resolution in extractos to avoid UPPER parameter error
+- 61199f8 Fix manual letter validation and redoblona overlap assignment
+- f25d941 Fix batch PDF province detection using filename fallback
+- 305b051 Avoid CABA default in smart batch fallback OCR
+- 598a7bd Validate batch files by sorteo date/modality and dedupe BD extractos
+
+### 9) Recomendaciones operativas de despliegue
+
+Para validar en web luego de deploy:
+- recarga forzada de assets (Ctrl+F5),
+- confirmar rama observada (main vs principal),
+- probar batch con mezcla de provincias y verificar estados por archivo,
+- revisar lista de extractos: no deben aparecer duplicados por provincia.
+
+---
+
 ## 📋 Descripción General
 
 Sistema web para el **control y análisis de sorteos de lotería** de LOTBA (Lotería de Buenos Aires). Diseñado como sistema **polimórfico** que detecta automáticamente el tipo de juego desde los archivos NTF.
