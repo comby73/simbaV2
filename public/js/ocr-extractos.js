@@ -68,8 +68,14 @@ const OCRExtractos = {
   },
 
   // Verificar si hay API key configurada (browser o servidor)
+  // null = verificación de servidor pendiente (optimista: intentamos de todas formas)
+  // true = servidor confirmado disponible
+  // false = definitivamente no hay OCR
   hasApiKey() {
-    return !!(this.CONFIG.API_KEY || this._servidorOCRDisponible);
+    if (this.CONFIG.API_KEY) return true;                // key en browser
+    if (this._servidorOCRDisponible === true) return true; // servidor confirmado
+    if (this._servidorOCRDisponible === null) return true; // aún verificando → optimista
+    return false;                                          // servidor confirmó que no hay OCR
   },
 
   /**
