@@ -5261,6 +5261,20 @@ function detectarCodigoModalidad(modalidadNombre) {
   return modalidadNombre;
 }
 
+function obtenerProvinciaHintDesdeCodigo(codigoProvincia) {
+  const mapa = {
+    '51': 'CABA',
+    '53': 'Buenos Aires',
+    '55': 'Córdoba',
+    '59': 'Entre Ríos',
+    '64': 'Mendoza',
+    '72': 'Santa Fe',
+    '00': 'Montevideo'
+  };
+
+  return mapa[String(codigoProvincia || '')] || '';
+}
+
 // Seleccionar provincia automáticamente en el combo
 function seleccionarProvinciaAutomatica(codigoProvincia) {
   const provinciaSelect = document.getElementById('cpst-extracto-provincia');
@@ -5298,18 +5312,39 @@ function loadScript(src) {
 }
 
 // Extraer números de 4 dígitos del texto OCR
-function extraerNumerosDeTexto(texto) {
-  const txt = String(texto || '')
+// opciones.digitosEsperados: 3 para Montevideo, 4 para resto
+// opciones.normalizarOCR: true solo para texto proveniente de imagen/Tesseract (no PDF digital)
+function extraerNumerosDeTexto(texto, opciones = {}) {
+  const digitosEsperados = Number(opciones?.digitosEsperados) || 4;
+  let txt = String(texto || '')
     .replace(/\r/g, '\n')
     .replace(/\t/g, ' ');
 
+  // Solo aplicar correcciones de caracteres OCR cuando el texto viene de imagen
+  // (NO aplicar a texto nativo de PDF, donde O, I, S, B son letras reales)
+  if (opciones?.normalizarOCR) {
+    txt = txt
+      .replace(/[OoQq]/g, '0')
+      .replace(/[Il|]/g, '1')
+      .replace(/[Ss]/g, '5')
+      .replace(/[Bb]/g, '8');
+  }
+
+  const normalizarNumero = (valor) => {
+    let num = String(valor || '').replace(/[^0-9]/g, '');
+    if (!num) return '';
+    if (num.length > digitosEsperados) num = num.slice(-digitosEsperados);
+    if (num.length < digitosEsperados) num = num.padStart(digitosEsperados, '0');
+    return num;
+  };
+
   // PRIORIDAD 1: detectar patrón posicional (1..20 + número de 4 dígitos)
   const porPosicion = new Map();
-  const regexPos = /\b(0?[1-9]|1\d|20)\s*[-:.)]?\s*(\d{4})\b/g;
+  const regexPos = /\b(0?[1-9]|1\d|20)\s*[-:.)]?\s*(\d{3,5})\b/g;
   let matchPos;
   while ((matchPos = regexPos.exec(txt)) !== null) {
     const pos = parseInt(matchPos[1], 10);
-    const numero = matchPos[2];
+    const numero = normalizarNumero(matchPos[2]);
     if (pos >= 1 && pos <= 20 && !porPosicion.has(pos)) {
       porPosicion.set(pos, numero);
     }
@@ -5323,11 +5358,43 @@ function extraerNumerosDeTexto(texto) {
     if (ordenados.length >= 18) return ordenados.slice(0, 20);
   }
 
-  // PRIORIDAD 2: fallback simple (primeros 20 grupos de 4 dígitos)
+  // PRIORIDAD 2: detectar filas tipo "1 1234 2 5678 ..."
+  const porFilas = new Map();
+  const lineas = txt
+    .split('\n')
+    .map(l => l.trim())
+    .filter(Boolean);
+
+  for (const linea of lineas) {
+    const tokens = linea.split(/\s+/).filter(Boolean);
+    for (let i = 0; i < tokens.length - 1; i++) {
+      const posMatch = tokens[i].match(/^(0?[1-9]|1\d|20)$/);
+      if (!posMatch) continue;
+
+      const pos = parseInt(posMatch[1], 10);
+      const numero = normalizarNumero(tokens[i + 1]);
+      if (!numero) continue;
+
+      if (pos >= 1 && pos <= 20 && !porFilas.has(pos)) {
+        porFilas.set(pos, numero);
+      }
+    }
+  }
+
+  if (porFilas.size >= 18) {
+    const ordenados = [];
+    for (let i = 1; i <= 20; i++) {
+      if (porFilas.has(i)) ordenados.push(porFilas.get(i));
+    }
+    if (ordenados.length >= 18) return ordenados.slice(0, 20);
+  }
+
+  // PRIORIDAD 3: fallback simple (primeros 20 grupos numéricos)
   const numeros = [];
-  const matches = txt.match(/\b\d{4}\b/g) || [];
+  const matches = txt.match(/\b\d{3,5}\b/g) || [];
   for (let i = 0; i < Math.min(20, matches.length); i++) {
-    numeros.push(matches[i]);
+    const numero = normalizarNumero(matches[i]);
+    if (numero) numeros.push(numero);
   }
 
   return numeros;
@@ -5351,11 +5418,14 @@ async function extraerDatosDesdePdfTexto(archivo) {
     texto += `${pageText}\n`;
   }
 
-  const numeros = extraerNumerosDeTexto(texto);
+  const provinciaDetectada = detectarProvinciaCodigoDesdeTextoOCR(texto) || '';
+  const digitosEsperados = String(provinciaDetectada) === '00' ? 3 : 4;
+  // normalizarOCR: false porque el texto de PDF digital ya es correcto (no hay confusión O/0, I/1, S/5)
+  const numeros = extraerNumerosDeTexto(texto, { digitosEsperados, normalizarOCR: false });
   const letras = extraerLetrasDeTexto(texto);
 
   return {
-    provincia: detectarProvinciaCodigoDesdeTextoOCR(texto) || '',
+    provincia: provinciaDetectada,
     modalidad: detectarModalidadDeTexto(texto) || '',
     fecha: detectarFechaDesdeNombreArchivo(archivo?.name || ''),
     numeros,
@@ -5364,13 +5434,37 @@ async function extraerDatosDesdePdfTexto(archivo) {
   };
 }
 
-// Extraer letras del texto OCR
+// Palabras a ignorar en la búsqueda de letras del sorteo
+const PALABRAS_IGNORAR_LETRAS = new Set([
+  'CABA','BUEN','AIRE','SORT','NOCT','MATR','VEST','PRIM','SEGU','HORA','FECH','LOTE',
+  'GRAN','PREM','PROV','BUEN','NOMB','NOMB','GANA','TIPO','JUGA','SEMI','QUIE','TOTAL',
+  'LUNE','MART','MIER','JUEV','VIER','SABA','DOMI','ENTR','RIOS','CORD','DOBA','SANT',
+  'MEND','TUCU','CORR','JUJY','SALT','MISC','FORM','CHAC','NEQU','RIOG','STAC','SJUA',
+  'SLUI','CATM','LARI','SENT','TAND','AZUL'
+]);
+
+// Extraer letras del texto (solo para extractos que las tienen: CABA, PBA)
 function extraerLetrasDeTexto(texto) {
-  // Buscar patrón de 4 letras mayúsculas seguidas
-  const match = texto.match(/\b[A-Z]{4}\b/);
-  if (match) {
-    return match[0].split('');
+  // Buscar sección explícita de letras en el extracto
+  const matchSeccion = texto.match(/(?:CLAVE\s+DE\s+LETRAS|LETRAS\s*GANADORAS|LETRAS)[:\s]+([A-P]\s+[A-P]\s+[A-P]\s+[A-P])/i);
+  if (matchSeccion) {
+    return matchSeccion[1].replace(/\s+/g, '').split('');
   }
+
+  // Buscar 4 letras separadas por espacios (formato típico del extracto)
+  const matchEspaciados = texto.match(/\b([A-P])\s+([A-P])\s+([A-P])\s+([A-P])\b/);
+  if (matchEspaciados) {
+    return [matchEspaciados[1], matchEspaciados[2], matchEspaciados[3], matchEspaciados[4]];
+  }
+
+  // Buscar bloque de 4 letras mayúsculas NO incluidas en palabras conocidas
+  const matches = texto.match(/\b[A-P]{4}\b/g) || [];
+  for (const m of matches) {
+    if (!PALABRAS_IGNORAR_LETRAS.has(m)) {
+      return m.split('');
+    }
+  }
+
   return [];
 }
 
@@ -6220,10 +6314,12 @@ async function procesarArchivoImagenInteligente(archivo) {
     try {
       console.log(`[OCR] Procesando imagen ${archivo.name} con ${getProveedorOCRActivo() || 'proveedor no identificado'}`);
       const { base64, mimeType } = await OCRExtractos.imageToBase64(archivo);
-      const resultado = await OCRExtractos.procesarImagenQuiniela(base64, mimeType, '');
+      const provinciaHint = obtenerProvinciaHintDesdeCodigo(metadataArchivo.codigoProvincia);
+      const resultado = await OCRExtractos.procesarImagenQuiniela(base64, mimeType, provinciaHint);
 
       if (resultado.success && resultado.data) {
         data = resultado.data;
+        console.log(`[CPST] ${archivo.name}: lectura por OCR API OK (${(data.numeros || []).length} números, provincia=${data.provincia || '-'})`);
       }
     } catch (errorOCR) {
       console.warn(`[OCR] Falló OCR API para imagen ${archivo.name}, usando fallback:`, errorOCR.message);
@@ -6233,6 +6329,7 @@ async function procesarArchivoImagenInteligente(archivo) {
   // Fallback: OCR local con Tesseract
   if (!data) {
     data = await extraerDatosQuinielaFallback(archivo, false, false);
+    console.log(`[CPST] ${archivo.name}: lectura por fallback OCR local (${(data.numeros || []).length} números, provincia=${data.provincia || '-'})`);
   }
 
   // Mapear código de provincia a índice
@@ -6255,6 +6352,7 @@ async function procesarArchivoImagenInteligente(archivo) {
   const modalidadFinal = modalidadArchivo || modalidadDetectada || cpstModalidadSorteo || 'M';
 
   if (modalidadFinal && cpstModalidadSorteo && modalidadFinal !== cpstModalidadSorteo) {
+    console.warn(`[CPST] ${archivo.name}: descartado por modalidad (final=${modalidadFinal}, sorteo=${cpstModalidadSorteo})`);
     notificarExtractoDescartadoPorModalidad(archivo.name, modalidadFinal, cpstModalidadSorteo, 'Imagen');
     return;
   }
@@ -6268,7 +6366,8 @@ async function procesarArchivoImagenInteligente(archivo) {
     console.log(`[OCR] Ajuste automático de orden aplicado a Entre Ríos (imagen): ${archivo.name}`);
   }
 
-  if (provinciaIdx !== null && provinciaIdx !== undefined && numerosNormalizados && numerosNormalizados.length >= 20) {
+  // Umbral de 18 para tolerar hasta 2 posiciones no parseadas en PDFs/imágenes con ruido
+  if (provinciaIdx !== null && provinciaIdx !== undefined && numerosNormalizados && numerosNormalizados.length >= 18) {
     try {
       const response = await extractosAPI.guardar({
         provincia: codigoProvinciaFinal,
@@ -6298,6 +6397,7 @@ async function procesarArchivoImagenInteligente(archivo) {
       } else {
         cpstExtractos.push(extracto);
       }
+      console.log(`[CPST] ${archivo.name}: guardado OK como ${provinciaNombres[provinciaIdx]} (${modalidad}, ${fecha})`);
     } catch (error) {
       console.warn('Error guardando imagen OCR en BD:', error);
       const extracto = {
@@ -6315,9 +6415,11 @@ async function procesarArchivoImagenInteligente(archivo) {
       } else {
         cpstExtractos.push(extracto);
       }
+      console.warn(`[CPST] ${archivo.name}: agregado solo en memoria (sin BD) como ${provinciaNombres[provinciaIdx]}`);
     }
   } else {
-    throw new Error(`No se pudo obtener una lectura confiable de la imagen (${archivo.name}). Provincia: ${data.provincia || metadataArchivo.codigoProvincia || '-'}, números detectados: ${(numerosNormalizados || []).length}`);
+    console.warn(`[CPST] ${archivo.name}: descartado por lectura no confiable (provincia=${data.provincia || metadataArchivo.codigoProvincia || '-'}, numeros=${(numerosNormalizados || []).length}/18 requeridos)`);
+    throw new Error(`No se pudo obtener una lectura confiable de la imagen (${archivo.name}). Provincia: ${data.provincia || metadataArchivo.codigoProvincia || '-'}, números detectados: ${(numerosNormalizados || []).length} (mínimo 18)`);
   }
 }
 
@@ -6332,6 +6434,7 @@ async function procesarArchivoPDFInteligente(archivo) {
   const fechaSorteoActual = normalizarFechaSorteo(metaSorteoActual.fecha || cpstDatosControlPrevio?.fechaSorteo || cpResultadosActuales?.sorteo?.fecha || cpResultadosActuales?.fecha || '');
 
   if (metadataArchivo.modalidad && cpstModalidadSorteo && metadataArchivo.modalidad !== cpstModalidadSorteo) {
+    console.warn(`[CPST] ${archivo.name}: descartado por modalidad de archivo (${metadataArchivo.modalidad}) vs sorteo (${cpstModalidadSorteo})`);
     notificarExtractoDescartadoPorModalidad(archivo.name, metadataArchivo.modalidad, cpstModalidadSorteo, 'PDF');
     return;
   }
@@ -6349,6 +6452,8 @@ async function procesarArchivoPDFInteligente(archivo) {
     if (Array.isArray(parsedPdf?.numeros) && parsedPdf.numeros.length >= 20) {
       data = parsedPdf;
       console.log(`[PDF-TEXT] ${archivo.name}: extracción por texto exitoso (${parsedPdf.numeros.length} números)`);
+    } else {
+      console.warn(`[PDF-TEXT] ${archivo.name}: texto extraído insuficiente (${parsedPdf?.numeros?.length || 0} números)`);
     }
   } catch (errorPdfText) {
     console.warn(`[PDF-TEXT] No se pudo extraer texto de ${archivo.name}:`, errorPdfText.message);
@@ -6359,10 +6464,12 @@ async function procesarArchivoPDFInteligente(archivo) {
     try {
       console.log(`[OCR] Procesando PDF ${archivo.name} con ${getProveedorOCRActivo() || 'proveedor no identificado'}`);
       const { base64, mimeType } = await OCRExtractos.pdfToImage(archivo);
-      const resultado = await OCRExtractos.procesarImagenQuiniela(base64, mimeType, '');
+      const provinciaHint = obtenerProvinciaHintDesdeCodigo(metadataArchivo.codigoProvincia);
+      const resultado = await OCRExtractos.procesarImagenQuiniela(base64, mimeType, provinciaHint);
 
       if (resultado.success && resultado.data) {
         data = resultado.data;
+        console.log(`[CPST] ${archivo.name}: lectura OCR API OK (${(data.numeros || []).length} números, provincia=${data.provincia || '-'})`);
       }
     } catch (errorOCR) {
       console.warn(`[OCR] Falló OCR API para PDF ${archivo.name}, usando fallback:`, errorOCR.message);
@@ -6372,6 +6479,7 @@ async function procesarArchivoPDFInteligente(archivo) {
   // Fallback: OCR local con Tesseract
   if (!data) {
     data = await extraerDatosQuinielaFallback(archivo, true, false);
+    console.log(`[CPST] ${archivo.name}: lectura por fallback OCR local (${(data.numeros || []).length} números, provincia=${data.provincia || '-'})`);
   }
 
   const codigoToIndex = {
@@ -6392,6 +6500,7 @@ async function procesarArchivoPDFInteligente(archivo) {
   const modalidadFinal = modalidadArchivo || modalidadDetectada || cpstModalidadSorteo || 'M';
 
   if (modalidadFinal && cpstModalidadSorteo && modalidadFinal !== cpstModalidadSorteo) {
+    console.warn(`[CPST] ${archivo.name}: descartado por modalidad (final=${modalidadFinal}, sorteo=${cpstModalidadSorteo})`);
     notificarExtractoDescartadoPorModalidad(archivo.name, modalidadFinal, cpstModalidadSorteo, 'PDF');
     return;
   }
@@ -6405,7 +6514,8 @@ async function procesarArchivoPDFInteligente(archivo) {
     console.log(`[OCR] Ajuste automático de orden aplicado a Entre Ríos (PDF): ${archivo.name}`);
   }
 
-  if (provinciaIdx !== null && provinciaIdx !== undefined && numerosNormalizados && numerosNormalizados.length >= 20) {
+  // Umbral de 18 para tolerar hasta 2 posiciones no parseadas en PDFs con ruido de renderizado
+  if (provinciaIdx !== null && provinciaIdx !== undefined && numerosNormalizados && numerosNormalizados.length >= 18) {
     try {
       const response = await extractosAPI.guardar({
         provincia: codigoProvinciaFinal,
@@ -6435,6 +6545,7 @@ async function procesarArchivoPDFInteligente(archivo) {
       } else {
         cpstExtractos.push(extracto);
       }
+      console.log(`[CPST] ${archivo.name}: guardado OK como ${provinciaNombres[provinciaIdx]} (${modalidad}, ${fecha})`);
     } catch (error) {
       console.warn('Error guardando PDF en BD:', error);
       // Igual agregar localmente
@@ -6453,9 +6564,11 @@ async function procesarArchivoPDFInteligente(archivo) {
       } else {
         cpstExtractos.push(extracto);
       }
+      console.warn(`[CPST] ${archivo.name}: agregado solo en memoria (sin BD) como ${provinciaNombres[provinciaIdx]}`);
     }
   } else {
-    throw new Error(`No se pudo obtener una lectura confiable del PDF (${archivo.name}). Provincia: ${data.provincia || metadataArchivo.codigoProvincia || '-'}, números detectados: ${(numerosNormalizados || []).length}`);
+    console.warn(`[CPST] ${archivo.name}: descartado por lectura no confiable (provincia=${data.provincia || metadataArchivo.codigoProvincia || '-'}, numeros=${(numerosNormalizados || []).length}/18 requeridos)`);
+    throw new Error(`No se pudo obtener una lectura confiable del PDF (${archivo.name}). Provincia: ${data.provincia || metadataArchivo.codigoProvincia || '-'}, números detectados: ${(numerosNormalizados || []).length} (mínimo 18)`);
   }
 }
 
@@ -6479,13 +6592,6 @@ async function extraerDatosQuinielaFallback(archivo, esPDF = false, usarProvinci
   const resultado = await Tesseract.recognize(origenOCR, 'spa');
   const texto = resultado?.data?.text || '';
 
-  const numeros = extraerNumerosDeTexto(texto);
-  const letras = extraerLetrasDeTexto(texto);
-
-  if (!numeros || numeros.length === 0) {
-    throw new Error('OCR alternativo no pudo extraer números del archivo');
-  }
-
   // Provincia fallback: priorizar nombre de archivo, luego texto OCR, y por último selección UI (si se permite)
   const provinciaSelect = document.getElementById('cpst-extracto-provincia');
   const indexToCodigoProvincia = {
@@ -6501,6 +6607,16 @@ async function extraerDatosQuinielaFallback(archivo, esPDF = false, usarProvinci
   const metadataArchivo = obtenerMetadataArchivoExtracto(archivo?.name || '');
   const provinciaDesdeNombre = metadataArchivo.codigoProvincia;
   const provinciaDesdeTexto = detectarProvinciaCodigoDesdeTextoOCR(texto);
+  const digitosEsperados = String(provinciaDesdeNombre || provinciaDesdeTexto || '') === '00' ? 3 : 4;
+
+  // normalizarOCR: true porque viene de Tesseract (imagen con posibles confusiones de caracteres)
+  const numeros = extraerNumerosDeTexto(texto, { digitosEsperados, normalizarOCR: true });
+  const letras = extraerLetrasDeTexto(texto);
+
+  if (!numeros || numeros.length === 0) {
+    throw new Error('OCR alternativo no pudo extraer números del archivo');
+  }
+
   let provincia = provinciaDesdeNombre || provinciaDesdeTexto || '';
 
   if (!provincia && usarProvinciaUI && provinciaSelect) {
