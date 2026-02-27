@@ -5338,13 +5338,26 @@ function extraerNumerosDeTexto(texto, opciones = {}) {
     return num;
   };
 
-  // PRIORIDAD 1: detectar patrón posicional (1..20 + número de 4 dígitos)
+  // Filtrar líneas que son cabecera/metadata (fechas, horas, sorteo) para evitar
+  // falsas capturas como "Nro.1171" -> pos=1 num=171, "2026" -> pos=20 num=26, etc.
+  const REGEX_LINEA_METADATA = /(?:fecha|hora|sorteo|nro|núm|prescri|próximo|proximo|inicio|fin\b|\d{2}\/\d{2}\/\d{4}|\d{2}:\d{2})/i;
+
+  const txtFiltrado = txt
+    .split('\n')
+    .map(linea => REGEX_LINEA_METADATA.test(linea) ? '' : linea)
+    .join('\n');
+
+  // PRIORIDAD 1: detectar patrón posicional (1..20 + número)
+  // Separador: solo espacio, punto o paréntesis. NO dos puntos (para evitar HH:MM:SS)
   const porPosicion = new Map();
-  const regexPos = /\b(0?[1-9]|1\d|20)\s*[-:.)]?\s*(\d{3,5})\b/g;
+  const regexPos = /\b(0?[1-9]|1\d|20)\s*[.)]?\s*(\d{3,5})\b(?!\s*:\d{2})/g;
   let matchPos;
-  while ((matchPos = regexPos.exec(txt)) !== null) {
+  while ((matchPos = regexPos.exec(txtFiltrado)) !== null) {
     const pos = parseInt(matchPos[1], 10);
     const numero = normalizarNumero(matchPos[2]);
+    // Descartar si el número capturado parece ser un año (2020-2030)
+    const numInt = parseInt(numero, 10);
+    if (numInt >= 2020 && numInt <= 2040) continue;
     if (pos >= 1 && pos <= 20 && !porPosicion.has(pos)) {
       porPosicion.set(pos, numero);
     }
@@ -5366,6 +5379,8 @@ function extraerNumerosDeTexto(texto, opciones = {}) {
     .filter(Boolean);
 
   for (const linea of lineas) {
+    // Saltar líneas de metadata (fechas, horas, encabezado)
+    if (REGEX_LINEA_METADATA.test(linea)) continue;
     const tokens = linea.split(/\s+/).filter(Boolean);
     for (let i = 0; i < tokens.length - 1; i++) {
       const posMatch = tokens[i].match(/^(0?[1-9]|1\d|20)$/);
@@ -5443,28 +5458,26 @@ const PALABRAS_IGNORAR_LETRAS = new Set([
   'SLUI','CATM','LARI','SENT','TAND','AZUL'
 ]);
 
-// Extraer letras del texto (solo para extractos que las tienen: CABA, PBA)
+// Extraer letras del sorteo (solo para extractos que tienen sección explícita de letras)
 function extraerLetrasDeTexto(texto) {
-  // Buscar sección explícita de letras en el extracto
+  // Buscar sección explícita de letras: Único caso válido sin ambigüedad
   const matchSeccion = texto.match(/(?:CLAVE\s+DE\s+LETRAS|LETRAS\s*GANADORAS|LETRAS)[:\s]+([A-P]\s+[A-P]\s+[A-P]\s+[A-P])/i);
   if (matchSeccion) {
     return matchSeccion[1].replace(/\s+/g, '').split('');
   }
 
-  // Buscar 4 letras separadas por espacios (formato típico del extracto)
+  // Buscar 4 letras separadas por espacios (formato típico del extracto cuando hay letras)
   const matchEspaciados = texto.match(/\b([A-P])\s+([A-P])\s+([A-P])\s+([A-P])\b/);
   if (matchEspaciados) {
-    return [matchEspaciados[1], matchEspaciados[2], matchEspaciados[3], matchEspaciados[4]];
-  }
-
-  // Buscar bloque de 4 letras mayúsculas NO incluidas en palabras conocidas
-  const matches = texto.match(/\b[A-P]{4}\b/g) || [];
-  for (const m of matches) {
-    if (!PALABRAS_IGNORAR_LETRAS.has(m)) {
-      return m.split('');
+    // Solo aceptar si aparece en contexto de "letra" o al final del documento
+    const posMatch = texto.indexOf(matchEspaciados[0]);
+    const contexto = texto.slice(Math.max(0, posMatch - 60), posMatch + 20);
+    if (/letra|clave/i.test(contexto)) {
+      return [matchEspaciados[1], matchEspaciados[2], matchEspaciados[3], matchEspaciados[4]];
     }
   }
 
+  // NO buscar bloques de 4 letras en texto libre → demasiados falsos positivos
   return [];
 }
 
