@@ -116,6 +116,52 @@ function calcularStakesPorExtracto(totalStake, numExtractos) {
   return stakes;
 }
 
+function obtenerPosicionesCoincidentes2Cifras(numeros, desde, hasta, numeroObjetivo) {
+  const posiciones = [];
+  for (let pos = desde; pos <= hasta; pos++) {
+    if (pos > numeros.length) continue;
+    const drawn = numeros[pos - 1];
+    const drawnComp = parseInt((drawn || '').slice(-2).padStart(2, '0'));
+    if (drawnComp === numeroObjetivo) {
+      posiciones.push(pos);
+    }
+  }
+  return posiciones;
+}
+
+function distribuirCoincidenciasMismoNumero(posiciones1, posiciones2) {
+  const set1 = new Set(posiciones1);
+  const set2 = new Set(posiciones2);
+
+  const solo1 = posiciones1.filter(p => !set2.has(p));
+  const solo2 = posiciones2.filter(p => !set1.has(p));
+  const ambas = posiciones1.filter(p => set2.has(p));
+
+  let efectivos1 = solo1.length;
+  let efectivos2 = solo2.length;
+  let rem = ambas.length;
+
+  if (efectivos1 === 0 && rem > 0) {
+    efectivos1++;
+    rem--;
+  }
+  if (efectivos2 === 0 && rem > 0) {
+    efectivos2++;
+    rem--;
+  }
+
+  while (rem > 0) {
+    if (efectivos1 <= efectivos2) efectivos1++;
+    else efectivos2++;
+    rem--;
+  }
+
+  const posPrimera = solo1[0] || ambas[0] || posiciones1[0] || 0;
+  const posSegunda = solo2[0] || ambas.find(p => p !== posPrimera) || posiciones2.find(p => p !== posPrimera) || posiciones2[0] || 0;
+
+  return { efectivos1, efectivos2, posPrimera, posSegunda };
+}
+
 function ejecutarEscrutinio(registros, extractos) {
   // Inicializar reporte para las 7 loterías (no solo los extractos cargados)
   const reportePorExtracto = PROVINCIAS.map((nombre, idx) => {
@@ -301,24 +347,14 @@ function ejecutarEscrutinio(registros, extractos) {
           // porque el rango se desplaza pero no cambia de tamaño
         }
 
-        // Buscar primera
-        let ganoPrimera = false;
-        let posPrimera = 0;
-        for (let pos = from1; pos <= to1; pos++) {
-          if (pos > numeros.length) continue;
-          const drawn = numeros[pos - 1];
-          const drawnComp = parseInt((drawn || '').slice(-2).padStart(2, '0'));
-          if (drawnComp === num1) {
-            ganoPrimera = true;
-            posPrimera = pos;
-            break;
-          }
-        }
+        const posicionesPrimera = obtenerPosicionesCoincidentes2Cifras(numeros, from1, to1, num1);
+        let posPrimera = posicionesPrimera[0] || 0;
+        let posSegunda = 0;
+        let efectivos1 = 0;
+        let efectivos2 = 0;
 
         // Buscar segunda
-        let ganoSegunda = false;
-        let posSegunda = 0;
-        if (ganoPrimera) {
+        if (posicionesPrimera.length > 0) {
           // Aplicar corrimiento si corresponde:
           // Si la primera es cabeza (1-1), acertó en pos 1, y la segunda empieza en 1
           // → desplazar el rango de búsqueda en +1
@@ -330,120 +366,79 @@ function ejecutarEscrutinio(registros, extractos) {
             console.log(`[REDOB CORRIMIENTO] Cabeza acertó en pos 1 → Segunda busca de ${from2Busq} a ${to2Busq} (original: ${from2}-${to2})`);
           }
 
-          for (let pos = from2Busq; pos <= to2Busq; pos++) {
-            if (pos > numeros.length) continue;
-            const drawn = numeros[pos - 1];
-            const drawnComp = parseInt((drawn || '').slice(-2).padStart(2, '0'));
-            if (drawnComp === num2) {
-              ganoSegunda = true;
-              posSegunda = pos;
-              break;
-            }
+          const posicionesSegunda = obtenerPosicionesCoincidentes2Cifras(numeros, from2Busq, to2Busq, num2);
+          posSegunda = posicionesSegunda[0] || 0;
+
+          // Verificar superposición
+          const overlap = !(to1 < from2Busq || to2Busq < from1);
+
+          if (overlap && num1 === num2) {
+            const distribucion = distribuirCoincidenciasMismoNumero(posicionesPrimera, posicionesSegunda);
+            efectivos1 = distribucion.efectivos1;
+            efectivos2 = distribucion.efectivos2;
+            posPrimera = distribucion.posPrimera || posPrimera;
+            posSegunda = distribucion.posSegunda || posSegunda;
+          } else {
+            efectivos1 = posicionesPrimera.length;
+            efectivos2 = posicionesSegunda.length;
           }
         }
-        
-        if (ganoPrimera && ganoSegunda) {
+
+        if (efectivos1 > 0 && efectivos2 > 0) {
           ganoNumeros = true;
 
           // DEBUG: Redoblona ganadora
           console.log(`[REDOB GANADORA] ${reportePorExtracto[idx].nombre}: ${numero1_2d} en pos ${posPrimera}, ${numero2_2d} en pos ${posSegunda}`);
-          
-          // Verificar superposición
-          const overlap = !(to1 < from2 || to2 < from1);
-          
-          // Contar efectivos
-          let efectivos1 = 0, efectivos2 = 0;
-          
-          if (overlap && num1 === num2) {
-            // Números iguales: distribución secuencial
-            let primeraAsignadaPos = null;
-            for (let pos = from1; pos <= to1; pos++) {
-              if (pos > numeros.length) continue;
-              const drawn = numeros[pos - 1];
-              const drawnComp = parseInt((drawn || '').slice(-2).padStart(2, '0'));
-              if (drawnComp === num1 && primeraAsignadaPos === null) {
-                efectivos1++;
-                primeraAsignadaPos = pos;
-                break;
-              }
-            }
-            // IMPORTANTE: Usar el rango corregido (from2Busq, to2Busq)
-            for (let pos = from2Busq; pos <= to2Busq; pos++) {
-              if (pos > numeros.length || pos === primeraAsignadaPos) continue;
-              const drawn = numeros[pos - 1];
-              const drawnComp = parseInt((drawn || '').slice(-2).padStart(2, '0'));
-              if (drawnComp === num2) {
-                efectivos2++;
-              }
-            }
+
+          // Calcular premio VB6
+          const valorApuesta = stakePorExtracto;
+          const apuestaPorLugar1 = valorApuesta / ext1Efectiva;
+          const premioUnitario1 = apuestaPorLugar1 * REL_PAGO_2C;
+          const premioFase1 = efectivos1 * premioUnitario1;
+
+          const montoPrimerAcierto = premioFase1;
+          const apuestaPorLugar2 = montoPrimerAcierto / ext2Efectiva;
+          const premioUnitario2 = apuestaPorLugar2 * REL_PAGO_2C;
+          const premioFase2 = efectivos2 * premioUnitario2;
+
+          let totalRedoblonaPremi = premioFase2;
+
+          // Aplicar tope
+          const esApuestaExacta = (ext1Basica === 1 && ext2Basica === 1);
+          let tope;
+          if (esApuestaExacta) {
+            tope = valorApuesta * TOPE_EXACTAS;
+          } else if ((ext1Efectiva === 1 && ext2Efectiva === 2) || (ext1Efectiva === 2 && ext2Efectiva === 1)) {
+            tope = valorApuesta * TOPE_1_A_2;
+          } else if ((ext1Efectiva === 1 && ext2Efectiva === 3) || (ext1Efectiva === 3 && ext2Efectiva === 1)) {
+            tope = valorApuesta * TOPE_1_A_3;
           } else {
-            // Números distintos
-            for (let pos = from1; pos <= to1; pos++) {
-              if (pos > numeros.length) continue;
-              const drawn = numeros[pos - 1];
-              const drawnComp = parseInt((drawn || '').slice(-2).padStart(2, '0'));
-              if (drawnComp === num1) efectivos1++;
-            }
-            // IMPORTANTE: Usar el rango corregido (from2Busq, to2Busq) para contar efectivos
-            for (let pos = from2Busq; pos <= to2Busq; pos++) {
-              if (pos > numeros.length) continue;
-              const drawn = numeros[pos - 1];
-              const drawnComp = parseInt((drawn || '').slice(-2).padStart(2, '0'));
-              if (drawnComp === num2) efectivos2++;
-            }
+            tope = valorApuesta * TOPE_GENERAL;
           }
-          
-          if (efectivos1 > 0 && efectivos2 > 0) {
-            // Calcular premio VB6
-            const valorApuesta = stakePorExtracto;
-            const apuestaPorLugar1 = valorApuesta / ext1Efectiva;
-            const premioUnitario1 = apuestaPorLugar1 * REL_PAGO_2C;
-            const premioFase1 = efectivos1 * premioUnitario1;
-            
-            const montoPrimerAcierto = premioFase1;
-            const apuestaPorLugar2 = montoPrimerAcierto / ext2Efectiva;
-            const premioUnitario2 = apuestaPorLugar2 * REL_PAGO_2C;
-            const premioFase2 = efectivos2 * premioUnitario2;
-            
-            let totalRedoblonaPremi = premioFase2;
-            
-            // Aplicar tope
-            const esApuestaExacta = (ext1Basica === 1 && ext2Basica === 1);
-            let tope;
-            if (esApuestaExacta) {
-              tope = valorApuesta * TOPE_EXACTAS;
-            } else if ((ext1Efectiva === 1 && ext2Efectiva === 2) || (ext1Efectiva === 2 && ext2Efectiva === 1)) {
-              tope = valorApuesta * TOPE_1_A_2;
-            } else if ((ext1Efectiva === 1 && ext2Efectiva === 3) || (ext1Efectiva === 3 && ext2Efectiva === 1)) {
-              tope = valorApuesta * TOPE_1_A_3;
-            } else {
-              tope = valorApuesta * TOPE_GENERAL;
-            }
-            
-            totalRedoblonaPremi = Math.min(totalRedoblonaPremi, tope);
-            
-            premioRegistro += totalRedoblonaPremi;
-            reportePorExtracto[idx].totalPagado += totalRedoblonaPremi;
-            reportePorExtracto[idx].totalGanadores++;
-            reportePorExtracto[idx].redoblona.pagado += totalRedoblonaPremi;
-            reportePorExtracto[idx].redoblona.ganadores++;
-            reportePorExtracto[idx].redoblona.aciertos++;
-            
-            ganadoresDetalle.push({
-              ticket: reg.numeroTicket,
-              provincia: reg.provincia || '51',
-              agencia: `${reg.provincia || '51'}${(reg.agencia || '').padStart(5, '0')}`,
-              tipo: 'REDOBLONA',
-              cifras: 2,
-              extracto: reportePorExtracto[idx].nombre,
-              posicion: `${posPrimera}+${posSegunda}`,
-              numeroApostado: `${numero1_2d}-${numero2_2d}`,
-              numeroSorteado: `${numeros[posPrimera-1]}-${numeros[posSegunda-1]}`,
-              apuesta: stakePorExtracto,
-              multiplicador: REL_PAGO_2C,
-              premio: totalRedoblonaPremi
-            });
-          }
+
+          totalRedoblonaPremi = Math.min(totalRedoblonaPremi, tope);
+
+          premioRegistro += totalRedoblonaPremi;
+          reportePorExtracto[idx].totalPagado += totalRedoblonaPremi;
+          reportePorExtracto[idx].totalGanadores++;
+          reportePorExtracto[idx].redoblona.pagado += totalRedoblonaPremi;
+          reportePorExtracto[idx].redoblona.ganadores++;
+          reportePorExtracto[idx].redoblona.aciertos++;
+
+          ganadoresDetalle.push({
+            ticket: reg.numeroTicket,
+            provincia: reg.provincia || '51',
+            agencia: `${reg.provincia || '51'}${(reg.agencia || '').padStart(5, '0')}`,
+            tipo: 'REDOBLONA',
+            cifras: 2,
+            extracto: reportePorExtracto[idx].nombre,
+            posicion: `${posPrimera}+${posSegunda}`,
+            numeroApostado: `${numero1_2d}-${numero2_2d}`,
+            numeroSorteado: `${numeros[posPrimera-1]}-${numeros[posSegunda-1]}`,
+            apuesta: stakePorExtracto,
+            multiplicador: REL_PAGO_2C,
+            premio: totalRedoblonaPremi
+          });
         }
       }
     }

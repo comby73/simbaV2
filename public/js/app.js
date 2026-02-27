@@ -3422,7 +3422,7 @@ function procesarXMLExtractoPoceada(xmlText) {
     if (letras.length < 4) {
       const letrasEl = xmlDoc.querySelector('LETRAS, letras, Letras');
       if (letrasEl) {
-        const lets = letrasEl.textContent.trim().split(/[\s,]+/).filter(l => /^[A-Pa-p]$/.test(l));
+        const lets = letrasEl.textContent.trim().split(/[\s,]+/).filter(l => /^[A-Za-z]$/.test(l));
         if (lets.length >= 4) letras = lets.slice(0, 4).map(l => l.toUpperCase());
       }
     }
@@ -3670,10 +3670,10 @@ function confirmarExtractoPoceada() {
   }
 
   letrasInputs.forEach((input, i) => {
-    const val = (input.value || '').toUpperCase();
-    if (!val || !/^[A-P]$/.test(val)) {
+    const val = (input.value || '').toUpperCase().trim();
+    if (!val || !/^[A-Z]$/.test(val)) {
       if (!hasError) {
-        showToast(`Letra ${i + 1} inválida (debe ser A-P)`, 'error');
+        showToast(`Letra ${i + 1} inválida (debe ser A-Z)`, 'error');
         hasError = true;
       }
       return;
@@ -12334,9 +12334,21 @@ function guardarExtractoManual() {
   });
 
   const letras = [];
+  let letrasInvalidas = false;
   document.querySelectorAll('.manual-letra').forEach(input => {
-    if (input.value) letras.push(input.value.toUpperCase());
+    const letra = (input.value || '').toUpperCase().trim();
+    if (!letra) return;
+    if (!/^[A-Z]$/.test(letra)) {
+      letrasInvalidas = true;
+      return;
+    }
+    letras.push(letra);
   });
+
+  if (letrasInvalidas) {
+    showToast('Las letras deben ser del abecedario A-Z (una por casillero)', 'warning');
+    return;
+  }
 
   mostrarResultadoOCR({
     provincia,
