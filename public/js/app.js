@@ -6318,8 +6318,13 @@ async function procesarArchivoImagenInteligente(archivo) {
       const resultado = await OCRExtractos.procesarImagenQuiniela(base64, mimeType, provinciaHint);
 
       if (resultado.success && resultado.data) {
-        data = resultado.data;
-        console.log(`[CPST] ${archivo.name}: lectura por OCR API OK (${(data.numeros || []).length} números, provincia=${data.provincia || '-'})`);
+        const cantNums = (resultado.data.numeros || []).length;
+        if (cantNums >= 18) {
+          data = resultado.data;
+          console.log(`[CPST] ${archivo.name}: lectura por OCR API OK (${cantNums} números, provincia=${data.provincia || '-'})`);
+        } else {
+          console.warn(`[CPST] ${archivo.name}: OCR API insuficiente (${cantNums} números), continúa con Tesseract`);
+        }
       }
     } catch (errorOCR) {
       console.warn(`[OCR] Falló OCR API para imagen ${archivo.name}, usando fallback:`, errorOCR.message);
@@ -6367,7 +6372,14 @@ async function procesarArchivoImagenInteligente(archivo) {
   }
 
   // Umbral de 18 para tolerar hasta 2 posiciones no parseadas en PDFs/imágenes con ruido
-  if (provinciaIdx !== null && provinciaIdx !== undefined && numerosNormalizados && numerosNormalizados.length >= 18) {
+  // Umbral normal: 18. Si la provincia viene confirmada del nombre de archivo y tenemos >=10, acepta con advertencia
+  const umbralMinimo = (metadataArchivo.codigoProvincia && numerosNormalizados.length >= 10) ? 10 : 18;
+  if (umbralMinimo < 18) {
+    console.warn(`[CPST] ${archivo.name}: aceptando con ${numerosNormalizados.length} números (provincia confirmada por nombre de archivo: ${codigoProvinciaFinal})`);
+    showToast(`⚠️ ${archivo.name}: solo ${numerosNormalizados.length}/20 números detectados. Verificar manualmente.`, 'warning');
+  }
+
+  if (provinciaIdx !== null && provinciaIdx !== undefined && numerosNormalizados && numerosNormalizados.length >= umbralMinimo) {
     try {
       const response = await extractosAPI.guardar({
         provincia: codigoProvinciaFinal,
@@ -6418,8 +6430,8 @@ async function procesarArchivoImagenInteligente(archivo) {
       console.warn(`[CPST] ${archivo.name}: agregado solo en memoria (sin BD) como ${provinciaNombres[provinciaIdx]}`);
     }
   } else {
-    console.warn(`[CPST] ${archivo.name}: descartado por lectura no confiable (provincia=${data.provincia || metadataArchivo.codigoProvincia || '-'}, numeros=${(numerosNormalizados || []).length}/18 requeridos)`);
-    throw new Error(`No se pudo obtener una lectura confiable de la imagen (${archivo.name}). Provincia: ${data.provincia || metadataArchivo.codigoProvincia || '-'}, números detectados: ${(numerosNormalizados || []).length} (mínimo 18)`);
+    console.warn(`[CPST] ${archivo.name}: descartado por lectura no confiable (provincia=${data.provincia || metadataArchivo.codigoProvincia || '-'}, numeros=${(numerosNormalizados || []).length}/${umbralMinimo} requeridos)`);
+    throw new Error(`No se pudo obtener una lectura confiable de la imagen (${archivo.name}). Provincia: ${data.provincia || metadataArchivo.codigoProvincia || '-'}, números detectados: ${(numerosNormalizados || []).length} (mínimo ${umbralMinimo})`);
   }
 }
 
@@ -6468,8 +6480,13 @@ async function procesarArchivoPDFInteligente(archivo) {
       const resultado = await OCRExtractos.procesarImagenQuiniela(base64, mimeType, provinciaHint);
 
       if (resultado.success && resultado.data) {
-        data = resultado.data;
-        console.log(`[CPST] ${archivo.name}: lectura OCR API OK (${(data.numeros || []).length} números, provincia=${data.provincia || '-'})`);
+        const cantNums = (resultado.data.numeros || []).length;
+        if (cantNums >= 18) {
+          data = resultado.data;
+          console.log(`[CPST] ${archivo.name}: lectura OCR API OK (${cantNums} números, provincia=${data.provincia || '-'})`);
+        } else {
+          console.warn(`[CPST] ${archivo.name}: OCR API insuficiente (${cantNums} números), continúa con Tesseract`);
+        }
       }
     } catch (errorOCR) {
       console.warn(`[OCR] Falló OCR API para PDF ${archivo.name}, usando fallback:`, errorOCR.message);
@@ -6514,8 +6531,14 @@ async function procesarArchivoPDFInteligente(archivo) {
     console.log(`[OCR] Ajuste automático de orden aplicado a Entre Ríos (PDF): ${archivo.name}`);
   }
 
-  // Umbral de 18 para tolerar hasta 2 posiciones no parseadas en PDFs con ruido de renderizado
-  if (provinciaIdx !== null && provinciaIdx !== undefined && numerosNormalizados && numerosNormalizados.length >= 18) {
+  // Umbral normal: 18. Si la provincia viene confirmada del nombre de archivo y tenemos >=10, acepta con advertencia
+  const umbralMinimoPDF = (metadataArchivo.codigoProvincia && numerosNormalizados.length >= 10) ? 10 : 18;
+  if (umbralMinimoPDF < 18) {
+    console.warn(`[CPST] ${archivo.name}: aceptando con ${numerosNormalizados.length} números (provincia confirmada por nombre: ${codigoProvinciaFinal})`);
+    showToast(`⚠️ ${archivo.name}: solo ${numerosNormalizados.length}/20 números detectados. Verificar manualmente.`, 'warning');
+  }
+
+  if (provinciaIdx !== null && provinciaIdx !== undefined && numerosNormalizados && numerosNormalizados.length >= umbralMinimoPDF) {
     try {
       const response = await extractosAPI.guardar({
         provincia: codigoProvinciaFinal,
@@ -6567,8 +6590,8 @@ async function procesarArchivoPDFInteligente(archivo) {
       console.warn(`[CPST] ${archivo.name}: agregado solo en memoria (sin BD) como ${provinciaNombres[provinciaIdx]}`);
     }
   } else {
-    console.warn(`[CPST] ${archivo.name}: descartado por lectura no confiable (provincia=${data.provincia || metadataArchivo.codigoProvincia || '-'}, numeros=${(numerosNormalizados || []).length}/18 requeridos)`);
-    throw new Error(`No se pudo obtener una lectura confiable del PDF (${archivo.name}). Provincia: ${data.provincia || metadataArchivo.codigoProvincia || '-'}, números detectados: ${(numerosNormalizados || []).length} (mínimo 18)`);
+    console.warn(`[CPST] ${archivo.name}: descartado por lectura no confiable (provincia=${data.provincia || metadataArchivo.codigoProvincia || '-'}, numeros=${(numerosNormalizados || []).length}/${umbralMinimoPDF} requeridos)`);
+    throw new Error(`No se pudo obtener una lectura confiable del PDF (${archivo.name}). Provincia: ${data.provincia || metadataArchivo.codigoProvincia || '-'}, números detectados: ${(numerosNormalizados || []).length} (mínimo ${umbralMinimoPDF})`);
   }
 }
 
