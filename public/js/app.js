@@ -6480,7 +6480,8 @@ async function procesarArchivoImagenInteligente(archivo) {
       }
       console.log(`[CPST] ${archivo.name}: guardado OK como ${provinciaNombres[provinciaIdx]} (${modalidad}, ${fecha})`);
     } catch (error) {
-      console.warn('Error guardando imagen OCR en BD:', error);
+      console.warn(`[CPST] Error guardando imagen OCR en BD (${error.message || error}):`, error);
+      showToast(`⚠️ ${archivo.name}: procesado pero no guardado en BD (${error.message || 'error desconocido'})`, 'warning');
       const extracto = {
         index: provinciaIdx,
         nombre: provinciaNombres[provinciaIdx],
@@ -6639,7 +6640,7 @@ async function procesarArchivoPDFInteligente(archivo) {
       }
       console.log(`[CPST] ${archivo.name}: guardado OK como ${provinciaNombres[provinciaIdx]} (${modalidad}, ${fecha})`);
     } catch (error) {
-      console.warn('Error guardando PDF en BD:', error);
+      console.warn(`[CPST] Error guardando PDF en BD (${error.message || error}):`, error);
       // Igual agregar localmente
       const extracto = {
         index: provinciaIdx,
@@ -6656,6 +6657,7 @@ async function procesarArchivoPDFInteligente(archivo) {
       } else {
         cpstExtractos.push(extracto);
       }
+      showToast(`⚠️ ${archivo.name}: procesado pero no guardado en BD (${error.message || 'error desconocido'})`, 'warning');
       console.warn(`[CPST] ${archivo.name}: agregado solo en memoria (sin BD) como ${provinciaNombres[provinciaIdx]}`);
     }
   } else {

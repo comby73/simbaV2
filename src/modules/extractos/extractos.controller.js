@@ -199,6 +199,7 @@ const guardarExtracto = async (req, res, next) => {
     const numeroSorteo = await resolverNumeroSorteo(conn, {
       juego: juego || 'Quiniela', modalidad, sorteo, fecha: fechaSorteo || fecha
     });
+    const nroFinal = numeroSorteo || 0; // 0 como fallback si no hay programación cargada
     const sorteoId = await resolverSorteoId(conn, juegoId, modalidad);
     const letrasJson = normalizarLetras(letras);
 
@@ -206,7 +207,7 @@ const guardarExtracto = async (req, res, next) => {
       return errorResponse(res, 'No se pudo determinar la fecha de sorteo', 400);
     }
 
-    if (!numeroSorteo) {
+    if (!nroFinal && nroFinal !== 0) {
       return errorResponse(res, 'No se pudo determinar el número de sorteo', 400);
     }
 
@@ -214,10 +215,14 @@ const guardarExtracto = async (req, res, next) => {
       return errorResponse(res, 'Para Quiniela debe informar una provincia válida', 400);
     }
 
+    if (!numeroSorteo) {
+      console.warn(`[EXTRACTOS] numero_sorteo no resuelto para ${juego} ${modalidad} ${fechaSorteo} — guardando con nro=0`);
+    }
+
     // 5. Guardar/Actualizar
     const [existente] = await conn.query(
       `SELECT id FROM extractos WHERE juego_id = ? AND sorteo_id = ? AND fecha = ? AND numero_sorteo = ? AND (provincia_id = ? OR (provincia_id IS NULL AND ? IS NULL))`,
-      [juegoId, sorteoId, fechaSorteo, numeroSorteo, provinciaId, provinciaId]
+      [juegoId, sorteoId, fechaSorteo, nroFinal, provinciaId, provinciaId]
     );
 
     if (existente.length > 0) {
@@ -231,7 +236,7 @@ const guardarExtracto = async (req, res, next) => {
     const [result] = await conn.query(
       `INSERT INTO extractos (juego_id, sorteo_id, numero_sorteo, fecha, provincia_id, numeros, letras, fuente, usuario_id)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      [juegoId, sorteoId, numeroSorteo, fechaSorteo, provinciaId, JSON.stringify(numeros), letrasJson, fuente || 'OCR', req.user.id]
+      [juegoId, sorteoId, nroFinal, fechaSorteo, provinciaId, JSON.stringify(numeros), letrasJson, fuente || 'OCR', req.user.id]
     );
 
     return successResponse(res, { id: result.insertId, created: true }, 'Extracto guardado');
@@ -292,10 +297,9 @@ const guardarExtractosBulk = async (req, res, next) => {
           continue;
         }
 
+        const nroFinal = numeroSorteo || 0;
         if (!numeroSorteo) {
-          errores++;
-          resultados.push({ error: 'No se pudo determinar número de sorteo', extracto: ext });
-          continue;
+          console.warn(`[EXTRACTOS] bulk: numero_sorteo no resuelto para ${juego} ${modalidad} ${fechaSorteo} — usando nro=0`);
         }
 
         if (normalizarJuegoEntrada(juego || 'Quiniela') === 'quiniela' && !provinciaId) {
@@ -307,7 +311,7 @@ const guardarExtractosBulk = async (req, res, next) => {
         // 5. Verificar duplicado
         const [existente] = await conn.query(
           `SELECT id FROM extractos WHERE juego_id = ? AND sorteo_id = ? AND fecha = ? AND numero_sorteo = ? AND (provincia_id = ? OR (provincia_id IS NULL AND ? IS NULL))`,
-          [juegoId, sorteoId, fechaSorteo, numeroSorteo, provinciaId, provinciaId]
+          [juegoId, sorteoId, fechaSorteo, nroFinal, provinciaId, provinciaId]
         );
 
         if (existente.length > 0) {
@@ -316,15 +320,15 @@ const guardarExtractosBulk = async (req, res, next) => {
             [JSON.stringify(numeros), letrasJson, fuente || 'OCR', existente[0].id]
           );
           guardados++;
-          resultados.push({ id: existente[0].id, updated: true, provincia, modalidad, fecha: fechaSorteo, numero_sorteo: numeroSorteo, juego: juego || 'Quiniela' });
+          resultados.push({ id: existente[0].id, updated: true, provincia, modalidad, fecha: fechaSorteo, numero_sorteo: nroFinal, juego: juego || 'Quiniela' });
         } else {
           const [result] = await conn.query(
             `INSERT INTO extractos (juego_id, sorteo_id, numero_sorteo, fecha, provincia_id, numeros, letras, fuente, usuario_id)
              VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-            [juegoId, sorteoId, numeroSorteo, fechaSorteo, provinciaId, JSON.stringify(numeros), letrasJson, fuente || 'OCR', req.user.id]
+            [juegoId, sorteoId, nroFinal, fechaSorteo, provinciaId, JSON.stringify(numeros), letrasJson, fuente || 'OCR', req.user.id]
           );
           guardados++;
-          resultados.push({ id: result.insertId, created: true, provincia, modalidad, fecha: fechaSorteo, numero_sorteo: numeroSorteo, juego: juego || 'Quiniela' });
+          resultados.push({ id: result.insertId, created: true, provincia, modalidad, fecha: fechaSorteo, numero_sorteo: nroFinal, juego: juego || 'Quiniela' });
         }
       } catch (err) {
         console.error('[EXTRACTOS] Error individual:', err.message);
