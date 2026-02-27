@@ -4649,6 +4649,45 @@ function parsearNombreArchivoXML(filename) {
   };
 }
 
+function detectarProvinciaCodigoDesdeNombreArchivo(filename) {
+  if (!filename) return '';
+
+  const infoQnl = parsearNombreArchivoXML(filename);
+  if (infoQnl?.codigoProvincia) return infoQnl.codigoProvincia;
+
+  const nombre = String(filename).toUpperCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '');
+
+  if (/\b51\b|CABA|CIUDAD\s*AUTONOMA/.test(nombre)) return '51';
+  if (/\b53\b|BUENOS\s*AIRES|\bPBA\b/.test(nombre)) return '53';
+  if (/\b55\b|CORDOBA|\bCBA\b/.test(nombre)) return '55';
+  if (/\b72\b|SANTA\s*FE|\bSFE\b/.test(nombre)) return '72';
+  if (/\b64\b|MENDOZA|\bMZA\b/.test(nombre)) return '64';
+  if (/\b59\b|ENTRE\s*RIOS|\bENR\b/.test(nombre)) return '59';
+  if (/\b00\b|MONTEVIDEO|URUGUAY|\bURU\b/.test(nombre)) return '00';
+
+  return '';
+}
+
+function detectarProvinciaCodigoDesdeTextoOCR(texto) {
+  if (!texto) return '';
+
+  const txt = String(texto).toUpperCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '');
+
+  if (/\bCABA\b|CIUDAD\s*AUTONOMA/.test(txt)) return '51';
+  if (/BUENOS\s*AIRES|\bPBA\b/.test(txt)) return '53';
+  if (/CORDOBA|\bCBA\b/.test(txt)) return '55';
+  if (/SANTA\s*FE|\bSFE\b/.test(txt)) return '72';
+  if (/MENDOZA|\bMZA\b/.test(txt)) return '64';
+  if (/ENTRE\s*RIOS|\bENR\b/.test(txt)) return '59';
+  if (/MONTEVIDEO|URUGUAY|\bURU\b/.test(txt)) return '00';
+
+  return '';
+}
+
 // Cargar desde archivo(s) XML - soporta múltiples archivos con filtrado por modalidad
 function cargarExtractoXML(input) {
   if (!input.files.length) return;
@@ -6061,7 +6100,7 @@ async function procesarArchivoImagenInteligente(archivo) {
 
   // Fallback: OCR local con Tesseract
   if (!data) {
-    data = await extraerDatosQuinielaFallback(archivo, false);
+    data = await extraerDatosQuinielaFallback(archivo, false, false);
   }
 
   // Mapear código de provincia a índice
@@ -6172,7 +6211,7 @@ async function procesarArchivoPDFInteligente(archivo) {
 
   // Fallback: OCR local con Tesseract
   if (!data) {
-    data = await extraerDatosQuinielaFallback(archivo, true);
+    data = await extraerDatosQuinielaFallback(archivo, true, false);
   }
 
   const codigoToIndex = {
@@ -6261,7 +6300,7 @@ async function procesarArchivoPDFInteligente(archivo) {
 }
 
 // Fallback OCR local (sin API) para Quiniela en modo inteligente
-async function extraerDatosQuinielaFallback(archivo, esPDF = false) {
+async function extraerDatosQuinielaFallback(archivo, esPDF = false, usarProvinciaUI = true) {
   if (!window.Tesseract) {
     await loadScript('https://cdn.jsdelivr.net/npm/tesseract.js@4/dist/tesseract.min.js');
   }
@@ -6287,7 +6326,7 @@ async function extraerDatosQuinielaFallback(archivo, esPDF = false) {
     throw new Error('OCR alternativo no pudo extraer números del archivo');
   }
 
-  // Provincia fallback: priorizar nombre de archivo (QNLxx...), luego selección UI
+  // Provincia fallback: priorizar nombre de archivo, luego texto OCR, y por último selección UI (si se permite)
   const provinciaSelect = document.getElementById('cpst-extracto-provincia');
   const indexToCodigoProvincia = {
     0: '51',
@@ -6299,10 +6338,13 @@ async function extraerDatosQuinielaFallback(archivo, esPDF = false) {
     6: '59'
   };
 
-  let provincia = parsearNombreArchivoXML(archivo?.name || '')?.codigoProvincia || '51';
-  if (provinciaSelect && !parsearNombreArchivoXML(archivo?.name || '')?.codigoProvincia) {
+  const provinciaDesdeNombre = detectarProvinciaCodigoDesdeNombreArchivo(archivo?.name || '');
+  const provinciaDesdeTexto = detectarProvinciaCodigoDesdeTextoOCR(texto);
+  let provincia = provinciaDesdeNombre || provinciaDesdeTexto || '';
+
+  if (!provincia && usarProvinciaUI && provinciaSelect) {
     const idx = parseInt(provinciaSelect.value || '0');
-    provincia = indexToCodigoProvincia[idx] || '51';
+    provincia = indexToCodigoProvincia[idx] || '';
   }
 
   const modalidadArchivo = parsearNombreArchivoXML(archivo?.name || '')?.modalidad || '';
