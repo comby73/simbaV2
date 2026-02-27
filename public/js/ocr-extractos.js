@@ -1,6 +1,7 @@
 // ============================================
 // MÓDULO OCR EXTRACTOS - SIMBA V2
 // Extracción de datos de extractos con IA (Groq API)
+// Soporta: API key en browser (config.js/localStorage) O proxy servidor
 // ============================================
 
 const OCRExtractos = {
@@ -11,8 +12,11 @@ const OCRExtractos = {
     MODEL: 'meta-llama/llama-4-maverick-17b-128e-instruct'
   },
 
+  // Si el servidor tiene OCR disponible (se consulta una vez al init)
+  _servidorOCRDisponible: null,
+
   // Inicializar con config global o localStorage
-  init() {
+  async init() {
     // 1. Intentar desde config.js (SIMBA_CONFIG)
     if (window.SIMBA_CONFIG && window.SIMBA_CONFIG.GROQ) {
       this.CONFIG.API_URL = window.SIMBA_CONFIG.GROQ.API_URL || this.CONFIG.API_URL;
@@ -25,10 +29,35 @@ const OCRExtractos = {
     if (savedKey) {
       this.CONFIG.API_KEY = savedKey;
     }
-    
+
     const savedModel = localStorage.getItem('groq_model');
     if (savedModel) {
       this.CONFIG.MODEL = savedModel;
+    }
+
+    // 3. Verificar si el servidor tiene OCR disponible (para usarlo como fallback)
+    if (!this.CONFIG.API_KEY) {
+      this._verificarOCRServidor();
+    }
+  },
+
+  // Verificar disponibilidad de OCR en servidor (no bloquea el init)
+  async _verificarOCRServidor() {
+    try {
+      const token = localStorage.getItem('token');
+      if (!token) return;
+      const resp = await fetch('/api/ocr/estado', {
+        headers: { 'Authorization': 'Bearer ' + token }
+      });
+      if (resp.ok) {
+        const data = await resp.json();
+        this._servidorOCRDisponible = data.disponible === true;
+        if (this._servidorOCRDisponible) {
+          console.log('[OCR] Servidor con OCR disponible (usando proxy servidor)');
+        }
+      }
+    } catch (e) {
+      this._servidorOCRDisponible = false;
     }
   },
 
@@ -38,9 +67,9 @@ const OCRExtractos = {
     localStorage.setItem('groq_api_key', key);
   },
 
-  // Verificar si hay API key configurada
+  // Verificar si hay API key configurada (browser o servidor)
   hasApiKey() {
-    return !!this.CONFIG.API_KEY;
+    return !!(this.CONFIG.API_KEY || this._servidorOCRDisponible);
   },
 
   /**
@@ -103,12 +132,55 @@ Responde SOLO con este JSON (sin markdown ni explicaciones):
     }
   },
 
-  // Llamar a la API de Groq
-  async llamarAPI(imageBase64, mimeType, prompt) {
-    if (!this.CONFIG.API_KEY) {
-      throw new Error('No hay API key de Groq configurada. Configurá tu clave en el panel.');
+  // Llamar al servidor como proxy OCR (usa GROQ_API_KEY del .env del servidor)
+  async llamarAPIServidor(imageBase64, mimeType, prompt) {
+    const token = localStorage.getItem('token');
+    if (!token) {
+      throw new Error('No hay sesión activa para usar OCR del servidor');
     }
 
+    const response = await fetch('/api/ocr/procesar-imagen', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': 'Bearer ' + token
+      },
+      body: JSON.stringify({ imageBase64, mimeType, prompt })
+    });
+
+    if (!response.ok) {
+      const err = await response.json().catch(() => ({}));
+      throw new Error(err.error || `Error servidor OCR: ${response.status}`);
+    }
+
+    const data = await response.json();
+    if (!data.success || !data.content) {
+      throw new Error(data.error || 'Respuesta vacía del servidor OCR');
+    }
+
+    return this.procesarRespuesta(data.content);
+  },
+
+  // Llamar a la API de Groq (browser directo o proxy servidor como fallback)
+  async llamarAPI(imageBase64, mimeType, prompt) {
+    // Opción 1: API key en el browser → llamada directa
+    if (this.CONFIG.API_KEY) {
+      return await this._llamarAPIDirecto(imageBase64, mimeType, prompt);
+    }
+
+    // Opción 2: Sin API key en browser → intentar proxy del servidor
+    // (el servidor usa GROQ_API_KEY del .env de Hostinger)
+    try {
+      // Si no verificamos el servidor aún, intentamos de todas formas
+      return await this.llamarAPIServidor(imageBase64, mimeType, prompt);
+    } catch (serverError) {
+      console.warn('[OCR] Proxy servidor falló:', serverError.message);
+      throw new Error('No hay API key de Groq configurada y el servidor no tiene OCR disponible. Configurá tu clave en el panel o contactá al administrador.');
+    }
+  },
+
+  // Llamada directa a Groq API con API key del browser
+  async _llamarAPIDirecto(imageBase64, mimeType, prompt) {
     const dataUrlPrefix = mimeType === 'image/png'
       ? 'data:image/png;base64,'
       : 'data:image/jpeg;base64,';
@@ -159,7 +231,7 @@ Responde SOLO con este JSON (sin markdown ni explicaciones):
         throw new Error('Respuesta inesperada de la API');
       }
     } catch (error) {
-      console.error('Error en OCR:', error);
+      console.error('Error en OCR directo:', error);
       throw error;
     }
   },
@@ -346,8 +418,8 @@ Responde SOLO con este JSON (sin markdown ni explicaciones):
   }
 };
 
-// Inicializar al cargar
-OCRExtractos.init();
+// Inicializar al cargar (async - no bloquea el resto de la app)
+OCRExtractos.init().catch(e => console.warn('[OCR] Init error:', e));
 
 // Disponible globalmente
 window.OCRExtractos = OCRExtractos;

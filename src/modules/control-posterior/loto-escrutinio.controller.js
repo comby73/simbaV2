@@ -10,7 +10,11 @@
  *
  * Plus (código 11): Si el número PLUS coincide, el premio se duplica
  * Premio Agenciero: 500000 por cada ganador de 1er premio
+ *
+ * VERSION: 2026-02-08 v3 - Con debug de datosControlPrevio
  */
+
+console.log('🔄 LOTO ESCRUTINIO CONTROLLER CARGADO - VERSION 2026-02-08 v3');
 
 const { query } = require('../../config/database');
 const { successResponse, errorResponse } = require('../../shared/helpers');
@@ -146,8 +150,46 @@ const ejecutar = async (req, res) => {
     console.log(`Número PLUS: ${extracto.plus != null ? extracto.plus : 'N/A'}`);
 
     // Extraer premios del XML (datosOficiales.modalidades) automáticamente
+    // IMPORTANTE: datosOficiales viene del XML del ZIP (Control Previo), NO del XML de extractos
+    console.log('\n📋 DEBUG datosControlPrevio recibido:');
+    console.log('   Keys en datosControlPrevio:', Object.keys(datosControlPrevio || {}));
+    console.log('   datosOficiales existe?', !!datosControlPrevio?.datosOficiales);
+    if (datosControlPrevio?.datosOficiales) {
+      console.log('   Keys en datosOficiales:', Object.keys(datosControlPrevio.datosOficiales));
+      console.log('   modalidades existe?', !!datosControlPrevio.datosOficiales.modalidades);
+      console.log('   formato:', datosControlPrevio.datosOficiales.formato);
+    }
+
     const modalidadesXml = datosControlPrevio?.datosOficiales?.modalidades || {};
-    console.log(`Modalidades XML disponibles: ${Object.keys(modalidadesXml).join(', ') || 'NINGUNA'}`);
+    console.log(`\n📊 Modalidades XML del Control Previo: ${Object.keys(modalidadesXml).join(', ') || 'NINGUNA'}`);
+
+    // Debug: mostrar TODOS los premios del XML por modalidad
+    console.log('\n💰 PREMIOS DEL XML (Control Previo ZIP):');
+    for (const [mod, data] of Object.entries(modalidadesXml)) {
+      console.log(`\n   === ${mod.toUpperCase()} ===`);
+      const premios = data?.premios || {};
+      if (premios.primerPremio) {
+        console.log(`   1er Premio: monto=$${premios.primerPremio.monto?.toLocaleString()}, totales=$${premios.primerPremio.totales?.toLocaleString()}`);
+      }
+      if (premios.segundoPremio) {
+        console.log(`   2do Premio: monto=$${premios.segundoPremio.monto?.toLocaleString()}, totales=$${premios.segundoPremio.totales?.toLocaleString()}`);
+      }
+      if (premios.tercerPremio) {
+        console.log(`   3er Premio: monto=$${premios.tercerPremio.monto?.toLocaleString()}, totales=$${premios.tercerPremio.totales?.toLocaleString()}`);
+      }
+      if (premios.agenciero) {
+        console.log(`   🏪 AGENCIERO: monto=$${premios.agenciero.monto?.toLocaleString()}, pozoVacante=$${premios.agenciero.pozoVacante?.toLocaleString()}, TOTALES=$${premios.agenciero.totales?.toLocaleString()}`);
+      } else {
+        console.log(`   🏪 AGENCIERO: ❌ NO ENCONTRADO EN XML`);
+      }
+      if (premios.fondoReserva) {
+        console.log(`   Fondo Reserva: $${premios.fondoReserva.monto?.toLocaleString()}`);
+      }
+      if (premios.fondoCompensador) {
+        console.log(`   Fondo Compensador: $${premios.fondoCompensador.monto?.toLocaleString()}`);
+      }
+    }
+    console.log('');
 
     const resultado = runScrutiny(registrosNTF, extracto, datosControlPrevio, modalidadesXml);
 
@@ -178,11 +220,31 @@ const ejecutar = async (req, res) => {
 };
 
 /**
- * Ejecuta el escrutinio completo de Loto con 4 modalidades
+ * Ejecuta el escrutinio completo de Loto Plus con 4 modalidades
+ *
+ * IMPORTANTE: En Loto Plus, CADA ticket juega las 4 modalidades simultáneamente.
+ * Un mismo ticket de 6 números se compara contra los 4 extractos diferentes.
+ * El gameCode '09' es el código general de Loto Plus, NO significa Desquite específicamente.
  */
 function runScrutiny(registrosNTF, extracto, datosControlPrevio, modalidadesXml) {
-  const extractNumbers = new Set(extracto.numeros.map(n => parseInt(n)));
   const numeroPLUS = extracto.plus != null ? parseInt(extracto.plus) : null;
+
+  // Extraer los 4 extractos por modalidad
+  // El frontend envía: {tradicional: [], match: [], desquite: [], saleOSale: [], plus: N}
+  const extractosPorModalidad = {
+    'Tradicional': new Set((extracto.tradicional || extracto.numeros || []).map(n => parseInt(n))),
+    'Match': new Set((extracto.match || []).map(n => parseInt(n))),
+    'Desquite': new Set((extracto.desquite || []).map(n => parseInt(n))),
+    'Sale o Sale': new Set((extracto.saleOSale || []).map(n => parseInt(n)))
+  };
+
+  console.log('=== INICIO runScrutiny ===');
+  console.log(`Registros recibidos en runScrutiny: ${registrosNTF.length}`);
+  console.log('Extractos usados:');
+  for (const [mod, nums] of Object.entries(extractosPorModalidad)) {
+    console.log(`  ${mod}: [${[...nums].join(', ')}]`);
+  }
+  console.log(`  PLUS: ${numeroPLUS}`);
 
   // Premios por modalidad vienen del XML (datosOficiales.modalidades)
   const xmlMods = modalidadesXml || {};
@@ -212,66 +274,93 @@ function runScrutiny(registrosNTF, extracto, datosControlPrevio, modalidadesXml)
   let totalApuestas = 0;
   let totalRecaudacion = 0;
 
-  // Separar registros por modalidad
-  const registrosPorModalidad = {};
-  const registrosPlus = []; // Registros PLUS se vinculan a Tradicional
+  // En Loto Plus, TODOS los registros juegan las 4 modalidades
+  // No se separan por modalidad del registro, sino que cada uno se evalúa contra los 4 extractos
+  const registrosLoto = registrosNTF.filter(reg =>
+    reg.tipoJuego === 'Loto' && !reg.cancelado && !reg.isCanceled
+  );
 
-  for (const reg of registrosNTF) {
-    if (reg.tipoJuego !== 'Loto') continue;
-    if (reg.cancelado || reg.isCanceled) continue;
+  // Los registros con Plus son para el Multiplicador
+  const registrosConPlus = registrosLoto.filter(reg => reg.numeroPlus != null);
 
-    const modalidad = reg.modalidad || MODALIDAD_POR_CODIGO[reg.gameCode] || 'Tradicional';
+  // En Loto Plus, CADA registro se evalúa contra las 4 modalidades
+  // Los registros/apuestas/recaudación se cuentan UNA SOLA VEZ (para Tradicional como base)
+  // Pero los ganadores se evalúan contra cada extracto
 
-    if (modalidad === 'Plus') {
-      registrosPlus.push(reg);
+  // Primero procesamos todos los registros UNA vez para contar registros/apuestas/recaudación
+  const registrosProcesados = [];
+  for (const reg of registrosLoto) {
+    const cantNum = parseInt(reg.cantNum || 6);
+    const nroApuestas = COMBINACIONES_LOTO[cantNum] || combinaciones(cantNum, 6);
+    const importe = parseFloat(reg.importe || 0);
+
+    // Decodificar números
+    let betNumbers = [];
+    if (reg.numeros && Array.isArray(reg.numeros)) {
+      betNumbers = reg.numeros.map(n => parseInt(n));
+    } else if (reg.secuencia) {
+      betNumbers = decodificarNumerosLoto(reg.secuencia);
+    }
+
+    if (betNumbers.length < 6) continue;
+
+    registrosProcesados.push({
+      ...reg,
+      betNumbers,
+      cantNum,
+      nroApuestas,
+      importe
+    });
+
+    totalRegistros++;
+    totalApuestas += nroApuestas;
+    totalRecaudacion += importe;
+  }
+
+  // La recaudación se divide en 4 partes iguales (una por modalidad)
+  // Pero para el resumen por modalidad usamos el total
+  for (const mod of modalidades) {
+    porModalidad[mod].registros = registrosProcesados.length;
+    porModalidad[mod].apuestas = totalApuestas;
+    porModalidad[mod].recaudacion = totalRecaudacion / 4; // Aproximación
+  }
+
+  // Ahora procesamos ganadores para CADA modalidad contra su extracto específico
+  for (const mod of modalidades) {
+    const modResult = porModalidad[mod];
+    const extractNumbers = extractosPorModalidad[mod];
+
+    if (!extractNumbers || extractNumbers.size === 0) {
+      console.log(`⚠️ No hay extracto para modalidad ${mod}, saltando...`);
       continue;
     }
 
-    if (!registrosPorModalidad[modalidad]) {
-      registrosPorModalidad[modalidad] = [];
-    }
-    registrosPorModalidad[modalidad].push(reg);
-  }
+    console.log(`\n🎲 Procesando modalidad ${mod}: Extracto = [${[...extractNumbers].join(', ')}]`);
 
-  // Procesar cada modalidad
-  for (const mod of modalidades) {
-    const regs = registrosPorModalidad[mod] || [];
-    const modResult = porModalidad[mod];
+    let maxHits = 0;
+    let gan6Count = 0;
 
-    for (const reg of regs) {
-      modResult.registros++;
-      totalRegistros++;
+    for (const reg of registrosProcesados) {
+      const { betNumbers, cantNum, ticket, agenciaCompleta, esVentaWeb, importe, numeroPlus } = reg;
 
-      const cantNum = parseInt(reg.cantNum || 6);
-      const nroApuestas = COMBINACIONES_LOTO[cantNum] || combinaciones(cantNum, 6);
-      modResult.apuestas += nroApuestas;
-      totalApuestas += nroApuestas;
-
-      const importe = parseFloat(reg.importe || 0);
-      modResult.recaudacion += importe;
-      totalRecaudacion += importe;
-
-      // Decodificar números
-      let betNumbers = [];
-      if (reg.numeros && Array.isArray(reg.numeros)) {
-        betNumbers = reg.numeros.map(n => parseInt(n));
-      } else if (reg.secuencia) {
-        betNumbers = decodificarNumerosLoto(reg.secuencia);
-      }
-
-      if (betNumbers.length < 6) continue;
-
-      // Calcular ganadores
+      // Calcular ganadores contra el extracto de ESTA modalidad
       if (cantNum === 6) {
         const hits = countHits(betNumbers, extractNumbers);
+        if (hits > maxHits) maxHits = hits;
         if (hits >= 4) {
           modResult.porNivel[hits].ganadores++;
           if (hits === 6) {
+            gan6Count++;
             modResult.porNivel[6].agenciasGanadoras.push({
               agencia: reg.agencia || '',
-              agenciaCompleta: reg.agenciaCompleta || '',
-              ticket: reg.ticket || ''
+              agenciaCompleta: agenciaCompleta || '',
+              ticket: ticket || '',
+              esVentaWeb: esVentaWeb || false,
+              importe: importe,
+              numerosJugados: betNumbers.slice(),
+              numeroPlus: numeroPlus
             });
+            console.log(`🏆 GANADOR 6 ACIERTOS en ${mod}: Ticket ${ticket}, Agencia ${agenciaCompleta}, Nums: ${betNumbers.join(',')}`);
           }
         }
       } else {
@@ -280,16 +369,23 @@ function runScrutiny(registrosNTF, extracto, datosControlPrevio, modalidadesXml)
           modResult.porNivel[nivel].ganadores += ganadoresMultiples[nivel];
         }
         if (ganadoresMultiples[6] > 0) {
+          gan6Count += ganadoresMultiples[6];
           modResult.porNivel[6].agenciasGanadoras.push({
             agencia: reg.agencia || '',
-            agenciaCompleta: reg.agenciaCompleta || '',
-            ticket: reg.ticket || '',
+            agenciaCompleta: agenciaCompleta || '',
+            ticket: ticket || '',
             esMultiple: true,
-            cantidad: ganadoresMultiples[6]
+            cantidad: ganadoresMultiples[6],
+            esVentaWeb: esVentaWeb || false,
+            importe: importe,
+            numerosJugados: betNumbers.slice(),
+            numeroPlus: numeroPlus
           });
         }
       }
     }
+
+    console.log(`   → Max aciertos encontrados: ${maxHits}, Ganadores de 6: ${gan6Count}`);
 
     // Aplicar regla "Sale o Sale" (cascada)
     if (mod === 'Sale o Sale') {
@@ -354,17 +450,23 @@ function runScrutiny(registrosNTF, extracto, datosControlPrevio, modalidadesXml)
     // Premio agenciero del XML
     const xmlAgenciero = xmlPremios.agenciero;
     const pozoAgenciero = parseFloat(xmlAgenciero?.totales || 0);
+
+    // DEBUG: Mostrar qué viene del XML para agenciero
+    console.log(`📊 XML Premios ${mod}: primerPremio.totales=${xmlPremios.primerPremio?.totales || 0}, agenciero=${JSON.stringify(xmlAgenciero || 'NO EXISTE')}`);
+
     if (modResult.porNivel[6].ganadores > 0) {
       modResult.agenciero.ganadores = modResult.porNivel[6].agenciasGanadoras.length;
       // Para Sale o Sale: agenciero solo si ganan con 6 aciertos exactos
       if (mod === 'Sale o Sale' && !modResult.porNivel[6]._esSaleOSale) {
         modResult.agenciero.ganadores = 0;
       }
+      console.log(`🏪 AGENCIERO ${mod}: gan6=${modResult.porNivel[6].ganadores}, pozoAgenciero=$${pozoAgenciero.toLocaleString()}, agenciasGanadoras=${modResult.agenciero.ganadores}`);
       if (modResult.agenciero.ganadores > 0) {
         modResult.agenciero.premioUnitario = pozoAgenciero > 0 ?
           pozoAgenciero / modResult.agenciero.ganadores : PREMIO_AGENCIERO;
         modResult.agenciero.totalPremios = modResult.agenciero.ganadores * modResult.agenciero.premioUnitario;
         totalPremios += modResult.agenciero.totalPremios;
+        console.log(`   → Premio unitario: $${modResult.agenciero.premioUnitario.toLocaleString()}, Total: $${modResult.agenciero.totalPremios.toLocaleString()}`);
       }
     }
 
@@ -377,25 +479,49 @@ function runScrutiny(registrosNTF, extracto, datosControlPrevio, modalidadesXml)
   // Un ganador de Multiplicador es quien tiene:
   //   1) 6 aciertos en cualquier otra modalidad (Tradicional, Match, Desquite, SOS)
   //   2) Su número PLUS coincide con el número PLUS sorteado
-  // El premio extra = 2x el premio original de esa modalidad (total 3x)
-  // Agenciero Multiplicador = $500.000 fijo
+  // El premio extra = 2x el premio original de esa modalidad
+  // Agenciero Multiplicador = $500.000 fijo por ganador
   let ganadoresPlus = 0;
   let premioExtraPlus = 0;
+  const multiplicadorDetalle = [];
   const xmlMultiplicador = xmlMods['Multiplicador'] || {};
+  const PREMIO_AGENCIERO_MULTIPLICADOR = 500000;
 
   if (numeroPLUS != null) {
-    for (const reg of registrosPlus) {
-      const plusDelTicket = parseInt(reg.numeroPlus);
-      if (plusDelTicket === numeroPLUS) {
-        ganadoresPlus++;
-        // El premio Multiplicador es 2x el premio que obtuvo en la otra modalidad
-        // Por ahora contamos ganadores; el premio real depende de qué modalidad ganó
+    console.log(`\n🎰 Procesando Multiplicador: PLUS sorteado = ${numeroPLUS}`);
+
+    // Buscar ganadores: tickets con 6 aciertos en cualquier modalidad Y que acertaron el PLUS
+    for (const mod of modalidades) {
+      const modResult = porModalidad[mod];
+      for (const ganador of modResult.porNivel[6].agenciasGanadoras) {
+        if (ganador.numeroPlus != null && parseInt(ganador.numeroPlus) === numeroPLUS) {
+          ganadoresPlus++;
+          // El premio extra es 2x el premio original (el ganador recibe 3x total)
+          const premioOriginal = modResult.porNivel[6].premioUnitario || 0;
+          const premioExtra = premioOriginal * 2;
+          premioExtraPlus += premioExtra;
+
+          multiplicadorDetalle.push({
+            ticket: ganador.ticket,
+            agencia: ganador.agenciaCompleta,
+            modalidad: mod,
+            premioOriginal,
+            premioExtra,
+            esVentaWeb: ganador.esVentaWeb
+          });
+
+          console.log(`   ✓ GANADOR MULTIPLICADOR: Ticket ${ganador.ticket}, Modalidad ${mod}, Plus: ${ganador.numeroPlus}`);
+          console.log(`     → Premio original: $${premioOriginal.toLocaleString()}, Extra: $${premioExtra.toLocaleString()}`);
+        }
       }
     }
+
     if (ganadoresPlus > 0) {
-      // El fondo compensador del Multiplicador del XML
       const fondoMultiplicador = parseFloat(xmlMultiplicador.premios?.fondoCompensador?.monto || 0);
-      console.log(`  Multiplicador: ${ganadoresPlus} ganadores PLUS. Fondo compensador: $${fondoMultiplicador}`);
+      console.log(`   Total Multiplicador: ${ganadoresPlus} ganadores, Premio extra total: $${premioExtraPlus.toLocaleString()}`);
+      totalPremios += premioExtraPlus;
+      // Agenciero del Multiplicador
+      totalPremios += ganadoresPlus * PREMIO_AGENCIERO_MULTIPLICADOR;
     }
   }
 
@@ -434,8 +560,17 @@ function runScrutiny(registrosNTF, extracto, datosControlPrevio, modalidadesXml)
       }
     },
     extractoUsado: {
-      numeros: [...extractNumbers],
+      tradicional: [...extractosPorModalidad['Tradicional']],
+      match: [...extractosPorModalidad['Match']],
+      desquite: [...extractosPorModalidad['Desquite']],
+      saleOSale: [...extractosPorModalidad['Sale o Sale']],
       plus: numeroPLUS
+    },
+    multiplicador: {
+      numero: numeroPLUS,
+      ganadores: ganadoresPlus,
+      premioExtra: premioExtraPlus,
+      detalle: multiplicadorDetalle
     }
   };
 }

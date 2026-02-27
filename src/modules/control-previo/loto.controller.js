@@ -13,7 +13,11 @@
  *
  * Rango de números: 0-45 (46 números posibles)
  * Apuesta base: 6 números
+ *
+ * VERSION: 2026-02-08 v3 - Con parser de agenciero por modalidad
  */
+
+console.log('🔄 LOTO CONTROLLER CARGADO - VERSION 2026-02-08 v3');
 
 const path = require('path');
 const fs = require('fs');
@@ -215,6 +219,16 @@ const procesarZip = async (req, res) => {
     if (xmlFileInfo) {
       const xmlContent = fs.readFileSync(xmlFileInfo.path, 'utf8');
       datosXml = await parsearXmlControlPrevio(xmlContent);
+
+      // DEBUG: Mostrar resumen de lo que se parseó del XML
+      if (datosXml) {
+        console.log(`\n✅ XML Loto parseado: Sorteo ${datosXml.sorteo}, ${Object.keys(datosXml.modalidades || {}).length} modalidades`);
+        console.log('🔍 VERIFICANDO AGENCIEROS PARSEADOS (CODIGO NUEVO v4):');
+        for (const [mod, data] of Object.entries(datosXml.modalidades || {})) {
+          const ag = data?.premios?.agenciero;
+          console.log(`   📍 ${mod}: Agenciero=${ag ? `monto=$${ag.monto}, TOTALES=$${ag.totales}` : 'NO EXISTE'}`);
+        }
+      }
     } else {
       console.warn('⚠️ No se encontró archivo XML de control previo (CP.XML)');
     }
@@ -443,6 +457,12 @@ function procesarArchivoNTF(content) {
  * Parsea el XML de control previo de Loto
  * Puede tener estructura CONTROL_PREVIO > LOTO_DE_LA_CIUDAD o DatosSorteo
  */
+/**
+ * Parsea el XML de control previo de Loto Plus
+ * El XML tiene estructura CONTROL_PREVIO > LOTO_PLUS con 5 nodos modalidad:
+ * LOTO_TRADICIONAL, LOTO_MATCH, LOTO_DESQUITE, LOTO_SOS, LOTO_MULTIPLICADOR
+ * Cada modalidad tiene premios anidados: PRIMER_PREMIO, SEGUNDO_PREMIO, TERCER_PREMIO, PREMIO_AGENCIERO
+ */
 async function parsearXmlControlPrevio(xmlContent) {
   const parser = new xml2js.Parser({ explicitArray: false });
   const result = await parser.parseStringPromise(xmlContent);
@@ -451,56 +471,168 @@ async function parsearXmlControlPrevio(xmlContent) {
   let root = null;
 
   if (result.CONTROL_PREVIO) {
-    root = result.CONTROL_PREVIO.LOTO_DE_LA_CIUDAD ||
-           result.CONTROL_PREVIO.LOTO_PLUS ||
+    root = result.CONTROL_PREVIO.LOTO_PLUS ||
+           result.CONTROL_PREVIO.LOTO_DE_LA_CIUDAD ||
            result.CONTROL_PREVIO;
+  } else if (result.LOTO_PLUS) {
+    root = result.LOTO_PLUS;
   } else if (result.LOTO_DE_LA_CIUDAD) {
     root = result.LOTO_DE_LA_CIUDAD;
   } else if (result.DatosSorteo) {
-    // Formato alternativo DatosSorteo
-    const ds = result.DatosSorteo;
-    return {
-      sorteo: ds.NumeroSorteo || ds.Sorteo,
-      fecha: ds.FechaSorteo,
-      registrosValidos: parseInt(ds.RegistrosValidos || 0),
-      registrosAnulados: parseInt(ds.RegistrosAnulados || 0),
-      apuestas: parseInt(ds.ApuestasEnSorteo || ds.Apuestas || 0),
-      recaudacion: parseFloat(ds.RecaudacionBruta || ds.Recaudacion || 0),
-      premios: parsearPremiosXml(ds),
-      formato: 'DatosSorteo'
-    };
+    // Formato alternativo DatosSorteo (legacy)
+    return parsearXmlLegacy(result.DatosSorteo);
   }
 
   if (!root) {
     console.warn('⚠️ No se encontró estructura XML conocida de Loto');
+    console.warn('   Estructura XML recibida:', JSON.stringify(Object.keys(result), null, 2));
     return null;
+  }
+
+  // Debug: mostrar nodos disponibles en root
+  console.log('📄 Loto XML - nodos disponibles en root:', Object.keys(root));
+
+  // Mapeo de nodos XML a nombres de modalidad
+  const MODALIDAD_XML_MAP = {
+    'LOTO_TRADICIONAL': 'Tradicional',
+    'LOTO_MATCH': 'Match',
+    'LOTO_DESQUITE': 'Desquite',
+    'LOTO_SOS': 'Sale o Sale',
+    'LOTO_MULTIPLICADOR': 'Multiplicador'
+  };
+
+  // Parsear premios de cada modalidad
+  const modalidades = {};
+  let totalRegistrosValidos = 0;
+  let totalRegistrosAnulados = 0;
+  let totalApuestas = 0;
+  let totalRecaudacion = 0;
+
+  for (const [xmlKey, modName] of Object.entries(MODALIDAD_XML_MAP)) {
+    const nodo = root[xmlKey];
+    if (!nodo) continue;
+
+    const premiosModalidad = parsearPremiosModalidad(nodo, modName);
+
+    modalidades[modName] = {
+      codigoJuego: nodo.CODIGO_JUEGO || '',
+      registrosValidos: parseInt(nodo.REGISTROS_VALIDOS || 0),
+      registrosAnulados: parseInt(nodo.REGISTROS_ANULADOS || 0),
+      apuestas: parseInt(nodo.APUESTAS_EN_SORTEO || 0),
+      recaudacionBruta: parseFloat(nodo.RECAUDACION_BRUTA || 0),
+      recaudacionDistribuir: parseFloat(nodo.RECAUDACION_A_DISTRIBUIR || 0),
+      importePremios: parseFloat(nodo.IMPORTE_TOTAL_PREMIOS_A_DISTRIBUIR || 0),
+      arancel: parseFloat(nodo.ARANCEL || 0),
+      premios: premiosModalidad
+    };
+
+    totalRegistrosValidos += modalidades[modName].registrosValidos;
+    totalRegistrosAnulados += modalidades[modName].registrosAnulados;
+    totalApuestas += modalidades[modName].apuestas;
+    totalRecaudacion += modalidades[modName].recaudacionBruta;
+  }
+
+  console.log('📊 Loto XML parseado - Modalidades encontradas:', Object.keys(modalidades));
+
+  // Log de premios agencieros para debug
+  for (const [mod, data] of Object.entries(modalidades)) {
+    if (data.premios.agenciero?.totales > 0) {
+      console.log(`   ${mod}: Agenciero TOTALES = $${data.premios.agenciero.totales.toLocaleString()}`);
+    }
   }
 
   return {
     sorteo: root.SORTEO || root.NumeroSorteo,
     fecha: root.FECHA_SORTEO || root.FechaSorteo,
-    registrosValidos: parseInt(root.REGISTROS_VALIDOS || 0),
-    registrosAnulados: parseInt(root.REGISTROS_ANULADOS || 0),
-    apuestas: parseInt(root.APUESTAS_EN_SORTEO || 0),
-    recaudacion: parseFloat(root.RECAUDACION_BRUTA || 0),
-    premios: {
-      tradicional: parseFloat(root.PREMIO_TRADICIONAL?.MONTO || root.PremioTradicional || 0),
-      match: parseFloat(root.PREMIO_MATCH?.MONTO || root.PremioMatch || 0),
-      desquite: parseFloat(root.PREMIO_DESQUITE?.MONTO || root.PremioDesquite || 0),
-      saleOSale: parseFloat(root.PREMIO_SALE_O_SALE?.MONTO || root.PremioSaleOSale || 0),
-      agenciero: parseFloat(root.PREMIO_AGENCIERO?.MONTO || root.PremioAgenciero || 0)
-    },
-    formato: 'CONTROL_PREVIO'
+    registrosValidos: totalRegistrosValidos,
+    registrosAnulados: totalRegistrosAnulados,
+    apuestas: totalApuestas,
+    recaudacion: totalRecaudacion,
+    modalidades,
+    formato: 'LOTO_PLUS'
   };
 }
 
-function parsearPremiosXml(ds) {
+/**
+ * Parsea los premios de un nodo de modalidad
+ * Extrae PRIMER_PREMIO, SEGUNDO_PREMIO, TERCER_PREMIO, PREMIO_AGENCIERO, FONDO_RESERVA/COMPENSADOR
+ */
+function parsearPremiosModalidad(nodo, modName) {
+  const premios = {};
+
+  // Primer premio (6 aciertos)
+  if (nodo.PRIMER_PREMIO) {
+    premios.primerPremio = {
+      monto: parseFloat(nodo.PRIMER_PREMIO.MONTO || 0),
+      pozoVacante: parseFloat(nodo.PRIMER_PREMIO.POZO_VACANTE || 0),
+      pozoAsegurar: parseFloat(nodo.PRIMER_PREMIO.POZO_A_ASEGURAR || 0),
+      totales: parseFloat(nodo.PRIMER_PREMIO.TOTALES || 0)
+    };
+  }
+
+  // Segundo premio (5 aciertos) - solo Tradicional/Match
+  if (nodo.SEGUNDO_PREMIO) {
+    premios.segundoPremio = {
+      monto: parseFloat(nodo.SEGUNDO_PREMIO.MONTO || 0),
+      pozoVacante: parseFloat(nodo.SEGUNDO_PREMIO.POZO_VACANTE || 0),
+      pozoAsegurar: parseFloat(nodo.SEGUNDO_PREMIO.POZO_A_ASEGURAR || 0),
+      totales: parseFloat(nodo.SEGUNDO_PREMIO.TOTALES || 0)
+    };
+  }
+
+  // Tercer premio (4 aciertos) - solo Tradicional/Match
+  if (nodo.TERCER_PREMIO) {
+    premios.tercerPremio = {
+      monto: parseFloat(nodo.TERCER_PREMIO.MONTO || 0),
+      pozoVacante: parseFloat(nodo.TERCER_PREMIO.POZO_VACANTE || 0),
+      pozoAsegurar: parseFloat(nodo.TERCER_PREMIO.POZO_A_ASEGURAR || 0),
+      totales: parseFloat(nodo.TERCER_PREMIO.TOTALES || 0)
+    };
+  }
+
+  // Premio agenciero - crucial para agencias ganadoras
+  if (nodo.PREMIO_AGENCIERO) {
+    console.log(`📋 DEBUG PREMIO_AGENCIERO ${modName} raw:`, JSON.stringify(nodo.PREMIO_AGENCIERO));
+    premios.agenciero = {
+      monto: parseFloat(nodo.PREMIO_AGENCIERO.MONTO || 0),
+      pozoVacante: parseFloat(nodo.PREMIO_AGENCIERO.POZO_VACANTE || 0),
+      totales: parseFloat(nodo.PREMIO_AGENCIERO.TOTALES || 0)
+    };
+    console.log(`📋 DEBUG ${modName} agenciero parsed:`, premios.agenciero);
+  } else {
+    console.log(`⚠️ ${modName}: NO tiene nodo PREMIO_AGENCIERO en el XML`);
+  }
+
+  // Fondo de reserva (Tradicional/Match)
+  if (nodo.FONDO_RESERVA) {
+    premios.fondoReserva = {
+      monto: parseFloat(nodo.FONDO_RESERVA.MONTO || 0)
+    };
+  }
+
+  // Fondo compensador (Desquite/SOS/Multiplicador)
+  if (nodo.FONDO_COMPENSADOR) {
+    premios.fondoCompensador = {
+      monto: parseFloat(nodo.FONDO_COMPENSADOR.MONTO || 0)
+    };
+  }
+
+  return premios;
+}
+
+/**
+ * Parsea formato XML legacy (DatosSorteo)
+ */
+function parsearXmlLegacy(ds) {
   return {
-    tradicional: parseFloat(ds.PremioTradicional || 0),
-    match: parseFloat(ds.PremioMatch || 0),
-    desquite: parseFloat(ds.PremioDesquite || 0),
-    saleOSale: parseFloat(ds.PremioSaleOSale || 0),
-    agenciero: parseFloat(ds.PremioAgenciero || 0)
+    sorteo: ds.NumeroSorteo || ds.Sorteo,
+    fecha: ds.FechaSorteo,
+    registrosValidos: parseInt(ds.RegistrosValidos || 0),
+    registrosAnulados: parseInt(ds.RegistrosAnulados || 0),
+    apuestas: parseInt(ds.ApuestasEnSorteo || ds.Apuestas || 0),
+    recaudacion: parseFloat(ds.RecaudacionBruta || ds.Recaudacion || 0),
+    modalidades: {},
+    formato: 'DatosSorteo'
   };
 }
 

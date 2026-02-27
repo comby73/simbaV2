@@ -3633,6 +3633,21 @@ async function ejecutarEscrutinio() {
     
     if (cpstJuegoSeleccionado === 'Loto') {
       // Ejecutar escrutinio de Loto
+      // DEBUG: verificar qué tiene datosControlPrevio antes de enviarlo
+      console.log('🔍 DEBUG FRONTEND - datosControlPrevio.datosOficiales:', cpstDatosControlPrevio?.datosOficiales ? 'EXISTE' : 'NULL');
+      if (cpstDatosControlPrevio?.datosOficiales?.modalidades) {
+        const mods = cpstDatosControlPrevio.datosOficiales.modalidades;
+        console.log('🔍 Modalidades en datosOficiales:', Object.keys(mods));
+        for (const [mod, data] of Object.entries(mods)) {
+          const ag = data?.premios?.agenciero;
+          console.log(`   📍 ${mod}: agenciero TOTALES = ${ag?.totales ?? 'NO EXISTE'}`);
+        }
+      } else {
+        console.warn('❌ datosOficiales.modalidades NO EXISTE en cpstDatosControlPrevio');
+        console.log('   Keys en cpstDatosControlPrevio:', Object.keys(cpstDatosControlPrevio || {}));
+        console.log('   datosOficiales:', cpstDatosControlPrevio?.datosOficiales);
+      }
+
       const response = await fetch(`${API_BASE}/control-posterior/loto/escrutinio`, {
         method: 'POST',
         headers: {
