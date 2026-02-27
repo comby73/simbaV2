@@ -6042,6 +6042,7 @@ async function procesarArchivoXMLInteligente(archivo) {
 // Procesar imagen con OCR inteligente
 async function procesarArchivoImagenInteligente(archivo) {
   let data = null;
+  const infoArchivo = parsearNombreArchivoXML(archivo.name || '');
 
   // Intento principal: OCR con proveedores API
   if (window.OCRExtractos && OCRExtractos.hasApiKey()) {
@@ -6068,20 +6069,28 @@ async function procesarArchivoImagenInteligente(archivo) {
     '51': 0, '53': 1, '55': 2, '72': 3, '00': 4, '64': 5, '59': 6
   };
 
-  const provinciaIdx = data.provincia ? codigoToIndex[data.provincia] : null;
+  const codigoProvinciaFinal = infoArchivo?.codigoProvincia || data.provincia;
+  const provinciaIdx = codigoProvinciaFinal ? codigoToIndex[codigoProvinciaFinal] : null;
   const provinciaNombres = ['CABA', 'Buenos Aires', 'Córdoba', 'Santa Fe', 'Montevideo', 'Mendoza', 'Entre Ríos'];
 
   // Verificar modalidad
   const modalidadDetectada = normalizarModalidadASigla(data.modalidad);
+  const modalidadArchivo = infoArchivo?.modalidad || null;
 
-  if (modalidadDetectada && cpstModalidadSorteo && modalidadDetectada !== cpstModalidadSorteo) {
-    notificarExtractoDescartadoPorModalidad(archivo.name, modalidadDetectada, cpstModalidadSorteo, 'Imagen');
+  if (modalidadArchivo && modalidadDetectada && modalidadArchivo !== modalidadDetectada) {
+    console.warn(`[OCR] ${archivo.name}: modalidad OCR=${modalidadDetectada}, modalidad archivo=${modalidadArchivo}. Se prioriza archivo.`);
+  }
+
+  const modalidadFinal = modalidadArchivo || modalidadDetectada || cpstModalidadSorteo || 'M';
+
+  if (modalidadFinal && cpstModalidadSorteo && modalidadFinal !== cpstModalidadSorteo) {
+    notificarExtractoDescartadoPorModalidad(archivo.name, modalidadFinal, cpstModalidadSorteo, 'Imagen');
     return;
   }
 
   const fecha = data.fecha || cpResultadosActuales?.sorteo?.fecha || new Date().toISOString().split('T')[0];
-  const modalidad = modalidadDetectada || cpstModalidadSorteo || 'M';
-  const esEntreRios = String(data.provincia || '') === '59';
+  const modalidad = modalidadFinal;
+  const esEntreRios = String(codigoProvinciaFinal || '') === '59';
   const numerosNormalizados = esEntreRios ? intercambiarMitadesOrden20(data.numeros || []) : (data.numeros || []);
 
   if (esEntreRios && Array.isArray(data.numeros) && data.numeros.length >= 20) {
@@ -6091,7 +6100,7 @@ async function procesarArchivoImagenInteligente(archivo) {
   if (provinciaIdx !== null && provinciaIdx !== undefined && numerosNormalizados && numerosNormalizados.length > 0) {
     try {
       const response = await extractosAPI.guardar({
-        provincia: data.provincia,
+        provincia: codigoProvinciaFinal,
         modalidad: modalidad,
         fecha: fecha,
         sorteo: cpstNumeroSorteo || cpResultadosActuales?.sorteo?.numero || null,
@@ -6137,13 +6146,14 @@ async function procesarArchivoImagenInteligente(archivo) {
       }
     }
   } else {
-    throw new Error(`No se pudo detectar provincia de la imagen (detectada: ${data.provincia})`);
+    throw new Error(`No se pudo detectar provincia de la imagen (detectada OCR: ${data.provincia || '-'}, archivo: ${infoArchivo?.codigoProvincia || '-'})`);
   }
 }
 
 // Procesar PDF con OCR
 async function procesarArchivoPDFInteligente(archivo) {
   let data = null;
+  const infoArchivo = parsearNombreArchivoXML(archivo.name || '');
 
   // Intento principal: OCR con proveedores API
   if (window.OCRExtractos && OCRExtractos.hasApiKey()) {
@@ -6169,19 +6179,27 @@ async function procesarArchivoPDFInteligente(archivo) {
     '51': 0, '53': 1, '55': 2, '72': 3, '00': 4, '64': 5, '59': 6
   };
 
-  const provinciaIdx = data.provincia ? codigoToIndex[data.provincia] : null;
+  const codigoProvinciaFinal = infoArchivo?.codigoProvincia || data.provincia;
+  const provinciaIdx = codigoProvinciaFinal ? codigoToIndex[codigoProvinciaFinal] : null;
   const provinciaNombres = ['CABA', 'Buenos Aires', 'Córdoba', 'Santa Fe', 'Montevideo', 'Mendoza', 'Entre Ríos'];
 
   const modalidadDetectada = normalizarModalidadASigla(data.modalidad);
+  const modalidadArchivo = infoArchivo?.modalidad || null;
 
-  if (modalidadDetectada && cpstModalidadSorteo && modalidadDetectada !== cpstModalidadSorteo) {
-    notificarExtractoDescartadoPorModalidad(archivo.name, modalidadDetectada, cpstModalidadSorteo, 'PDF');
+  if (modalidadArchivo && modalidadDetectada && modalidadArchivo !== modalidadDetectada) {
+    console.warn(`[OCR] ${archivo.name}: modalidad OCR=${modalidadDetectada}, modalidad archivo=${modalidadArchivo}. Se prioriza archivo.`);
+  }
+
+  const modalidadFinal = modalidadArchivo || modalidadDetectada || cpstModalidadSorteo || 'M';
+
+  if (modalidadFinal && cpstModalidadSorteo && modalidadFinal !== cpstModalidadSorteo) {
+    notificarExtractoDescartadoPorModalidad(archivo.name, modalidadFinal, cpstModalidadSorteo, 'PDF');
     return;
   }
 
   const fecha = data.fecha || cpResultadosActuales?.sorteo?.fecha || new Date().toISOString().split('T')[0];
-  const modalidad = modalidadDetectada || cpstModalidadSorteo || 'M';
-  const esEntreRios = String(data.provincia || '') === '59';
+  const modalidad = modalidadFinal;
+  const esEntreRios = String(codigoProvinciaFinal || '') === '59';
   const numerosNormalizados = esEntreRios ? intercambiarMitadesOrden20(data.numeros || []) : (data.numeros || []);
 
   if (esEntreRios && Array.isArray(data.numeros) && data.numeros.length >= 20) {
@@ -6191,7 +6209,7 @@ async function procesarArchivoPDFInteligente(archivo) {
   if (provinciaIdx !== null && provinciaIdx !== undefined && numerosNormalizados && numerosNormalizados.length > 0) {
     try {
       const response = await extractosAPI.guardar({
-        provincia: data.provincia,
+        provincia: codigoProvinciaFinal,
         modalidad: modalidad,
         fecha: fecha,
         sorteo: cpstNumeroSorteo || cpResultadosActuales?.sorteo?.numero || null,
@@ -6238,7 +6256,7 @@ async function procesarArchivoPDFInteligente(archivo) {
       }
     }
   } else {
-    throw new Error(`No se pudo detectar provincia del PDF (detectada: ${data.provincia})`);
+    throw new Error(`No se pudo detectar provincia del PDF (detectada OCR: ${data.provincia || '-'}, archivo: ${infoArchivo?.codigoProvincia || '-'})`);
   }
 }
 
@@ -6269,7 +6287,7 @@ async function extraerDatosQuinielaFallback(archivo, esPDF = false) {
     throw new Error('OCR alternativo no pudo extraer números del archivo');
   }
 
-  // Provincia fallback: usar la seleccionada en UI
+  // Provincia fallback: priorizar nombre de archivo (QNLxx...), luego selección UI
   const provinciaSelect = document.getElementById('cpst-extracto-provincia');
   const indexToCodigoProvincia = {
     0: '51',
@@ -6281,15 +6299,17 @@ async function extraerDatosQuinielaFallback(archivo, esPDF = false) {
     6: '59'
   };
 
-  let provincia = '51';
-  if (provinciaSelect) {
+  let provincia = parsearNombreArchivoXML(archivo?.name || '')?.codigoProvincia || '51';
+  if (provinciaSelect && !parsearNombreArchivoXML(archivo?.name || '')?.codigoProvincia) {
     const idx = parseInt(provinciaSelect.value || '0');
     provincia = indexToCodigoProvincia[idx] || '51';
   }
 
+  const modalidadArchivo = parsearNombreArchivoXML(archivo?.name || '')?.modalidad || '';
+
   return {
     provincia,
-    modalidad: cpstModalidadSorteo || '',
+    modalidad: modalidadArchivo || cpstModalidadSorteo || '',
     fecha: cpResultadosActuales?.sorteo?.fecha || cpResultadosActuales?.fecha || new Date().toISOString().split('T')[0],
     numeros,
     letras
