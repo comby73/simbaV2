@@ -3974,13 +3974,13 @@ async function verificarExtractosExistentes() {
     // Limpiar extractos locales y cargar los de la BD (deduplicando por provincia)
     cpstExtractos = [];
 
-    // Mapeo de códigos de provincia
+    // Mapeo de códigos de provincia — orden igual al select HTML y tablas
     const provinciasMap = {
-      '51': 0, '53': 1, '55': 2, '59': 3, '64': 4, '72': 5, '00': 6
+      '51': 0, '53': 1, '55': 2, '72': 3, '00': 4, '64': 5, '59': 6
     };
     const nombresProvincias = {
       '51': 'CABA', '53': 'Buenos Aires', '55': 'Córdoba',
-      '59': 'Entre Ríos', '64': 'Mendoza', '72': 'Santa Fe', '00': 'Montevideo'
+      '72': 'Santa Fe', '00': 'Montevideo', '64': 'Mendoza', '59': 'Entre Ríos'
     };
 
     const porProvincia = new Map();
@@ -5333,15 +5333,15 @@ function seleccionarProvinciaAutomatica(codigoProvincia) {
   const provinciaSelect = document.getElementById('cpst-extracto-provincia');
   if (!provinciaSelect) return;
 
-  // Mapeo de códigos a índices del select
+  // Mapeo de códigos a índices del select — orden igual al select HTML: CABA=0,BsAs=1,Cba=2,SFe=3,URU=4,Mza=5,ERios=6
   const codigoToIndex = {
     '51': 0, 'CABA': 0, 'CIUDAD': 0,
     '53': 1, 'BUENOS AIRES': 1, 'PBA': 1, 'PROVINCIA': 1,
     '55': 2, 'CORDOBA': 2, 'CÓRDOBA': 2,
-    '59': 3, 'ENTRE RIOS': 3, 'ENTRE RÍOS': 3,
-    '64': 4, 'MENDOZA': 4,
-    '72': 5, 'SANTA FE': 5,
-    '00': 6, 'MONTEVIDEO': 6, 'URUGUAY': 6
+    '72': 3, 'SANTA FE': 3,
+    '00': 4, 'MONTEVIDEO': 4, 'URUGUAY': 4,
+    '64': 5, 'MENDOZA': 5,
+    '59': 6, 'ENTRE RIOS': 6, 'ENTRE RÍOS': 6
   };
 
   const codigo = String(codigoProvincia).toUpperCase();
@@ -5663,15 +5663,15 @@ async function agregarExtracto() {
   const provinciaIdx = parseInt(provinciaSelect.value);
   const provinciaNombre = provinciaSelect.options[provinciaSelect.selectedIndex].text;
 
-  // Mapeo de índice a código de provincia
+  // Mapeo de índice a código de provincia — orden igual al select HTML y tablas
   const indexToCodigoProvincia = {
     0: '51', // CABA
     1: '53', // Buenos Aires
     2: '55', // Córdoba
-    3: '59', // Entre Ríos
-    4: '64', // Mendoza
-    5: '72', // Santa Fe
-    6: '00'  // Montevideo
+    3: '72', // Santa Fe
+    4: '00', // Montevideo
+    5: '64', // Mendoza
+    6: '59'  // Entre Ríos
   };
 
   // Recoger números
