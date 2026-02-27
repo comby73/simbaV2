@@ -56,14 +56,21 @@ async function resolverProvinciaId(conn, provincia) {
 
   const provinciaRaw = String(provincia).trim();
   const provinciaSinCeros = provinciaRaw.replace(/^0+/, '') || '0';
-  const provinciaNombre = PROVINCIAS[provinciaRaw] || PROVINCIAS[provinciaSinCeros] || provinciaRaw;
+  const provinciaInfo = PROVINCIAS[provinciaRaw] || PROVINCIAS[provinciaSinCeros] || null;
+  const provinciaNombre = typeof provinciaInfo === 'object'
+    ? (provinciaInfo.nombre || provinciaRaw)
+    : (provinciaInfo || provinciaRaw);
 
   const [rows] = await conn.query(
     `SELECT id
      FROM provincias
-     WHERE codigo = ? OR codigo_luba = ? OR codigo_luba = ? OR UPPER(nombre) = UPPER(?)
+     WHERE codigo = ?
+        OR codigo_luba = ?
+        OR codigo_luba = ?
+        OR UPPER(nombre) = UPPER(?)
+        OR UPPER(nombre) = UPPER(?)
      ORDER BY id LIMIT 1`,
-    [provinciaRaw, provinciaRaw, provinciaSinCeros, provinciaNombre]
+    [provinciaRaw, provinciaRaw, provinciaSinCeros, provinciaNombre, provinciaRaw]
   );
 
   return rows.length > 0 ? rows[0].id : null;
