@@ -3971,7 +3971,7 @@ async function verificarExtractosExistentes() {
   const extractosExistentes = await cargarExtractosExistentesBD(fecha, modalidad);
 
   if (extractosExistentes.length > 0) {
-    // Limpiar extractos locales y cargar los de la BD
+    // Limpiar extractos locales y cargar los de la BD (deduplicando por provincia)
     cpstExtractos = [];
 
     // Mapeo de códigos de provincia
@@ -3983,22 +3983,32 @@ async function verificarExtractosExistentes() {
       '59': 'Entre Ríos', '64': 'Mendoza', '72': 'Santa Fe', '00': 'Montevideo'
     };
 
+    const porProvincia = new Map();
+
     for (const ext of extractosExistentes) {
       const codigoProv = ext.provincia_codigo || '51';
       const idx = provinciasMap[codigoProv] ?? 0;
 
-      cpstExtractos.push({
+      const nuevo = {
         index: idx,
         nombre: ext.provincia_nombre || nombresProvincias[codigoProv] || 'Desconocida',
         numeros: ext.numeros || [],
         letras: ext.letras || [],
         fromDB: true,
         dbId: ext.id
-      });
+      };
+
+      const actual = porProvincia.get(idx);
+      if (!actual || (Number(nuevo.dbId) || 0) > (Number(actual.dbId) || 0)) {
+        porProvincia.set(idx, nuevo);
+      }
     }
 
+    cpstExtractos = Array.from(porProvincia.values()).sort((a, b) => a.index - b.index);
+
     renderExtractosList();
-    showToast(`Se cargaron ${extractosExistentes.length} extractos existentes de la base de datos`, 'success');
+    const duplicados = extractosExistentes.length - cpstExtractos.length;
+    showToast(`Se cargaron ${cpstExtractos.length} extractos existentes de la base de datos${duplicados > 0 ? ` (${duplicados} duplicados depurados)` : ''}`, 'success');
   }
 }
 
@@ -4686,6 +4696,58 @@ function detectarProvinciaCodigoDesdeTextoOCR(texto) {
   if (/MONTEVIDEO|URUGUAY|\bURU\b/.test(txt)) return '00';
 
   return '';
+}
+
+function detectarModalidadCodigoDesdeNombreArchivo(filename) {
+  if (!filename) return '';
+
+  const infoQnl = parsearNombreArchivoXML(filename);
+  if (infoQnl?.modalidad) return infoQnl.modalidad;
+
+  const nombre = String(filename).toUpperCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '');
+
+  if (/PREVIA|\bPREV\b/.test(nombre)) return 'R';
+  if (/PRIMERA|\bPRIM\b/.test(nombre)) return 'P';
+  if (/MATUTINA|MATUTINO|\bMAT\b/.test(nombre)) return 'M';
+  if (/VESPERTINA|VESPERTINO|\bVESP\b/.test(nombre)) return 'V';
+  if (/NOCTURNA|NOCTURNO|\bNOCT\b/.test(nombre)) return 'N';
+
+  return '';
+}
+
+function detectarFechaDesdeNombreArchivo(filename) {
+  if (!filename) return '';
+  const nombre = String(filename).toUpperCase();
+
+  const isoCompact = nombre.match(/(20\d{2}[01]\d[0-3]\d)/);
+  if (isoCompact) return normalizarFechaSorteo(isoCompact[1]);
+
+  const dmyCompact = nombre.match(/([0-3]\d[01]\d20\d{2})/);
+  if (dmyCompact) {
+    const v = dmyCompact[1];
+    return `${v.slice(4, 8)}-${v.slice(2, 4)}-${v.slice(0, 2)}`;
+  }
+
+  const dmySep = nombre.match(/([0-3]?\d)[\/_\-.]([01]?\d)[\/_\-.](20\d{2})/);
+  if (dmySep) {
+    const dd = dmySep[1].padStart(2, '0');
+    const mm = dmySep[2].padStart(2, '0');
+    const yyyy = dmySep[3];
+    return `${yyyy}-${mm}-${dd}`;
+  }
+
+  return '';
+}
+
+function obtenerMetadataArchivoExtracto(filename) {
+  const infoQnl = parsearNombreArchivoXML(filename || '');
+  return {
+    codigoProvincia: infoQnl?.codigoProvincia || detectarProvinciaCodigoDesdeNombreArchivo(filename || ''),
+    modalidad: infoQnl?.modalidad || detectarModalidadCodigoDesdeNombreArchivo(filename || ''),
+    fecha: infoQnl?.fecha ? normalizarFechaSorteo(infoQnl.fecha) : detectarFechaDesdeNombreArchivo(filename || '')
+  };
 }
 
 // Cargar desde archivo(s) XML - soporta múltiples archivos con filtrado por modalidad
@@ -6081,7 +6143,24 @@ async function procesarArchivoXMLInteligente(archivo) {
 // Procesar imagen con OCR inteligente
 async function procesarArchivoImagenInteligente(archivo) {
   let data = null;
-  const infoArchivo = parsearNombreArchivoXML(archivo.name || '');
+  const metadataArchivo = obtenerMetadataArchivoExtracto(archivo.name || '');
+
+  const metaSorteoActual = resolverMetaSorteo(cpResultadosActuales || {}, {
+    datosControlPrevio: cpstDatosControlPrevio
+  });
+  const fechaSorteoActual = normalizarFechaSorteo(metaSorteoActual.fecha || cpstDatosControlPrevio?.fechaSorteo || cpResultadosActuales?.sorteo?.fecha || cpResultadosActuales?.fecha || '');
+
+  if (metadataArchivo.modalidad && cpstModalidadSorteo && metadataArchivo.modalidad !== cpstModalidadSorteo) {
+    notificarExtractoDescartadoPorModalidad(archivo.name, metadataArchivo.modalidad, cpstModalidadSorteo, 'Imagen');
+    return;
+  }
+
+  if (metadataArchivo.fecha && fechaSorteoActual && metadataArchivo.fecha !== fechaSorteoActual) {
+    const mensaje = `Imagen ${archivo.name} descartada: fecha archivo ${metadataArchivo.fecha}, sorteo actual ${fechaSorteoActual}`;
+    console.warn(`[CPST] ${mensaje}`);
+    showToast(mensaje, 'warning');
+    return;
+  }
 
   // Intento principal: OCR con proveedores API
   if (window.OCRExtractos && OCRExtractos.hasApiKey()) {
@@ -6108,13 +6187,13 @@ async function procesarArchivoImagenInteligente(archivo) {
     '51': 0, '53': 1, '55': 2, '72': 3, '00': 4, '64': 5, '59': 6
   };
 
-  const codigoProvinciaFinal = infoArchivo?.codigoProvincia || data.provincia;
+  const codigoProvinciaFinal = metadataArchivo.codigoProvincia || data.provincia;
   const provinciaIdx = codigoProvinciaFinal ? codigoToIndex[codigoProvinciaFinal] : null;
   const provinciaNombres = ['CABA', 'Buenos Aires', 'Córdoba', 'Santa Fe', 'Montevideo', 'Mendoza', 'Entre Ríos'];
 
   // Verificar modalidad
   const modalidadDetectada = normalizarModalidadASigla(data.modalidad);
-  const modalidadArchivo = infoArchivo?.modalidad || null;
+  const modalidadArchivo = metadataArchivo.modalidad || null;
 
   if (modalidadArchivo && modalidadDetectada && modalidadArchivo !== modalidadDetectada) {
     console.warn(`[OCR] ${archivo.name}: modalidad OCR=${modalidadDetectada}, modalidad archivo=${modalidadArchivo}. Se prioriza archivo.`);
@@ -6127,7 +6206,7 @@ async function procesarArchivoImagenInteligente(archivo) {
     return;
   }
 
-  const fecha = data.fecha || cpResultadosActuales?.sorteo?.fecha || new Date().toISOString().split('T')[0];
+  const fecha = metadataArchivo.fecha || data.fecha || fechaSorteoActual || new Date().toISOString().split('T')[0];
   const modalidad = modalidadFinal;
   const esEntreRios = String(codigoProvinciaFinal || '') === '59';
   const numerosNormalizados = esEntreRios ? intercambiarMitadesOrden20(data.numeros || []) : (data.numeros || []);
@@ -6185,14 +6264,31 @@ async function procesarArchivoImagenInteligente(archivo) {
       }
     }
   } else {
-    throw new Error(`No se pudo detectar provincia de la imagen (detectada OCR: ${data.provincia || '-'}, archivo: ${infoArchivo?.codigoProvincia || '-'})`);
+    throw new Error(`No se pudo detectar provincia de la imagen (detectada OCR: ${data.provincia || '-'}, archivo: ${metadataArchivo.codigoProvincia || '-'})`);
   }
 }
 
 // Procesar PDF con OCR
 async function procesarArchivoPDFInteligente(archivo) {
   let data = null;
-  const infoArchivo = parsearNombreArchivoXML(archivo.name || '');
+  const metadataArchivo = obtenerMetadataArchivoExtracto(archivo.name || '');
+
+  const metaSorteoActual = resolverMetaSorteo(cpResultadosActuales || {}, {
+    datosControlPrevio: cpstDatosControlPrevio
+  });
+  const fechaSorteoActual = normalizarFechaSorteo(metaSorteoActual.fecha || cpstDatosControlPrevio?.fechaSorteo || cpResultadosActuales?.sorteo?.fecha || cpResultadosActuales?.fecha || '');
+
+  if (metadataArchivo.modalidad && cpstModalidadSorteo && metadataArchivo.modalidad !== cpstModalidadSorteo) {
+    notificarExtractoDescartadoPorModalidad(archivo.name, metadataArchivo.modalidad, cpstModalidadSorteo, 'PDF');
+    return;
+  }
+
+  if (metadataArchivo.fecha && fechaSorteoActual && metadataArchivo.fecha !== fechaSorteoActual) {
+    const mensaje = `PDF ${archivo.name} descartado: fecha archivo ${metadataArchivo.fecha}, sorteo actual ${fechaSorteoActual}`;
+    console.warn(`[CPST] ${mensaje}`);
+    showToast(mensaje, 'warning');
+    return;
+  }
 
   // Intento principal: OCR con proveedores API
   if (window.OCRExtractos && OCRExtractos.hasApiKey()) {
@@ -6218,12 +6314,12 @@ async function procesarArchivoPDFInteligente(archivo) {
     '51': 0, '53': 1, '55': 2, '72': 3, '00': 4, '64': 5, '59': 6
   };
 
-  const codigoProvinciaFinal = infoArchivo?.codigoProvincia || data.provincia;
+  const codigoProvinciaFinal = metadataArchivo.codigoProvincia || data.provincia;
   const provinciaIdx = codigoProvinciaFinal ? codigoToIndex[codigoProvinciaFinal] : null;
   const provinciaNombres = ['CABA', 'Buenos Aires', 'Córdoba', 'Santa Fe', 'Montevideo', 'Mendoza', 'Entre Ríos'];
 
   const modalidadDetectada = normalizarModalidadASigla(data.modalidad);
-  const modalidadArchivo = infoArchivo?.modalidad || null;
+  const modalidadArchivo = metadataArchivo.modalidad || null;
 
   if (modalidadArchivo && modalidadDetectada && modalidadArchivo !== modalidadDetectada) {
     console.warn(`[OCR] ${archivo.name}: modalidad OCR=${modalidadDetectada}, modalidad archivo=${modalidadArchivo}. Se prioriza archivo.`);
@@ -6236,7 +6332,7 @@ async function procesarArchivoPDFInteligente(archivo) {
     return;
   }
 
-  const fecha = data.fecha || cpResultadosActuales?.sorteo?.fecha || new Date().toISOString().split('T')[0];
+  const fecha = metadataArchivo.fecha || data.fecha || fechaSorteoActual || new Date().toISOString().split('T')[0];
   const modalidad = modalidadFinal;
   const esEntreRios = String(codigoProvinciaFinal || '') === '59';
   const numerosNormalizados = esEntreRios ? intercambiarMitadesOrden20(data.numeros || []) : (data.numeros || []);
@@ -6295,7 +6391,7 @@ async function procesarArchivoPDFInteligente(archivo) {
       }
     }
   } else {
-    throw new Error(`No se pudo detectar provincia del PDF (detectada OCR: ${data.provincia || '-'}, archivo: ${infoArchivo?.codigoProvincia || '-'})`);
+    throw new Error(`No se pudo detectar provincia del PDF (detectada OCR: ${data.provincia || '-'}, archivo: ${metadataArchivo.codigoProvincia || '-'})`);
   }
 }
 
@@ -6338,7 +6434,8 @@ async function extraerDatosQuinielaFallback(archivo, esPDF = false, usarProvinci
     6: '59'
   };
 
-  const provinciaDesdeNombre = detectarProvinciaCodigoDesdeNombreArchivo(archivo?.name || '');
+  const metadataArchivo = obtenerMetadataArchivoExtracto(archivo?.name || '');
+  const provinciaDesdeNombre = metadataArchivo.codigoProvincia;
   const provinciaDesdeTexto = detectarProvinciaCodigoDesdeTextoOCR(texto);
   let provincia = provinciaDesdeNombre || provinciaDesdeTexto || '';
 
@@ -6347,12 +6444,13 @@ async function extraerDatosQuinielaFallback(archivo, esPDF = false, usarProvinci
     provincia = indexToCodigoProvincia[idx] || '';
   }
 
-  const modalidadArchivo = parsearNombreArchivoXML(archivo?.name || '')?.modalidad || '';
+  const modalidadArchivo = metadataArchivo.modalidad || '';
+  const fechaArchivo = metadataArchivo.fecha || '';
 
   return {
     provincia,
     modalidad: modalidadArchivo || cpstModalidadSorteo || '',
-    fecha: cpResultadosActuales?.sorteo?.fecha || cpResultadosActuales?.fecha || new Date().toISOString().split('T')[0],
+    fecha: fechaArchivo || cpResultadosActuales?.sorteo?.fecha || cpResultadosActuales?.fecha || new Date().toISOString().split('T')[0],
     numeros,
     letras
   };
