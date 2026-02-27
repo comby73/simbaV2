@@ -22,6 +22,10 @@ const OCRExtractos = {
   PROVIDERS: [],
   CURRENT_PROVIDER: null,
 
+  // Proxy servidor disponible (fallback cuando no hay API keys en browser)
+  // null = verificando, true = disponible, false = no disponible
+  _servidorOCRDisponible: null,
+
   // Inicializar con config global o localStorage
   init() {
     // 1. Cargar proveedores desde config.js
@@ -86,6 +90,66 @@ const OCRExtractos = {
       .map(p => `${p.name}${p.API_KEY ? '✓' : '✗'}`)
       .join(' → ');
     console.log('[OCR] Proveedores habilitados:', resumen || 'ninguno');
+
+    // Si no hay proveedores con key, verificar si el servidor puede hacer OCR
+    // (servidor usa GROQ_API_KEY del .env de Hostinger — fix para producción sin config.local.js)
+    if (this.getAvailableProviders().length === 0) {
+      this._verificarOCRServidor();
+    }
+  },
+
+  // Verifica si el servidor tiene GROQ_API_KEY configurada (no bloquea init)
+  async _verificarOCRServidor() {
+    try {
+      const token = localStorage.getItem('token');
+      if (!token) return;
+      const resp = await fetch('/api/ocr/estado', {
+        headers: { 'Authorization': 'Bearer ' + token }
+      });
+      if (resp.ok) {
+        const data = await resp.json();
+        this._servidorOCRDisponible = data.disponible === true;
+        if (this._servidorOCRDisponible) {
+          console.log('[OCR] ✓ Servidor con OCR disponible (proxy Groq)');
+        } else {
+          console.warn('[OCR] ✗ Servidor sin OCR configurado');
+        }
+      }
+    } catch (e) {
+      this._servidorOCRDisponible = false;
+    }
+  },
+
+  // Llamar al OCR via proxy del servidor (usa GROQ_API_KEY del .env)
+  async llamarAPIServidor(imageBase64, mimeType, prompt) {
+    const token = localStorage.getItem('token');
+    if (!token) throw new Error('No hay sesión activa para usar OCR del servidor');
+
+    // Limpiar base64
+    let cleanBase64 = imageBase64.replace(/[\r\n\s]/g, '');
+    if (cleanBase64.includes(',')) cleanBase64 = cleanBase64.split(',')[1] || cleanBase64;
+
+    const response = await fetch('/api/ocr/procesar-imagen', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': 'Bearer ' + token
+      },
+      body: JSON.stringify({ imageBase64: cleanBase64, mimeType, prompt })
+    });
+
+    if (!response.ok) {
+      const err = await response.json().catch(() => ({}));
+      throw new Error(err.error || `Error servidor OCR: ${response.status}`);
+    }
+
+    const data = await response.json();
+    if (!data.success || !data.content) throw new Error(data.error || 'Respuesta vacía del servidor OCR');
+
+    console.log('[OCR] ✓ Servidor respondió correctamente');
+    this.CURRENT_PROVIDER = 'SERVIDOR';
+    this.emitirCambioProveedor();
+    return this.procesarRespuesta(data.content);
   },
 
   getAvailableProviders() {
@@ -159,9 +223,13 @@ const OCRExtractos = {
     return null;
   },
 
-  // Verificar si hay API key configurada
+  // Verificar si hay API key configurada (browser, localStorage O servidor)
   hasApiKey() {
-    return this.getAvailableProviders().length > 0 || !!(this.CONFIG.API_KEY && this.CONFIG.API_KEY.trim());
+    if (this.getAvailableProviders().length > 0) return true;   // providers con key
+    if (this.CONFIG.API_KEY && this.CONFIG.API_KEY.trim()) return true; // legacy key
+    if (this._servidorOCRDisponible === true) return true;   // servidor confirmado
+    if (this._servidorOCRDisponible === null) return true;   // aún verificando → optimista
+    return false;  // servidor confirmó que no hay OCR disponible
   },
 
   /**
@@ -209,7 +277,13 @@ Responde SOLO con este JSON (INCLUIR SIEMPRE EL CAMPO "letras"):
     const availableProviders = this.getAvailableProviders();
 
     if (availableProviders.length === 0 && !this.CONFIG.API_KEY) {
-      throw new Error('No hay API keys configuradas. Configurá al menos una clave en config.js');
+      // Sin providers en browser → intentar proxy del servidor directamente
+      try {
+        console.log('[OCR] Sin providers en browser, intentando proxy servidor...');
+        return await this.llamarAPIServidor(imageBase64, mimeType, prompt);
+      } catch (serverErr) {
+        throw new Error('No hay API keys configuradas y el servidor no tiene OCR. ' + serverErr.message);
+      }
     }
 
     // Limpiar base64 (remover saltos de línea, espacios, y prefijo si ya existe)
@@ -252,6 +326,14 @@ Responde SOLO con este JSON (INCLUIR SIEMPRE EL CAMPO "letras"):
         lastError = error;
         // Continuar con el siguiente proveedor
       }
+    }
+
+    // Si todos los proveedores del browser fallaron → intentar proxy servidor como último recurso
+    try {
+      console.log('[OCR] Todos los providers fallaron, intentando proxy servidor...');
+      return await this.llamarAPIServidor(imageBase64, mimeType, prompt);
+    } catch (serverErr) {
+      console.warn('[OCR] Proxy servidor también falló:', serverErr.message);
     }
 
     // Si todos los proveedores fallaron
