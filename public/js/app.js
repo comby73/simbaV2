@@ -3984,15 +3984,29 @@ async function verificarExtractosExistentes() {
     };
 
     const porProvincia = new Map();
+    let descartados = 0;
 
     for (const ext of extractosExistentes) {
       const codigoProv = ext.provincia_codigo || '51';
       const idx = provinciasMap[codigoProv] ?? 0;
+      const numeros = ext.numeros || [];
+
+      // Validar datos: descartar si más de 3 de los primeros 10 números parecen años (2020-2040)
+      const numerosCorruptos = numeros.slice(0, 10).filter(n => {
+        const v = parseInt(String(n || '').replace(/\D/g, ''), 10);
+        return v >= 2020 && v <= 2040;
+      }).length;
+
+      if (numerosCorruptos > 3) {
+        console.warn(`[CPST] BD: descartando extracto ${codigoProv} id=${ext.id} por datos corruptos (${numerosCorruptos} años en primeros 10 números: ${numeros.slice(0,5).join(',')})`);
+        descartados++;
+        continue;
+      }
 
       const nuevo = {
         index: idx,
         nombre: ext.provincia_nombre || nombresProvincias[codigoProv] || 'Desconocida',
-        numeros: ext.numeros || [],
+        numeros,
         letras: ext.letras || [],
         fromDB: true,
         dbId: ext.id
@@ -4007,9 +4021,44 @@ async function verificarExtractosExistentes() {
     cpstExtractos = Array.from(porProvincia.values()).sort((a, b) => a.index - b.index);
 
     renderExtractosList();
-    const duplicados = extractosExistentes.length - cpstExtractos.length;
-    showToast(`Se cargaron ${cpstExtractos.length} extractos existentes de la base de datos${duplicados > 0 ? ` (${duplicados} duplicados depurados)` : ''}`, 'success');
+    const duplicados = extractosExistentes.length - cpstExtractos.length - descartados;
+    const msgPartes = [`Se cargaron ${cpstExtractos.length} extractos de BD`];
+    if (descartados > 0) msgPartes.push(`${descartados} descartados por datos corruptos`);
+    if (duplicados > 0) msgPartes.push(`${duplicados} duplicados depurados`);
+    showToast(msgPartes.join(' — '), descartados > 0 ? 'warning' : 'success');
   }
+}
+
+async function limpiarExtractosBD() {
+  const desdeDB = (cpstExtractos || []).filter(e => e.fromDB && e.dbId);
+  if (desdeDB.length === 0) {
+    showToast('No hay extractos de BD para eliminar.', 'info');
+    return;
+  }
+  if (!confirm(`¿Eliminar ${desdeDB.length} extracto(s) de la BD para este sorteo? Esta acción no se puede deshacer.`)) return;
+
+  let eliminados = 0;
+  let errores = 0;
+  for (const ext of desdeDB) {
+    try {
+      await extractosAPI.eliminar(ext.dbId);
+      eliminados++;
+    } catch (e) {
+      console.warn(`Error eliminando extracto BD id=${ext.dbId}:`, e);
+      errores++;
+    }
+  }
+
+  // Remover de la lista local los que vinieron de BD
+  cpstExtractos = (cpstExtractos || []).filter(e => !e.fromDB);
+
+  if (eliminados > 0) {
+    showToast(`${eliminados} extracto(s) eliminado(s) de BD${errores > 0 ? ` (${errores} errores)` : ''}.`, errores > 0 ? 'warning' : 'success');
+  } else {
+    showToast(`No se pudo eliminar ningún extracto (${errores} errores).`, 'danger');
+  }
+
+  renderExtractosListInteligente();
 }
 
 function cargarDatosControlPrevio() {
@@ -5404,12 +5453,17 @@ function extraerNumerosDeTexto(texto, opciones = {}) {
     if (ordenados.length >= 18) return ordenados.slice(0, 20);
   }
 
-  // PRIORIDAD 3: fallback simple (primeros 20 grupos numéricos)
+  // PRIORIDAD 3: fallback simple — usa txtFiltrado para evitar capturar años/fechas/horas
   const numeros = [];
-  const matches = txt.match(/\b\d{3,5}\b/g) || [];
-  for (let i = 0; i < Math.min(20, matches.length); i++) {
-    const numero = normalizarNumero(matches[i]);
-    if (numero) numeros.push(numero);
+  const matches = txtFiltrado.match(/\b\d{3,5}\b/g) || [];
+  for (const m of matches) {
+    if (numeros.length >= 20) break;
+    const numero = normalizarNumero(m);
+    if (!numero) continue;
+    // Descartar años (2020-2040) que lleguen hasta acá
+    const numInt = parseInt(numero, 10);
+    if (numInt >= 2020 && numInt <= 2040) continue;
+    numeros.push(numero);
   }
 
   return numeros;
@@ -6688,7 +6742,19 @@ function renderExtractosListInteligente() {
     return;
   }
 
+  const tieneDesdeDB = cpstExtractos.some(e => e.fromDB);
   let html = '';
+
+  // Barra superior con acciones globales
+  if (tieneDesdeDB) {
+    html += `
+      <div style="display:flex; justify-content:flex-end; margin-bottom:0.5rem; gap:0.5rem;">
+        <button class="btn btn-sm btn-danger" onclick="limpiarExtractosBD()" title="Eliminar todos los extractos de BD para este sorteo">
+          <i class="fas fa-database"></i> Limpiar BD
+        </button>
+      </div>
+    `;
+  }
 
   // Ordenar por nombre de provincia
   const extractosOrdenados = [...cpstExtractos].sort((a, b) => a.nombre.localeCompare(b.nombre));

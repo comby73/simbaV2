@@ -320,6 +320,9 @@ const extractosAPI = {
   guardarBulk: (extractos) => apiRequest('/extractos/bulk', {
     method: 'POST',
     body: JSON.stringify({ extractos })
+  }),
+  eliminar: (id) => apiRequest(`/extractos/${id}`, {
+    method: 'DELETE'
   })
 };
 
