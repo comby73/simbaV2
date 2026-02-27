@@ -5299,16 +5299,69 @@ function loadScript(src) {
 
 // Extraer números de 4 dígitos del texto OCR
 function extraerNumerosDeTexto(texto) {
-  const numeros = [];
-  // Buscar patrones de números de 4 dígitos
-  const matches = texto.match(/\b\d{4}\b/g) || [];
+  const txt = String(texto || '')
+    .replace(/\r/g, '\n')
+    .replace(/\t/g, ' ');
 
-  // Tomar los primeros 20
+  // PRIORIDAD 1: detectar patrón posicional (1..20 + número de 4 dígitos)
+  const porPosicion = new Map();
+  const regexPos = /\b(0?[1-9]|1\d|20)\s*[-:.)]?\s*(\d{4})\b/g;
+  let matchPos;
+  while ((matchPos = regexPos.exec(txt)) !== null) {
+    const pos = parseInt(matchPos[1], 10);
+    const numero = matchPos[2];
+    if (pos >= 1 && pos <= 20 && !porPosicion.has(pos)) {
+      porPosicion.set(pos, numero);
+    }
+  }
+
+  if (porPosicion.size >= 18) {
+    const ordenados = [];
+    for (let i = 1; i <= 20; i++) {
+      if (porPosicion.has(i)) ordenados.push(porPosicion.get(i));
+    }
+    if (ordenados.length >= 18) return ordenados.slice(0, 20);
+  }
+
+  // PRIORIDAD 2: fallback simple (primeros 20 grupos de 4 dígitos)
+  const numeros = [];
+  const matches = txt.match(/\b\d{4}\b/g) || [];
   for (let i = 0; i < Math.min(20, matches.length); i++) {
     numeros.push(matches[i]);
   }
 
   return numeros;
+}
+
+async function extraerDatosDesdePdfTexto(archivo) {
+  if (!window.pdfjsLib) {
+    await loadScript('https://cdn.jsdelivr.net/npm/pdfjs-dist@3/build/pdf.min.js');
+    pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdn.jsdelivr.net/npm/pdfjs-dist@3/build/pdf.worker.min.js';
+  }
+
+  const arrayBuffer = await archivo.arrayBuffer();
+  const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+
+  let texto = '';
+  const paginas = Math.min(pdf.numPages, 2);
+  for (let i = 1; i <= paginas; i++) {
+    const page = await pdf.getPage(i);
+    const textContent = await page.getTextContent();
+    const pageText = textContent.items.map(item => item.str).join(' ');
+    texto += `${pageText}\n`;
+  }
+
+  const numeros = extraerNumerosDeTexto(texto);
+  const letras = extraerLetrasDeTexto(texto);
+
+  return {
+    provincia: detectarProvinciaCodigoDesdeTextoOCR(texto) || '',
+    modalidad: detectarModalidadDeTexto(texto) || '',
+    fecha: detectarFechaDesdeNombreArchivo(archivo?.name || ''),
+    numeros,
+    letras,
+    fuente: 'PDF-TEXT'
+  };
 }
 
 // Extraer letras del texto OCR
@@ -6215,7 +6268,7 @@ async function procesarArchivoImagenInteligente(archivo) {
     console.log(`[OCR] Ajuste automático de orden aplicado a Entre Ríos (imagen): ${archivo.name}`);
   }
 
-  if (provinciaIdx !== null && provinciaIdx !== undefined && numerosNormalizados && numerosNormalizados.length > 0) {
+  if (provinciaIdx !== null && provinciaIdx !== undefined && numerosNormalizados && numerosNormalizados.length >= 20) {
     try {
       const response = await extractosAPI.guardar({
         provincia: codigoProvinciaFinal,
@@ -6264,7 +6317,7 @@ async function procesarArchivoImagenInteligente(archivo) {
       }
     }
   } else {
-    throw new Error(`No se pudo detectar provincia de la imagen (detectada OCR: ${data.provincia || '-'}, archivo: ${metadataArchivo.codigoProvincia || '-'})`);
+    throw new Error(`No se pudo obtener una lectura confiable de la imagen (${archivo.name}). Provincia: ${data.provincia || metadataArchivo.codigoProvincia || '-'}, números detectados: ${(numerosNormalizados || []).length}`);
   }
 }
 
@@ -6290,8 +6343,19 @@ async function procesarArchivoPDFInteligente(archivo) {
     return;
   }
 
-  // Intento principal: OCR con proveedores API
-  if (window.OCRExtractos && OCRExtractos.hasApiKey()) {
+  // Intento 1: extraer texto interno del PDF (más confiable que OCR cuando el PDF es digital)
+  try {
+    const parsedPdf = await extraerDatosDesdePdfTexto(archivo);
+    if (Array.isArray(parsedPdf?.numeros) && parsedPdf.numeros.length >= 20) {
+      data = parsedPdf;
+      console.log(`[PDF-TEXT] ${archivo.name}: extracción por texto exitoso (${parsedPdf.numeros.length} números)`);
+    }
+  } catch (errorPdfText) {
+    console.warn(`[PDF-TEXT] No se pudo extraer texto de ${archivo.name}:`, errorPdfText.message);
+  }
+
+  // Intento 2: OCR con proveedores API
+  if (!data && window.OCRExtractos && OCRExtractos.hasApiKey()) {
     try {
       console.log(`[OCR] Procesando PDF ${archivo.name} con ${getProveedorOCRActivo() || 'proveedor no identificado'}`);
       const { base64, mimeType } = await OCRExtractos.pdfToImage(archivo);
@@ -6341,7 +6405,7 @@ async function procesarArchivoPDFInteligente(archivo) {
     console.log(`[OCR] Ajuste automático de orden aplicado a Entre Ríos (PDF): ${archivo.name}`);
   }
 
-  if (provinciaIdx !== null && provinciaIdx !== undefined && numerosNormalizados && numerosNormalizados.length > 0) {
+  if (provinciaIdx !== null && provinciaIdx !== undefined && numerosNormalizados && numerosNormalizados.length >= 20) {
     try {
       const response = await extractosAPI.guardar({
         provincia: codigoProvinciaFinal,
@@ -6391,7 +6455,7 @@ async function procesarArchivoPDFInteligente(archivo) {
       }
     }
   } else {
-    throw new Error(`No se pudo detectar provincia del PDF (detectada OCR: ${data.provincia || '-'}, archivo: ${metadataArchivo.codigoProvincia || '-'})`);
+    throw new Error(`No se pudo obtener una lectura confiable del PDF (${archivo.name}). Provincia: ${data.provincia || metadataArchivo.codigoProvincia || '-'}, números detectados: ${(numerosNormalizados || []).length}`);
   }
 }
 
