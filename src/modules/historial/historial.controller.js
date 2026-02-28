@@ -1030,6 +1030,46 @@ const listarEscrutiniosGeneral = async (req, res) => {
       }
     }
 
+    const juegosConRecaudacionEnControlPrevio = new Set(['quiniela', 'poceada', 'tombolina', 'loto', 'loto5', 'brinco', 'quini6', 'quinielaya']);
+
+    // Completar recaudación faltante desde control_previo_agencias
+    for (const row of resultados) {
+      const recActual = Number(row?.total_recaudacion || row?.recaudacion_total || row?.recaudacion || 0);
+      const numeroSorteo = row?.numero_sorteo;
+      const juegoRow = String(row?.juego || '').toLowerCase();
+
+      if (!juegosConRecaudacionEnControlPrevio.has(juegoRow)) continue;
+      if (!numeroSorteo) continue;
+      if (Number.isFinite(recActual) && recActual > 0) {
+        row.total_recaudacion = recActual;
+        continue;
+      }
+
+      try {
+        let sqlRec = `
+          SELECT COALESCE(SUM(cpa.total_recaudacion), 0) as total_recaudacion
+          FROM control_previo_agencias cpa
+          WHERE cpa.juego = ? AND cpa.numero_sorteo = ?
+        `;
+        const paramsRec = [juegoRow, numeroSorteo];
+
+        if (row.fecha) {
+          sqlRec += ' AND cpa.fecha = ?';
+          paramsRec.push(row.fecha);
+        }
+
+        if (juegoRow === 'quiniela' && row.modalidad) {
+          sqlRec += ' AND cpa.modalidad = ?';
+          paramsRec.push(row.modalidad);
+        }
+
+        const [recRow] = await query(sqlRec, paramsRec);
+        row.total_recaudacion = Number(recRow?.total_recaudacion || 0);
+      } catch (e) {
+        row.total_recaudacion = Number(row?.total_recaudacion || 0);
+      }
+    }
+
     // Ordenar por fecha y limitar
     resultados.sort((a, b) => new Date(b.fecha) - new Date(a.fecha));
     resultados = resultados.slice(0, maxLimit);

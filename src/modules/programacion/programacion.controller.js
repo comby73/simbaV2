@@ -27,6 +27,7 @@ const MODALIDADES = {
 // El Excel muestra una columna "Juego" con formato "CODIGO NOMBRE" (ej: "0069 QUINI 6")
 const JUEGOS_CONFIG = {
   '0080': { nombre: 'Quiniela', nombreCorto: 'QNL', tipo: 'quiniela' },
+  'QYA': { nombre: 'Quiniela Ya', nombreCorto: 'QYA', tipo: 'quinielaya' },
   '0069': { nombre: 'Quini 6', nombreCorto: 'Q6', tipo: 'loto' },
   '0013': { nombre: 'Brinco', nombreCorto: 'BRC', tipo: 'loto' },
   '0005': { nombre: 'Loto 5 Plus', nombreCorto: 'L5P', tipo: 'loto' },
@@ -59,6 +60,11 @@ function detectarJuego(valorJuego) {
   if (!valorJuego) return null;
 
   const valor = String(valorJuego).trim().toUpperCase();
+
+  // Prioridad alta: QUINIELA YA puede compartir prefijo/código con Quiniela
+  if (valor.includes('QUINIELA YA') || valor.includes('QYA') || valor.includes('QUINIELAYA')) {
+    return { ...JUEGOS_CONFIG['QYA'], codigo: 'QYA' };
+  }
 
   // Intentar extraer código del inicio (primeros 4 dígitos)
   const match = valor.match(/^(\d{4})\s*/);

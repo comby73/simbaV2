@@ -11789,7 +11789,7 @@ function cambiarPaginaProgramacion(newPage) {
 
 async function cargarHistorialProgramacion() {
   try {
-    const response = await fetch(`${API_BASE}/programacion/historial?juego=Quiniela&limit=10`, {
+    const response = await fetch(`${API_BASE}/programacion/historial?limit=10`, {
       headers: {
         'Authorization': `Bearer ${getToken()}`
       }
