@@ -1067,6 +1067,38 @@ const listarEscrutiniosGeneral = async (req, res) => {
 
       if (!juegosConRecaudacionEnControlPrevio.has(juegoRow)) continue;
 
+      // Prioridad 1: si existe control_previo_id, sincronizar desde la tabla canónica del juego
+      if (cfgJuego && row?.control_previo_id) {
+        try {
+          const sqlById = `
+            SELECT numero_sorteo,
+                   ${cfgJuego.usaModalidad ? 'modalidad' : 'NULL AS modalidad'},
+                   COALESCE(${cfgJuego.campo}, 0) AS total_recaudacion
+            FROM ${cfgJuego.tabla}
+            WHERE id = ?
+            LIMIT 1
+          `;
+          const [cpById] = await query(sqlById, [row.control_previo_id]);
+
+          const numeroById = normalizarNumeroSorteo(cpById?.numero_sorteo);
+          if (numeroById) {
+            numeroSorteo = numeroById;
+            row.numero_sorteo = numeroById;
+          }
+
+          if (cfgJuego.usaModalidad && cpById?.modalidad) {
+            const modalidadNormalizada = normalizarModalidadCodigo(cpById.modalidad) || cpById.modalidad;
+            row.modalidad = modalidadNormalizada;
+          }
+
+          if (!(Number.isFinite(recActual) && recActual > 0)) {
+            recActual = Number(cpById?.total_recaudacion || 0);
+          }
+        } catch (e) {
+          // continuar con otros fallback
+        }
+      }
+
       // Completar número desde extractos cuando escrutinio guardó 0/null pero tiene extracto_id
       if (!numeroSorteo && row?.extracto_id) {
         try {

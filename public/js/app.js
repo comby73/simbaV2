@@ -13698,7 +13698,38 @@ function obtenerTotalRecaudacionEscrutinio(item) {
 
   const normalizarNumero = (valor) => {
     if (valor === null || valor === undefined || valor === '') return null;
-    const numero = Number(String(valor).replace(',', '.'));
+
+    if (typeof valor === 'number') {
+      return Number.isFinite(valor) ? valor : null;
+    }
+
+    let texto = String(valor).trim();
+    if (!texto) return null;
+
+    // Limpiar símbolos y espacios
+    texto = texto.replace(/\$/g, '').replace(/\s+/g, '');
+
+    const ultimoPunto = texto.lastIndexOf('.');
+    const ultimaComa = texto.lastIndexOf(',');
+
+    // Formatos mixtos: 1.234.567,89 o 1,234,567.89
+    if (ultimoPunto !== -1 && ultimaComa !== -1) {
+      if (ultimaComa > ultimoPunto) {
+        // Estilo es-AR: puntos miles, coma decimal
+        texto = texto.replace(/\./g, '').replace(',', '.');
+      } else {
+        // Estilo en-US: comas miles, punto decimal
+        texto = texto.replace(/,/g, '');
+      }
+    } else if (ultimaComa !== -1) {
+      // Solo coma: asumir decimal
+      texto = texto.replace(',', '.');
+    }
+
+    // Quitar caracteres no numéricos remanentes
+    texto = texto.replace(/[^0-9.-]/g, '');
+
+    const numero = Number(texto);
     return Number.isFinite(numero) ? numero : null;
   };
 
