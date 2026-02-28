@@ -6808,8 +6808,11 @@ async function extraerDatosQuinielaFallback(archivo, esPDF = false, usarProvinci
     origenOCR = `data:${mimeType};base64,${base64}`;
   }
 
-  const resultado = await Tesseract.recognize(origenOCR, 'spa');
-  const texto = resultado?.data?.text || '';
+  const resultado = await Tesseract.recognize(origenOCR, 'spa+eng', {
+    tessedit_pageseg_mode: '6',
+    preserve_interword_spaces: '1'
+  });
+  let texto = resultado?.data?.text || '';
 
   // Provincia fallback: priorizar nombre de archivo, luego texto OCR, y por último selección UI (si se permite)
   const provinciaSelect = document.getElementById('cpst-extracto-provincia');
@@ -6829,8 +6832,31 @@ async function extraerDatosQuinielaFallback(archivo, esPDF = false, usarProvinci
   const digitosEsperados = String(provinciaDesdeNombre || provinciaDesdeTexto || '') === '00' ? 3 : 4;
 
   // normalizarOCR: true porque viene de Tesseract (imagen con posibles confusiones de caracteres)
-  const numeros = extraerNumerosDeTexto(texto, { digitosEsperados, normalizarOCR: true });
-  const letras = extraerLetrasDeTexto(texto);
+  let numeros = extraerNumerosDeTexto(texto, { digitosEsperados, normalizarOCR: true });
+  let letras = extraerLetrasDeTexto(texto);
+
+  // Segunda pasada más agresiva para PDFs escaneados con baja calidad
+  if (esPDF && numeros.length < 18) {
+    try {
+      const resultado2 = await Tesseract.recognize(origenOCR, 'spa+eng', {
+        tessedit_pageseg_mode: '11',
+        tessedit_char_whitelist: '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ/-: ',
+        preserve_interword_spaces: '1'
+      });
+
+      const texto2 = resultado2?.data?.text || '';
+      const numeros2 = extraerNumerosDeTexto(texto2, { digitosEsperados, normalizarOCR: true });
+      const letras2 = extraerLetrasDeTexto(texto2);
+
+      if (numeros2.length > numeros.length) {
+        texto = texto2;
+        numeros = numeros2;
+        letras = letras2;
+      }
+    } catch (e) {
+      // mantener resultado original
+    }
+  }
 
   if (!numeros || numeros.length === 0) {
     throw new Error('OCR alternativo no pudo extraer números del archivo');
