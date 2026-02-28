@@ -13684,6 +13684,24 @@ function exportarControlPrevioCSV() {
 // ESCRUTINIOS - TAB
 // =============================================
 
+function obtenerTotalRecaudacionEscrutinio(item) {
+  const candidatos = [
+    item?.total_recaudacion,
+    item?.totalRecaudacion,
+    item?.recaudacion_total,
+    item?.recaudacion,
+    item?.recaudacionTotal
+  ];
+
+  for (const valor of candidatos) {
+    if (valor === null || valor === undefined || valor === '') continue;
+    const numero = Number(String(valor).replace(',', '.'));
+    if (Number.isFinite(numero)) return numero;
+  }
+
+  return 0;
+}
+
 // Buscar Escrutinios
 async function buscarEscrutinios() {
   const fechaDesde = document.getElementById('esc-fecha-desde').value;
@@ -13694,7 +13712,7 @@ async function buscarEscrutinios() {
   const emptyMsg = document.getElementById('historial-escrutinio-empty');
 
   try {
-    tbody.innerHTML = '<tr><td colspan="8" class="text-center"><i class="fas fa-spinner fa-spin"></i> Cargando...</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="10" class="text-center"><i class="fas fa-spinner fa-spin"></i> Cargando...</td></tr>';
     emptyMsg.classList.add('hidden');
 
     let url = `${API_BASE}/historial/escrutinios?`;
@@ -13719,6 +13737,8 @@ async function buscarEscrutinios() {
     emptyMsg.classList.add('hidden');
 
     tbody.innerHTML = escrutiniosData.map(item => {
+      const totalRecaudacion = obtenerTotalRecaudacionEscrutinio(item);
+
       // Modalidad solo aplica a Quiniela
       const modalidadHtml = item.juego === 'quiniela' 
         ? `<span class="badge badge-modalidad-${item.modalidad || 'N'}">${getModalidadNombre(item.modalidad || 'N')}</span>`
@@ -13732,6 +13752,7 @@ async function buscarEscrutinios() {
         <td><span class="badge game-${item.juego}">${item.juego.toUpperCase()}</span></td>
         <td class="text-end">${formatNumber(item.total_ganadores)}</td>
         <td class="text-end text-success"><strong>$${formatNumber(item.total_premios)}</strong></td>
+        <td class="text-end text-primary"><strong>$${formatNumber(totalRecaudacion)}</strong></td>
         <td>${item.usuario_nombre || '-'}</td>
         <td>${formatDate(item.fecha)}</td>
         <td>
@@ -13747,7 +13768,7 @@ async function buscarEscrutinios() {
 
   } catch (error) {
     console.error('Error cargando escrutinios:', error);
-    tbody.innerHTML = '<tr><td colspan="9" class="text-center text-danger">Error cargando datos</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="10" class="text-center text-danger">Error cargando datos</td></tr>';
   }
 }
 
@@ -13772,6 +13793,7 @@ async function verDetalleEscrutinio(id, juego) {
     }
 
     const item = data.data;
+  const totalRecaudacion = obtenerTotalRecaudacionEscrutinio(item);
     const ganadores = dataGanadores?.success ? (dataGanadores.data?.ganadores || []) : [];
     const ganadoresPrimerPremio = ganadores.filter(g => {
       const tipo = String(g.tipo_premio || '').toUpperCase();
@@ -13803,6 +13825,12 @@ async function verDetalleEscrutinio(id, juego) {
                 <div class="stat-card">
                   <div class="stat-value text-success">$${formatNumber(item.total_premios)}</div>
                   <div class="stat-label">Total Premios</div>
+                </div>
+              </div>
+              <div class="col-md-6">
+                <div class="stat-card">
+                  <div class="stat-value text-primary">$${formatNumber(totalRecaudacion)}</div>
+                  <div class="stat-label">Total Recaudación</div>
                 </div>
               </div>
             </div>
@@ -13971,7 +13999,7 @@ function exportarEscrutiniosCSV() {
     return;
   }
 
-  const headers = ['Fecha', 'Sorteo', 'Modalidad', 'Juego', 'Ganadores', 'Premios', 'Usuario'];
+  const headers = ['Fecha', 'Sorteo', 'Modalidad', 'Juego', 'Ganadores', 'Premios', 'Recaudacion', 'Usuario'];
   const rows = escrutiniosData.map(item => [
     item.fecha,
     item.numero_sorteo,
@@ -13979,6 +14007,7 @@ function exportarEscrutiniosCSV() {
     item.juego,
     item.total_ganadores || 0,
     item.total_premios || 0,
+    obtenerTotalRecaudacionEscrutinio(item),
     item.usuario_nombre || ''
   ]);
 
