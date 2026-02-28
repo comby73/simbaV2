@@ -101,7 +101,7 @@ const OCRExtractos = {
   // Verifica si el servidor tiene GROQ_API_KEY configurada (no bloquea init)
   async _verificarOCRServidor() {
     try {
-      const token = localStorage.getItem('token');
+      const token = localStorage.getItem('cl_token');
       if (!token) return;
       const resp = await fetch('/api/ocr/estado', {
         headers: { 'Authorization': 'Bearer ' + token }
@@ -122,7 +122,7 @@ const OCRExtractos = {
 
   // Llamar al OCR via proxy del servidor (usa GROQ_API_KEY del .env)
   async llamarAPIServidor(imageBase64, mimeType, prompt) {
-    const token = localStorage.getItem('token');
+    const token = localStorage.getItem('cl_token');
     if (!token) throw new Error('No hay sesión activa para usar OCR del servidor');
 
     // Limpiar base64
