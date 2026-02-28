@@ -193,6 +193,25 @@ function aggregateByAgency(records) {
 }
 
 async function saveQuinielaYaSummary(summary, user, overwrite) {
+  let modalidadQuinielaYa = 'Y';
+  try {
+    const modalidadRows = await query(
+      `SELECT modalidad_codigo, modalidad_nombre
+       FROM programacion_sorteos
+       WHERE juego = 'Quiniela Ya'
+         AND numero_sorteo = ?
+         AND activo = 1
+       ORDER BY (fecha_sorteo = ?) DESC, fecha_sorteo DESC
+       LIMIT 1`,
+      [summary.sorteo, summary.fechaSorteo]
+    );
+
+    const modalidadDb = modalidadRows?.[0]?.modalidad_codigo || modalidadRows?.[0]?.modalidad_nombre;
+    if (modalidadDb) modalidadQuinielaYa = String(modalidadDb).trim().toUpperCase();
+  } catch (e) {
+    // fallback Y
+  }
+
   const existingRows = await query(
     'SELECT id FROM escrutinio_quiniela_ya WHERE numero_sorteo = ? LIMIT 1',
     [summary.sorteo]
@@ -286,7 +305,7 @@ async function saveQuinielaYaSummary(summary, user, overwrite) {
           'quinielaya',
           summary.fechaSorteo,
           summary.sorteo,
-          'Y',
+          modalidadQuinielaYa,
           ctaCte,
           ag.provincia,
           ag.registros_validados + ag.cantidad_cancelaciones,

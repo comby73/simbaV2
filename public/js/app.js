@@ -13841,7 +13841,7 @@ async function buscarEscrutinios() {
       const totalRecaudacion = obtenerTotalRecaudacionEscrutinio(item);
 
       // Modalidad solo aplica a Quiniela
-      const modalidadHtml = item.juego === 'quiniela' 
+      const modalidadHtml = (item.juego === 'quiniela' || item.juego === 'quinielaya')
         ? `<span class="badge badge-modalidad-${item.modalidad || 'N'}">${getModalidadNombre(item.modalidad || 'N')}</span>`
         : '-';
       

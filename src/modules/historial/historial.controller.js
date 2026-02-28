@@ -1011,7 +1011,28 @@ const listarEscrutiniosGeneral = async (req, res) => {
     if (!juego || juego === 'quinielaya') {
       try {
         let sqlQY = `
-          SELECT e.*, u.nombre as usuario_nombre, 'quinielaya' as juego
+          SELECT e.*, 
+                 COALESCE(
+                   (
+                     SELECT p.modalidad_codigo
+                     FROM programacion_sorteos p
+                     WHERE p.juego = 'Quiniela Ya'
+                       AND p.numero_sorteo = e.numero_sorteo
+                       AND p.activo = 1
+                     ORDER BY (p.fecha_sorteo = e.fecha) DESC, p.fecha_sorteo DESC
+                     LIMIT 1
+                   ),
+                   (
+                     SELECT cpa.modalidad
+                     FROM control_previo_agencias cpa
+                     WHERE cpa.juego = 'quinielaya'
+                       AND cpa.numero_sorteo = e.numero_sorteo
+                     ORDER BY cpa.id DESC
+                     LIMIT 1
+                   ),
+                   'Y'
+                 ) as modalidad,
+                 u.nombre as usuario_nombre, 'quinielaya' as juego
           FROM escrutinio_quiniela_ya e
           LEFT JOIN usuarios u ON e.usuario_id = u.id
           WHERE 1=1
