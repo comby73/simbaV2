@@ -1031,6 +1031,15 @@ const listarEscrutiniosGeneral = async (req, res) => {
     }
 
     const juegosConRecaudacionEnControlPrevio = new Set(['quiniela', 'poceada', 'tombolina', 'loto', 'loto5', 'brinco', 'quini6', 'quinielaya']);
+    const fallbackControlPrevio = {
+      quiniela: { tabla: 'control_previo_quiniela', campo: 'total_recaudacion', usaModalidad: true },
+      poceada: { tabla: 'control_previo_poceada', campo: 'total_recaudacion', usaModalidad: false },
+      tombolina: { tabla: 'control_previo_tombolina', campo: 'total_recaudacion', usaModalidad: false },
+      loto: { tabla: 'control_previo_loto', campo: 'recaudacion', usaModalidad: false },
+      loto5: { tabla: 'control_previo_loto5', campo: 'recaudacion', usaModalidad: false },
+      brinco: { tabla: 'control_previo_brinco', campo: 'recaudacion', usaModalidad: false },
+      quini6: { tabla: 'control_previo_quini6', campo: 'recaudacion', usaModalidad: false }
+    };
 
     // Completar recaudación faltante desde control_previo_agencias
     for (const row of resultados) {
@@ -1064,7 +1073,34 @@ const listarEscrutiniosGeneral = async (req, res) => {
         }
 
         const [recRow] = await query(sqlRec, paramsRec);
-        row.total_recaudacion = Number(recRow?.total_recaudacion || 0);
+        let recCompleta = Number(recRow?.total_recaudacion || 0);
+
+        // Si no hay detalle en control_previo_agencias, buscar en la tabla de control_previo del juego
+        if (!(Number.isFinite(recCompleta) && recCompleta > 0) && fallbackControlPrevio[juegoRow]) {
+          const cfg = fallbackControlPrevio[juegoRow];
+          let sqlCp = `
+            SELECT COALESCE(${cfg.campo}, 0) AS total_recaudacion
+            FROM ${cfg.tabla}
+            WHERE numero_sorteo = ?
+          `;
+          const paramsCp = [numeroSorteo];
+
+          if (row.fecha) {
+            sqlCp += ' AND fecha = ?';
+            paramsCp.push(row.fecha);
+          }
+
+          if (cfg.usaModalidad && row.modalidad) {
+            sqlCp += ' AND modalidad = ?';
+            paramsCp.push(row.modalidad);
+          }
+
+          sqlCp += ' ORDER BY id DESC LIMIT 1';
+          const [cpRow] = await query(sqlCp, paramsCp);
+          recCompleta = Number(cpRow?.total_recaudacion || 0);
+        }
+
+        row.total_recaudacion = Number.isFinite(recCompleta) ? recCompleta : 0;
       } catch (e) {
         row.total_recaudacion = Number(row?.total_recaudacion || 0);
       }
