@@ -1067,6 +1067,23 @@ const listarEscrutiniosGeneral = async (req, res) => {
 
       if (!juegosConRecaudacionEnControlPrevio.has(juegoRow)) continue;
 
+      // Completar número desde extractos cuando escrutinio guardó 0/null pero tiene extracto_id
+      if (!numeroSorteo && row?.extracto_id) {
+        try {
+          const [extRow] = await query(
+            'SELECT numero_sorteo FROM extractos WHERE id = ? LIMIT 1',
+            [row.extracto_id]
+          );
+          const numeroDesdeExtracto = normalizarNumeroSorteo(extRow?.numero_sorteo);
+          if (numeroDesdeExtracto) {
+            numeroSorteo = numeroDesdeExtracto;
+            row.numero_sorteo = numeroDesdeExtracto;
+          }
+        } catch (e) {
+          // seguir con otros fallback
+        }
+      }
+
       // Completar número de sorteo (casos históricos con 0/null en escrutinio)
       if (!numeroSorteo && cfgJuego) {
         try {
