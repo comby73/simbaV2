@@ -1058,10 +1058,24 @@ const listarEscrutiniosGeneral = async (req, res) => {
       return Number.isFinite(n) && n > 0 ? n : null;
     };
 
+    const normalizarFechaSql = (valor) => {
+      if (!valor) return null;
+      if (valor instanceof Date && !Number.isNaN(valor.getTime())) {
+        return valor.toISOString().slice(0, 10);
+      }
+      const texto = String(valor).trim();
+      if (!texto) return null;
+      if (/^\d{4}-\d{2}-\d{2}/.test(texto)) return texto.slice(0, 10);
+      const d = new Date(texto);
+      if (!Number.isNaN(d.getTime())) return d.toISOString().slice(0, 10);
+      return null;
+    };
+
     // Completar recaudación faltante desde control_previo_agencias
     for (const row of resultados) {
       let recActual = Number(row?.total_recaudacion || row?.recaudacion_total || row?.recaudacion || 0);
       let numeroSorteo = normalizarNumeroSorteo(row?.numero_sorteo);
+      const fechaSql = normalizarFechaSql(row?.fecha);
       const juegoRow = String(row?.juego || '').toLowerCase();
       const cfgJuego = fallbackControlPrevio[juegoRow];
 
@@ -1133,9 +1147,9 @@ const listarEscrutiniosGeneral = async (req, res) => {
             sqlNum += ' AND id = ?';
             paramsNum.push(row.control_previo_id);
           } else {
-            if (row.fecha) {
+            if (fechaSql) {
               sqlNum += ' AND fecha = ?';
-              paramsNum.push(row.fecha);
+              paramsNum.push(fechaSql);
             }
             if (cfgJuego.usaModalidad && (modalidadOriginal || modalidadCodigo)) {
               sqlNum += ' AND modalidad IN (?, ?)';
@@ -1185,9 +1199,9 @@ const listarEscrutiniosGeneral = async (req, res) => {
         `;
         const paramsRec = [juegoRow, numeroSorteo];
 
-        if (row.fecha) {
+        if (fechaSql) {
           sqlRec += ' AND cpa.fecha = ?';
-          paramsRec.push(row.fecha);
+          paramsRec.push(fechaSql);
         }
 
         if (juegoRow === 'quiniela' && (modalidadOriginal || modalidadCodigo)) {
@@ -1226,9 +1240,9 @@ const listarEscrutiniosGeneral = async (req, res) => {
           `;
           const paramsCp = [numeroSorteo];
 
-          if (row.fecha) {
+          if (fechaSql) {
             sqlCp += ' AND fecha = ?';
-            paramsCp.push(row.fecha);
+            paramsCp.push(fechaSql);
           }
 
           if (cfg.usaModalidad && (modalidadOriginal || modalidadCodigo)) {
@@ -1257,6 +1271,28 @@ const listarEscrutiniosGeneral = async (req, res) => {
             sqlCp2 += ' ORDER BY id DESC LIMIT 1';
             const [cpRow2] = await query(sqlCp2, paramsCp2);
             recCompleta = Number(cpRow2?.total_recaudacion || 0);
+
+            // Último recurso Quiniela: ignorar modalidad errónea histórica en escrutinio
+            if (!(Number.isFinite(recCompleta) && recCompleta > 0) && juegoRow === 'quiniela') {
+              let sqlCp3 = `
+                SELECT COALESCE(${cfg.campo}, 0) AS total_recaudacion, modalidad
+                FROM ${cfg.tabla}
+                WHERE numero_sorteo = ?
+              `;
+              const paramsCp3 = [numeroSorteo];
+
+              if (fechaSql) {
+                sqlCp3 += ' AND fecha = ?';
+                paramsCp3.push(fechaSql);
+              }
+
+              sqlCp3 += ' ORDER BY id DESC LIMIT 1';
+              const [cpRow3] = await query(sqlCp3, paramsCp3);
+              recCompleta = Number(cpRow3?.total_recaudacion || 0);
+              if (cpRow3?.modalidad) {
+                row.modalidad = normalizarModalidadCodigo(cpRow3.modalidad) || cpRow3.modalidad;
+              }
+            }
           }
         }
 

@@ -4174,6 +4174,25 @@ function cargarDatosControlPrevio() {
   cpstDatosControlPrevio.fechaSorteo = cpstDatosControlPrevio.fechaSorteo || metaSorteo.fecha;
   cpstDatosControlPrevio.fecha = cpstDatosControlPrevio.fecha || metaSorteo.fecha;
 
+  // Normalizar campos base para persistencia de escrutinio
+  cpstDatosControlPrevio.recaudacion =
+    cpstDatosControlPrevio.recaudacion ||
+    cpResultadosActuales?.comparacion?.recaudacion?.calculado ||
+    cpResultadosActuales?.resumen?.recaudacion ||
+    0;
+
+  cpstDatosControlPrevio.apuestas =
+    cpstDatosControlPrevio.apuestas ||
+    cpResultadosActuales?.comparacion?.apuestas?.calculado ||
+    cpResultadosActuales?.resumen?.apuestasTotal ||
+    0;
+
+  cpstDatosControlPrevio.registros =
+    cpstDatosControlPrevio.registros ||
+    cpResultadosActuales?.comparacion?.registros?.calculado ||
+    cpResultadosActuales?.resumen?.registros ||
+    0;
+
   // Tomar modalidad SOLO de la programación (basado en número de sorteo)
   // NO usar el código del NTF (SR, etc.) - la programación ya tiene la modalidad correcta
   const modalidadInfo = cpResultadosActuales.sorteo?.modalidad || {};
@@ -4181,6 +4200,8 @@ function cargarDatosControlPrevio() {
 
   if (modalidadProgramacion) {
     cpstModalidadSorteo = modalidadProgramacion;
+    cpstDatosControlPrevio.modalidadCodigo = modalidadProgramacion;
+    cpstDatosControlPrevio.modalidad = modalidadProgramacion;
     console.log(`Modalidad desde programación (sorteo ${cpstNumeroSorteo}): ${modalidadProgramacion} (${modalidadInfo.nombre})`);
   } else {
     // Sin programación cargada - Solo para juegos que no son Quiniela, podemos asignar una modalidad por defecto
@@ -4193,6 +4214,8 @@ function cargarDatosControlPrevio() {
     else cpstModalidadSorteo = '';
 
     if (cpstModalidadSorteo) {
+      cpstDatosControlPrevio.modalidadCodigo = cpstModalidadSorteo;
+      cpstDatosControlPrevio.modalidad = cpstModalidadSorteo;
       console.log(`[CPST] Sorteo ${cpstNumeroSorteo} no programado. Usando modalidad por defecto para ${tipoJuegoDetectado}: ${cpstModalidadSorteo}`);
     } else {
       console.warn(`⚠️ Sorteo ${cpstNumeroSorteo} no encontrado en programación. Cargue la programación primero.`);
