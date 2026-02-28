@@ -1098,6 +1098,12 @@
               <input type="file" id="cpst-archivo-zip" accept=".zip" class="form-control"
                 onchange="cargarZipPosterior(this)">
             </div>
+            <div class="form-group">
+              <label>Nueva carga</label>
+              <button class="btn btn-warning" onclick="iniciarNuevaCargaPosterior()" id="btn-nueva-carga-cpst">
+                <i class="fas fa-broom"></i> Nueva carga limpia
+              </button>
+            </div>
           </div>
 
           <div id="cpst-datos-cargados" class="hidden"

@@ -873,6 +873,20 @@ let cpArchivoSeleccionado = null;
 let cpResultadosActuales = null;
 let cpRegistrosNTF = []; // NUEVO: Registros parseados del TXT para Control Posterior
 
+function resetearControlPrevioParaNuevaCarga({ preservarArchivoSeleccionado = false } = {}) {
+  cpResultadosActuales = null;
+  cpRegistrosNTF = [];
+
+  document.getElementById('cp-resultados')?.classList.add('hidden');
+
+  if (!preservarArchivoSeleccionado) {
+    cpArchivoSeleccionado = null;
+    const inputArchivo = document.getElementById('cp-archivo-input');
+    if (inputArchivo) inputArchivo.value = '';
+    document.getElementById('cp-archivo-seleccionado')?.classList.add('hidden');
+  }
+}
+
 function initControlPrevio() {
   const uploadArea = document.getElementById('cp-upload-area');
   const fileInput = document.getElementById('cp-archivo-input');
@@ -942,6 +956,9 @@ async function procesarControlPrevio() {
     showToast('No se pudo detectar el tipo de juego (Prefijos: QNL, PCD, TMB)', 'error');
     return;
   }
+
+  // Arrancar siempre limpio para evitar mezclar datos de una corrida anterior
+  resetearControlPrevioParaNuevaCarga({ preservarArchivoSeleccionado: true });
 
   showToast(`Procesando ${juegoConfig.nombre}...`, 'info');
 
@@ -1339,12 +1356,7 @@ function mostrarResultadosCP(data) {
 }
 
 function limpiarControlPrevio() {
-  cpArchivoSeleccionado = null;
-  cpResultadosActuales = null;
-  cpRegistrosNTF = []; // Limpiar registros parseados
-  document.getElementById('cp-archivo-input').value = '';
-  document.getElementById('cp-archivo-seleccionado').classList.add('hidden');
-  document.getElementById('cp-resultados').classList.add('hidden');
+  resetearControlPrevioParaNuevaCarga();
 }
 
 async function guardarControlPrevio() {
@@ -3136,6 +3148,73 @@ let cpstExtractoBrinco = null; // {tradicional: {numeros: [6], premios: {}}, jun
 let cpstExtractoQuini6 = null; // {tradicional: {primera: [6], segunda: [6]}, revancha: [6], siempreSale: [6], premioExtra: [6], siempreSaleAciertos: 6}
 let cpstQuinielaYaZipFile = null; // Archivo ZIP cargado para Quiniela Ya
 
+function resetearControlPosteriorParaNuevaCarga() {
+  cpResultadosActuales = null;
+  cpRegistrosNTF = [];
+
+  cpstRegistrosNTF = [];
+  cpstDatosControlPrevio = null;
+  cpstNumeroSorteo = '';
+  cpstModalidadSorteo = '';
+  cpstQuinielaYaZipFile = null;
+
+  document.getElementById('cpst-datos-cargados')?.classList.add('hidden');
+
+  const sorteo = document.getElementById('cpst-sorteo');
+  if (sorteo) sorteo.textContent = '-';
+
+  const registros = document.getElementById('cpst-registros');
+  if (registros) registros.textContent = '-';
+
+  const recaudacion = document.getElementById('cpst-recaudacion');
+  if (recaudacion) recaudacion.textContent = '-';
+
+  const modalidadBadge = document.getElementById('cpst-modalidad-badge');
+  if (modalidadBadge) modalidadBadge.textContent = '-';
+
+  const juegoBadge = document.getElementById('cpst-juego-badge');
+  if (juegoBadge) juegoBadge.textContent = '-';
+
+  resetearExtractosPosteriorParaNuevaCarga();
+
+  const inputZip = document.getElementById('cpst-archivo-zip');
+  if (inputZip) inputZip.value = '';
+  const inputUniversal = document.getElementById('cpst-archivo-universal');
+  if (inputUniversal) inputUniversal.value = '';
+}
+
+function resetearExtractosPosteriorParaNuevaCarga() {
+  cpstExtractos = [];
+  cpstResultados = null;
+  cpstExtractoPoceada = null;
+  cpstExtractoLoto = null;
+  cpstExtractoLoto5 = null;
+  cpstExtractoBrinco = null;
+  cpstExtractoQuini6 = null;
+
+  document.getElementById('cpst-resultados')?.classList.add('hidden');
+
+  renderExtractosListInteligente();
+  limpiarExtractoPosterior();
+  limpiarExtractoPoceada(false);
+  limpiarXMLExtractoLoto(false);
+  limpiarExtractoQuini6(false);
+  limpiarExtractoBrinco(false);
+
+  for (let i = 1; i <= 5; i++) {
+    const inputLoto5 = document.getElementById(`cpst-loto5-num-${i}`);
+    if (inputLoto5) inputLoto5.value = '';
+  }
+
+  const inputUniversal = document.getElementById('cpst-archivo-universal');
+  if (inputUniversal) inputUniversal.value = '';
+}
+
+function iniciarNuevaCargaPosterior() {
+  resetearControlPosteriorParaNuevaCarga();
+  showToast('Control Posterior limpio. Ya podés cargar un nuevo sorteo.', 'info');
+}
+
 // Mapeo de códigos de modalidad a nombres
 const MODALIDADES_NOMBRE = {
   'R': 'La Previa',
@@ -3356,6 +3435,8 @@ function generarInputsPoceadaManual() {
 async function cargarExtractoPoceadaXML(input) {
   if (!input.files.length) return;
 
+  resetearExtractosPosteriorParaNuevaCarga();
+
   const file = input.files[0];
   const text = await file.text();
   procesarXMLExtractoPoceada(text);
@@ -3367,6 +3448,9 @@ function cargarExtractoPoceadaDesdeTextoXML() {
     showToast('Pegue el contenido XML del extracto', 'warning');
     return;
   }
+
+  resetearExtractosPosteriorParaNuevaCarga();
+
   procesarXMLExtractoPoceada(text);
 }
 
@@ -3719,7 +3803,7 @@ function mostrarPreviewExtractoPoceada() {
   }
 }
 
-function limpiarExtractoPoceada() {
+function limpiarExtractoPoceada(mostrarMensaje = true) {
   cpstExtractoPoceada = null;
 
   // Limpiar inputs
@@ -3731,7 +3815,7 @@ function limpiarExtractoPoceada() {
   // Ocultar preview
   document.getElementById('cpst-poceada-extracto-preview')?.classList.add('hidden');
 
-  showToast('Extracto Poceada limpiado', 'info');
+  if (mostrarMensaje) showToast('Extracto Poceada limpiado', 'info');
 }
 
 function initControlPosterior() {
@@ -4504,6 +4588,9 @@ async function cargarZipPosterior(input) {
 
   const file = input.files[0];
 
+  // Limpiar todo el estado previo antes de una nueva carga de ZIP
+  resetearControlPosteriorParaNuevaCarga();
+
   if (cpstJuegoSeleccionado === 'Quiniela Ya') {
     cpstQuinielaYaZipFile = file;
     cpstDatosControlPrevio = null;
@@ -4619,6 +4706,8 @@ function llenarInputsExtracto(numeros, letras, autoAgregar = true) {
 function cargarExtractoJSON(input) {
   if (!input.files.length) return;
 
+  resetearExtractosPosteriorParaNuevaCarga();
+
   const file = input.files[0];
   const reader = new FileReader();
 
@@ -4645,6 +4734,8 @@ function cargarExtractoDesdeTextoJSON() {
     showToast('Ingrese el JSON', 'warning');
     return;
   }
+
+  resetearExtractosPosteriorParaNuevaCarga();
 
   try {
     const data = JSON.parse(texto);
@@ -4806,6 +4897,8 @@ function obtenerMetadataArchivoExtracto(filename) {
 // Cargar desde archivo(s) XML - soporta múltiples archivos con filtrado por modalidad
 function cargarExtractoXML(input) {
   if (!input.files.length) return;
+
+  resetearExtractosPosteriorParaNuevaCarga();
 
   const files = Array.from(input.files);
   console.log(`📂 Intentando cargar ${files.length} archivos XML`);
@@ -5042,6 +5135,9 @@ function cargarExtractoDesdeTextoXML() {
     showToast('Ingrese el XML', 'warning');
     return;
   }
+
+  resetearExtractosPosteriorParaNuevaCarga();
+
   procesarXMLExtracto(texto);
 }
 
@@ -5161,6 +5257,8 @@ function procesarXMLExtracto(xmlString, infoArchivo = null) {
 // Cargar desde imagen (OCR con detección automática de provincia/modalidad)
 async function cargarExtractoImagen(input) {
   if (!input.files.length) return;
+
+  resetearExtractosPosteriorParaNuevaCarga();
 
   const file = input.files[0];
 
@@ -5540,6 +5638,8 @@ function extraerLetrasDeTexto(texto) {
 // Cargar desde PDF (con OCR inteligente)
 async function cargarExtractoPDF(input) {
   if (!input.files.length) return;
+
+  resetearExtractosPosteriorParaNuevaCarga();
 
   const file = input.files[0];
   const status = document.getElementById('cpst-pdf-status');
@@ -6151,6 +6251,8 @@ function handleDropInteligente(event) {
 // Procesar archivos de forma inteligente
 async function procesarArchivosInteligente(files) {
   if (!files || files.length === 0) return;
+
+  resetearExtractosPosteriorParaNuevaCarga();
 
   const statusDiv = document.getElementById('cpst-procesamiento-status');
   const mensajeDiv = document.getElementById('cpst-procesamiento-mensaje');
@@ -7670,6 +7772,8 @@ document.addEventListener('DOMContentLoaded', () => {
  */
 function cargarXMLExtractoLoto(file) {
   if (!file) return;
+
+  resetearExtractosPosteriorParaNuevaCarga();
   
   if (!file.name.toLowerCase().endsWith('.xml')) {
     showToast('El archivo debe ser un XML', 'warning');
@@ -7830,7 +7934,7 @@ function cargarXMLExtractoLoto(file) {
 /**
  * Limpia el XML cargado y resetea los campos
  */
-function limpiarXMLExtractoLoto() {
+function limpiarXMLExtractoLoto(mostrarMensaje = true) {
   cpstLotoXmlData = null;
   cpstExtractoLoto = null;
 
@@ -7854,7 +7958,7 @@ function limpiarXMLExtractoLoto() {
   const preview = document.getElementById('cpst-loto-preview');
   if (preview) preview.innerHTML = '';
 
-  showToast('Extracto limpiado', 'info');
+  if (mostrarMensaje) showToast('Extracto limpiado', 'info');
 }
 
 function cargarExtractoLoto() {
@@ -9029,6 +9133,8 @@ function leerPremiosBrincoJunior() {
  * Cargar extracto BRINCO desde archivo JSON
  */
 async function cargarExtractoBrincoDesdeArchivo(file) {
+  resetearExtractosPosteriorParaNuevaCarga();
+
   try {
     const text = await file.text();
     const data = JSON.parse(text);
@@ -9869,6 +9975,8 @@ function cargarExtractoQuini6Manual() {
  * Cargar extracto QUINI 6 desde archivo JSON
  */
 async function cargarExtractoQuini6DesdeArchivo(file) {
+  resetearExtractosPosteriorParaNuevaCarga();
+
   try {
     const text = await file.text();
     const data = JSON.parse(text);
@@ -9889,7 +9997,7 @@ async function cargarExtractoQuini6DesdeArchivo(file) {
 /**
  * Limpiar extracto QUINI 6
  */
-function limpiarExtractoQuini6() {
+function limpiarExtractoQuini6(mostrarMensaje = true) {
   cpstExtractoQuini6 = null;
   
   // Limpiar todos los inputs de números
@@ -9942,13 +10050,13 @@ function limpiarExtractoQuini6() {
   document.getElementById('cpst-quini6-ocr-status')?.classList.add('hidden');
   document.getElementById('cpst-quini6-file-info')?.classList.add('hidden');
   
-  showToast('Extracto QUINI 6 limpiado', 'info');
+  if (mostrarMensaje) showToast('Extracto QUINI 6 limpiado', 'info');
 }
 
 /**
  * Limpiar extracto BRINCO
  */
-function limpiarExtractoBrinco() {
+function limpiarExtractoBrinco(mostrarMensaje = true) {
   cpstExtractoBrinco = null;
   
   // Limpiar todos los inputs de números
@@ -9987,7 +10095,7 @@ function limpiarExtractoBrinco() {
   const fileInput = document.getElementById('cpst-brinco-file-input');
   if (fileInput) fileInput.value = '';
   
-  showToast('Extracto BRINCO limpiado', 'info');
+  if (mostrarMensaje) showToast('Extracto BRINCO limpiado', 'info');
 }
 
 /**
