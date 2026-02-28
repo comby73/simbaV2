@@ -1053,14 +1053,73 @@ const listarEscrutiniosGeneral = async (req, res) => {
       return null;
     };
 
+    const normalizarNumeroSorteo = (valor) => {
+      const n = Number(valor);
+      return Number.isFinite(n) && n > 0 ? n : null;
+    };
+
     // Completar recaudación faltante desde control_previo_agencias
     for (const row of resultados) {
-      const recActual = Number(row?.total_recaudacion || row?.recaudacion_total || row?.recaudacion || 0);
-      const numeroSorteo = row?.numero_sorteo;
+      let recActual = Number(row?.total_recaudacion || row?.recaudacion_total || row?.recaudacion || 0);
+      let numeroSorteo = normalizarNumeroSorteo(row?.numero_sorteo);
       const juegoRow = String(row?.juego || '').toLowerCase();
+      const cfgJuego = fallbackControlPrevio[juegoRow];
 
       if (!juegosConRecaudacionEnControlPrevio.has(juegoRow)) continue;
-      if (!numeroSorteo) continue;
+
+      // Completar número de sorteo (casos históricos con 0/null en escrutinio)
+      if (!numeroSorteo && cfgJuego) {
+        try {
+          const modalidadOriginal = row?.modalidad || null;
+          const modalidadCodigo = normalizarModalidadCodigo(modalidadOriginal);
+
+          let sqlNum = `
+            SELECT numero_sorteo, modalidad, COALESCE(${cfgJuego.campo}, 0) AS total_recaudacion
+            FROM ${cfgJuego.tabla}
+            WHERE 1=1
+          `;
+          const paramsNum = [];
+
+          if (row.control_previo_id) {
+            sqlNum += ' AND id = ?';
+            paramsNum.push(row.control_previo_id);
+          } else {
+            if (row.fecha) {
+              sqlNum += ' AND fecha = ?';
+              paramsNum.push(row.fecha);
+            }
+            if (cfgJuego.usaModalidad && (modalidadOriginal || modalidadCodigo)) {
+              sqlNum += ' AND modalidad IN (?, ?)';
+              paramsNum.push(modalidadOriginal || '', modalidadCodigo || '');
+            }
+          }
+
+          sqlNum += ' ORDER BY id DESC LIMIT 1';
+          const [rowNum] = await query(sqlNum, paramsNum);
+          const numeroDetectado = normalizarNumeroSorteo(rowNum?.numero_sorteo);
+
+          if (numeroDetectado) {
+            numeroSorteo = numeroDetectado;
+            row.numero_sorteo = numeroDetectado;
+          }
+
+          if ((!row.modalidad || row.modalidad === '-') && rowNum?.modalidad) {
+            row.modalidad = rowNum.modalidad;
+          }
+
+          if (!(Number.isFinite(recActual) && recActual > 0)) {
+            recActual = Number(rowNum?.total_recaudacion || 0);
+          }
+        } catch (e) {
+          // continuar con fallback estándar
+        }
+      }
+
+      if (!numeroSorteo) {
+        row.total_recaudacion = Number.isFinite(recActual) ? recActual : 0;
+        continue;
+      }
+
       if (Number.isFinite(recActual) && recActual > 0) {
         row.total_recaudacion = recActual;
         continue;
