@@ -37,6 +37,19 @@ function normalizarModalidad(valor) {
   return v;
 }
 
+async function limpiarDuplicadosEscrutinio(tabla, juego, numeroSorteo, idConservar) {
+  const duplicados = await query(
+    `SELECT id FROM ${tabla} WHERE numero_sorteo = ? AND id <> ?`,
+    [numeroSorteo, idConservar]
+  );
+
+  for (const dup of duplicados) {
+    await query('DELETE FROM escrutinio_premios_agencia WHERE escrutinio_id = ? AND juego = ?', [dup.id, juego]);
+    await query('DELETE FROM escrutinio_ganadores WHERE escrutinio_id = ? AND juego = ?', [dup.id, juego]);
+    await query(`DELETE FROM ${tabla} WHERE id = ?`, [dup.id]);
+  }
+}
+
 /**
  * Guarda el resultado del Escrutinio de Quiniela en la base de datos
  * 
@@ -90,10 +103,10 @@ async function guardarEscrutinioQuiniela(resultado, datosControlPrevio, usuario)
       controlPrevioId = previoExistente[0].id;
     }
 
-    // Verificar si ya existe el escrutinio (para reemplazar)
+    // Verificar por número de sorteo (reemplazo global del mismo sorteo)
     const existe = await query(
-      'SELECT id FROM escrutinio_quiniela WHERE fecha = ? AND numero_sorteo = ? AND modalidad = ?',
-      [fecha, numeroSorteo, modalidad]
+      'SELECT id FROM escrutinio_quiniela WHERE numero_sorteo = ? ORDER BY id DESC LIMIT 1',
+      [numeroSorteo]
     );
 
     const { totalPremios, totalGanadores, reportePorExtracto, ganadoresDetalle } = resultado;
@@ -122,12 +135,18 @@ async function guardarEscrutinioQuiniela(resultado, datosControlPrevio, usuario)
     if (existe.length > 0) {
       // Actualizar
       escrutinioId = existe[0].id;
+
+      // Limpiar duplicados históricos del mismo número
+      await limpiarDuplicadosEscrutinio('escrutinio_quiniela', 'quiniela', numeroSorteo, escrutinioId);
+
       await query(
         `UPDATE escrutinio_quiniela SET 
+          fecha = ?, numero_sorteo = ?, modalidad = ?,
           control_previo_id = ?, total_ganadores = ?, total_premios = ?,
           resumen_premios = ?, usuario_id = ?, usuario_nombre = ?, created_at = NOW()
          WHERE id = ?`,
-        [controlPrevioId, totalGanadores, totalPremios, JSON.stringify(resumenPremios),
+        [fecha, numeroSorteo, modalidad,
+          controlPrevioId, totalGanadores, totalPremios, JSON.stringify(resumenPremios),
           usuario?.id || null, usuario?.nombre || 'Sistema', escrutinioId]
       );
 
@@ -215,10 +234,10 @@ async function guardarEscrutinioPoceada(resultado, datosControlPrevio, usuario) 
       controlPrevioId = previoExistente[0].id;
     }
 
-    // Verificar si ya existe
+    // Verificar por número de sorteo (reemplazo global del mismo sorteo)
     const existe = await query(
-      'SELECT id FROM escrutinio_poceada WHERE fecha = ? AND numero_sorteo = ?',
-      [fecha, numeroSorteo]
+      'SELECT id FROM escrutinio_poceada WHERE numero_sorteo = ? ORDER BY id DESC LIMIT 1',
+      [numeroSorteo]
     );
 
     const { totalPremios, totalGanadores, porNivel, agenciero, porCantidadNumeros, extractoUsado } = resultado;
@@ -235,8 +254,13 @@ async function guardarEscrutinioPoceada(resultado, datosControlPrevio, usuario) 
 
     if (existe.length > 0) {
       escrutinioId = existe[0].id;
+
+      // Limpiar duplicados históricos del mismo número
+      await limpiarDuplicadosEscrutinio('escrutinio_poceada', 'poceada', numeroSorteo, escrutinioId);
+
       await query(
         `UPDATE escrutinio_poceada SET 
+          fecha = ?, numero_sorteo = ?,
           control_previo_id = ?, total_ganadores = ?, total_premios = ?,
           ganadores_8_aciertos = ?, premio_8_aciertos = ?,
           ganadores_7_aciertos = ?, premio_7_aciertos = ?,
@@ -245,6 +269,7 @@ async function guardarEscrutinioPoceada(resultado, datosControlPrevio, usuario) 
           resumen_premios = ?, usuario_id = ?, usuario_nombre = ?, created_at = NOW()
          WHERE id = ?`,
         [
+          fecha, numeroSorteo,
           controlPrevioId, totalGanadores, totalPremios,
           porNivel[8]?.ganadores || 0, porNivel[8]?.totalPremios || 0,
           porNivel[7]?.ganadores || 0, porNivel[7]?.totalPremios || 0,
@@ -621,10 +646,10 @@ async function guardarEscrutinioTombolina(resultado, datosControlPrevio, usuario
       controlPrevioId = previoExistente[0].id;
     }
 
-    // Verificar si ya existe
+    // Verificar por número de sorteo (reemplazo global del mismo sorteo)
     const existe = await query(
-      'SELECT id FROM escrutinio_tombolina WHERE fecha = ? AND numero_sorteo = ?',
-      [fecha, numeroSorteo]
+      'SELECT id FROM escrutinio_tombolina WHERE numero_sorteo = ? ORDER BY id DESC LIMIT 1',
+      [numeroSorteo]
     );
 
     const { totalPremios, totalGanadores, totalAgenciero, reporte, ganadoresDetalle, extracto } = resultado;
@@ -638,13 +663,19 @@ async function guardarEscrutinioTombolina(resultado, datosControlPrevio, usuario
 
     if (existe.length > 0) {
       escrutinioId = existe[0].id;
+
+      // Limpiar duplicados históricos del mismo número
+      await limpiarDuplicadosEscrutinio('escrutinio_tombolina', 'tombolina', numeroSorteo, escrutinioId);
+
       await query(
         `UPDATE escrutinio_tombolina SET 
+          fecha = ?, numero_sorteo = ?,
           control_previo_id = ?, total_ganadores = ?, total_premios = ?,
           total_agenciero = ?, resumen_premios = ?, 
           usuario_id = ?, usuario_nombre = ?, created_at = NOW()
          WHERE id = ?`,
         [
+          fecha, numeroSorteo,
           controlPrevioId, totalGanadores, totalPremios,
           totalAgenciero, resumenPremiosJSON,
           usuario?.id || null, usuario?.nombre || 'Sistema', escrutinioId
