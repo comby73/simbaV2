@@ -702,6 +702,44 @@ const listarControlPrevioGeneral = async (req, res) => {
       }
     }
 
+    // Deduplicar por juego + número de sorteo (evita inconsistencias históricas)
+    const porSorteo = new Map();
+
+    const toMs = (v) => {
+      const d = new Date(v || 0);
+      return Number.isNaN(d.getTime()) ? 0 : d.getTime();
+    };
+
+    const scoreFila = (row) => {
+      const numero = Number(row?.numero_sorteo || 0);
+      const rec = Number(row?.total_recaudacion || row?.recaudacion_total || row?.recaudacion || 0);
+      const tieneCpId = Number(row?.control_previo_id || 0) > 0 ? 1 : 0;
+      const modalidadValida = row?.juego === 'quiniela'
+        ? (['R', 'P', 'M', 'V', 'N'].includes(String(row?.modalidad || '').toUpperCase()) ? 1 : 0)
+        : 1;
+
+      return (
+        tieneCpId * 1000 +
+        (numero > 0 ? 200 : 0) +
+        (rec > 0 ? 100 : 0) +
+        modalidadValida * 10 +
+        toMs(row?.created_at) / 1e13
+      );
+    };
+
+    for (const row of resultados) {
+      const numero = Number(row?.numero_sorteo || 0);
+      const juegoRow = String(row?.juego || '').toLowerCase();
+      const key = `${juegoRow}:${numero > 0 ? numero : `id-${row?.id || Math.random()}`}`;
+
+      const actual = porSorteo.get(key);
+      if (!actual || scoreFila(row) > scoreFila(actual)) {
+        porSorteo.set(key, row);
+      }
+    }
+
+    resultados = Array.from(porSorteo.values());
+
     // Ordenar por fecha y limitar
     resultados.sort((a, b) => new Date(b.fecha) - new Date(a.fecha));
     resultados = resultados.slice(0, maxLimit);
