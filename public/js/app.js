@@ -5965,7 +5965,7 @@ function abrirModalCorreccionOrdenQuiniela(idx = null) {
     </div>
   `;
 
-  mostrarModalSimple('Corregir orden del extracto', contenido);
+  showModalSimple('Corregir orden del extracto', contenido);
 }
 
 function confirmarCorreccionOrdenQuiniela(idx = null) {
