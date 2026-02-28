@@ -253,6 +253,11 @@ REGLAS CRÍTICAS DE EXTRACCIÓN:
    - RESTO DE ARGENTINA (CABA, PBA, etc.): Cada número DEBE tener EXACTAMENTE 4 DÍGITOS.
 
 3. EXTRACCIÓN DE TABLA: Busca las 20 posiciones (puestos 1 al 20) y extrae el número ganador asociado.
+   - IMPORTANTE: Devuelve el array `numeros` SIEMPRE en orden de UBICACIÓN (1°, 2°, 3° ... 20°), nunca por orden visual de lectura.
+   - CASO ENTRE RÍOS (IAFAS / TÓMBOLA): suele venir en 2 columnas.
+     * Columna izquierda: ubicaciones 1° a 10°
+     * Columna derecha: ubicaciones 11° a 20°
+     * El JSON final debe quedar en orden 1°..20° (primero 1-10 y luego 11-20).
 
 4. MODALIDAD: Detecta si es LA PREVIA, LA PRIMERA, MATUTINA, VESPERTINA o NOCTURNA.
 

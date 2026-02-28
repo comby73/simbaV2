@@ -174,6 +174,41 @@ function normalizarLetras(letras) {
   return letrasArr.length > 0 ? JSON.stringify(letrasArr) : null;
 }
 
+async function buscarExtractosExistentes(conn, {
+  juegoId,
+  sorteoId,
+  fechaSorteo,
+  nroFinal,
+  provinciaId
+}) {
+  if (Number(nroFinal) > 0) {
+    const [rows] = await conn.query(
+      `SELECT id
+       FROM extractos
+       WHERE juego_id = ?
+         AND numero_sorteo = ?
+         AND (provincia_id = ? OR (provincia_id IS NULL AND ? IS NULL))
+       ORDER BY updated_at DESC, id DESC`,
+      [juegoId, nroFinal, provinciaId, provinciaId]
+    );
+    return rows;
+  }
+
+  const [rows] = await conn.query(
+    `SELECT id
+     FROM extractos
+     WHERE juego_id = ?
+       AND sorteo_id = ?
+       AND fecha = ?
+       AND numero_sorteo = ?
+       AND (provincia_id = ? OR (provincia_id IS NULL AND ? IS NULL))
+     ORDER BY updated_at DESC, id DESC`,
+    [juegoId, sorteoId, fechaSorteo, nroFinal, provinciaId, provinciaId]
+  );
+
+  return rows;
+}
+
 /**
  * Guardar un extracto (desde OCR, XML o manual)
  * POST /api/extractos
@@ -220,17 +255,39 @@ const guardarExtracto = async (req, res, next) => {
     }
 
     // 5. Guardar/Actualizar
-    const [existente] = await conn.query(
-      `SELECT id FROM extractos WHERE juego_id = ? AND sorteo_id = ? AND fecha = ? AND numero_sorteo = ? AND (provincia_id = ? OR (provincia_id IS NULL AND ? IS NULL))`,
-      [juegoId, sorteoId, fechaSorteo, nroFinal, provinciaId, provinciaId]
-    );
+    const existentes = await buscarExtractosExistentes(conn, {
+      juegoId,
+      sorteoId,
+      fechaSorteo,
+      nroFinal,
+      provinciaId
+    });
 
-    if (existente.length > 0) {
+    if (existentes.length > 0) {
+      const idPrincipal = existentes[0].id;
       await conn.query(
-        `UPDATE extractos SET numeros = ?, letras = ?, fuente = ?, updated_at = NOW() WHERE id = ?`,
-        [JSON.stringify(numeros), letrasJson, fuente || 'OCR', existente[0].id]
+        `UPDATE extractos
+         SET sorteo_id = ?,
+             numero_sorteo = ?,
+             fecha = ?,
+             provincia_id = ?,
+             numeros = ?,
+             letras = ?,
+             fuente = ?,
+             updated_at = NOW()
+         WHERE id = ?`,
+        [sorteoId, nroFinal, fechaSorteo, provinciaId, JSON.stringify(numeros), letrasJson, fuente || 'OCR', idPrincipal]
       );
-      return successResponse(res, { id: existente[0].id, updated: true }, 'Extracto actualizado');
+
+      if (existentes.length > 1) {
+        const idsDuplicados = existentes.slice(1).map((row) => row.id);
+        await conn.query(
+          `DELETE FROM extractos WHERE id IN (${idsDuplicados.map(() => '?').join(',')})`,
+          idsDuplicados
+        );
+      }
+
+      return successResponse(res, { id: idPrincipal, updated: true, mergedDuplicates: Math.max(0, existentes.length - 1) }, 'Extracto actualizado');
     }
 
     const [result] = await conn.query(
@@ -309,18 +366,42 @@ const guardarExtractosBulk = async (req, res, next) => {
         }
 
         // 5. Verificar duplicado
-        const [existente] = await conn.query(
-          `SELECT id FROM extractos WHERE juego_id = ? AND sorteo_id = ? AND fecha = ? AND numero_sorteo = ? AND (provincia_id = ? OR (provincia_id IS NULL AND ? IS NULL))`,
-          [juegoId, sorteoId, fechaSorteo, nroFinal, provinciaId, provinciaId]
-        );
+        const existentes = await buscarExtractosExistentes(conn, {
+          juegoId,
+          sorteoId,
+          fechaSorteo,
+          nroFinal,
+          provinciaId
+        });
 
-        if (existente.length > 0) {
+        if (existentes.length > 0) {
+          const idPrincipal = existentes[0].id;
           await conn.query(
-            `UPDATE extractos SET numeros = ?, letras = ?, fuente = ?, updated_at = NOW() WHERE id = ?`,
-            [JSON.stringify(numeros), letrasJson, fuente || 'OCR', existente[0].id]
+            `UPDATE extractos
+             SET sorteo_id = ?,
+                 numero_sorteo = ?,
+                 fecha = ?,
+                 provincia_id = ?,
+                 numeros = ?,
+                 letras = ?,
+                 fuente = ?,
+                 updated_at = NOW()
+             WHERE id = ?`,
+            [sorteoId, nroFinal, fechaSorteo, provinciaId, JSON.stringify(numeros), letrasJson, fuente || 'OCR', idPrincipal]
           );
+
+          let mergedDuplicates = 0;
+          if (existentes.length > 1) {
+            const idsDuplicados = existentes.slice(1).map((row) => row.id);
+            await conn.query(
+              `DELETE FROM extractos WHERE id IN (${idsDuplicados.map(() => '?').join(',')})`,
+              idsDuplicados
+            );
+            mergedDuplicates = idsDuplicados.length;
+          }
+
           guardados++;
-          resultados.push({ id: existente[0].id, updated: true, provincia, modalidad, fecha: fechaSorteo, numero_sorteo: nroFinal, juego: juego || 'Quiniela' });
+          resultados.push({ id: idPrincipal, updated: true, mergedDuplicates, provincia, modalidad, fecha: fechaSorteo, numero_sorteo: nroFinal, juego: juego || 'Quiniela' });
         } else {
           const [result] = await conn.query(
             `INSERT INTO extractos (juego_id, sorteo_id, numero_sorteo, fecha, provincia_id, numeros, letras, fuente, usuario_id)

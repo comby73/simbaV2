@@ -6558,12 +6558,7 @@ async function procesarArchivoImagenInteligente(archivo) {
 
   const fecha = metadataArchivo.fecha || data.fecha || fechaSorteoActual || new Date().toISOString().split('T')[0];
   const modalidad = modalidadFinal;
-  const esEntreRios = String(codigoProvinciaFinal || '') === '59';
-  const numerosNormalizados = esEntreRios ? intercambiarMitadesOrden20(data.numeros || []) : (data.numeros || []);
-
-  if (esEntreRios && Array.isArray(data.numeros) && data.numeros.length >= 20) {
-    console.log(`[OCR] Ajuste automático de orden aplicado a Entre Ríos (imagen): ${archivo.name}`);
-  }
+  const numerosNormalizados = data.numeros || [];
 
   // Umbral de 18 para tolerar hasta 2 posiciones no parseadas en PDFs/imágenes con ruido
   // Umbral normal: 18. Si la provincia viene confirmada del nombre de archivo y tenemos >=10, acepta con advertencia
@@ -6719,12 +6714,7 @@ async function procesarArchivoPDFInteligente(archivo) {
 
   const fecha = metadataArchivo.fecha || data.fecha || fechaSorteoActual || new Date().toISOString().split('T')[0];
   const modalidad = modalidadFinal;
-  const esEntreRios = String(codigoProvinciaFinal || '') === '59';
-  const numerosNormalizados = esEntreRios ? intercambiarMitadesOrden20(data.numeros || []) : (data.numeros || []);
-
-  if (esEntreRios && Array.isArray(data.numeros) && data.numeros.length >= 20) {
-    console.log(`[OCR] Ajuste automático de orden aplicado a Entre Ríos (PDF): ${archivo.name}`);
-  }
+  const numerosNormalizados = data.numeros || [];
 
   // Umbral normal: 18. Si la provincia viene confirmada del nombre de archivo y tenemos >=10, acepta con advertencia
   const umbralMinimoPDF = (metadataArchivo.codigoProvincia && numerosNormalizados.length >= 10) ? 10 : 18;
