@@ -13685,6 +13685,23 @@ function exportarControlPrevioCSV() {
 // =============================================
 
 function obtenerTotalRecaudacionEscrutinio(item) {
+  const obtenerEnRuta = (obj, ruta) => {
+    if (!obj || !ruta) return undefined;
+    const partes = ruta.split('.');
+    let actual = obj;
+    for (const parte of partes) {
+      if (actual === null || actual === undefined) return undefined;
+      actual = actual[parte];
+    }
+    return actual;
+  };
+
+  const normalizarNumero = (valor) => {
+    if (valor === null || valor === undefined || valor === '') return null;
+    const numero = Number(String(valor).replace(',', '.'));
+    return Number.isFinite(numero) ? numero : null;
+  };
+
   const candidatos = [
     item?.total_recaudacion,
     item?.totalRecaudacion,
@@ -13694,9 +13711,39 @@ function obtenerTotalRecaudacionEscrutinio(item) {
   ];
 
   for (const valor of candidatos) {
-    if (valor === null || valor === undefined || valor === '') continue;
-    const numero = Number(String(valor).replace(',', '.'));
-    if (Number.isFinite(numero)) return numero;
+    const numero = normalizarNumero(valor);
+    if (numero !== null) return numero;
+  }
+
+  const jsonCandidatos = [item?.datos_json, item?.datos_adicionales, item?.resumen_premios];
+  const rutas = [
+    'resumen.recaudacion',
+    'resumen.recaudacionTotal',
+    'resumen.totalRecaudacion',
+    'recaudacion',
+    'recaudacionTotal',
+    'totalRecaudacion',
+    'total_recaudacion',
+    'comparacion.recaudacion.controlPosterior',
+    'comparacion.recaudacion.controlPrevio'
+  ];
+
+  for (const raw of jsonCandidatos) {
+    if (!raw) continue;
+
+    let obj = raw;
+    if (typeof raw === 'string') {
+      try {
+        obj = JSON.parse(raw);
+      } catch (e) {
+        continue;
+      }
+    }
+
+    for (const ruta of rutas) {
+      const numero = normalizarNumero(obtenerEnRuta(obj, ruta));
+      if (numero !== null) return numero;
+    }
   }
 
   return 0;
@@ -13712,7 +13759,7 @@ async function buscarEscrutinios() {
   const emptyMsg = document.getElementById('historial-escrutinio-empty');
 
   try {
-    tbody.innerHTML = '<tr><td colspan="10" class="text-center"><i class="fas fa-spinner fa-spin"></i> Cargando...</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="9" class="text-center"><i class="fas fa-spinner fa-spin"></i> Cargando...</td></tr>';
     emptyMsg.classList.add('hidden');
 
     let url = `${API_BASE}/historial/escrutinios?`;
@@ -13753,7 +13800,6 @@ async function buscarEscrutinios() {
         <td class="text-end">${formatNumber(item.total_ganadores)}</td>
         <td class="text-end text-success"><strong>$${formatNumber(item.total_premios)}</strong></td>
         <td class="text-end text-primary"><strong>$${formatNumber(totalRecaudacion)}</strong></td>
-        <td>${item.usuario_nombre || '-'}</td>
         <td>${formatDate(item.fecha)}</td>
         <td>
           <button class="btn btn-sm btn-secondary" onclick="verDetalleEscrutinio(${item.id}, '${item.juego}')" title="Ver detalle">
@@ -13768,7 +13814,7 @@ async function buscarEscrutinios() {
 
   } catch (error) {
     console.error('Error cargando escrutinios:', error);
-    tbody.innerHTML = '<tr><td colspan="10" class="text-center text-danger">Error cargando datos</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="9" class="text-center text-danger">Error cargando datos</td></tr>';
   }
 }
 
@@ -13999,7 +14045,7 @@ function exportarEscrutiniosCSV() {
     return;
   }
 
-  const headers = ['Fecha', 'Sorteo', 'Modalidad', 'Juego', 'Ganadores', 'Premios', 'Recaudacion', 'Usuario'];
+  const headers = ['Fecha', 'Sorteo', 'Modalidad', 'Juego', 'Ganadores', 'Premios', 'Recaudacion'];
   const rows = escrutiniosData.map(item => [
     item.fecha,
     item.numero_sorteo,
@@ -14007,8 +14053,7 @@ function exportarEscrutiniosCSV() {
     item.juego,
     item.total_ganadores || 0,
     item.total_premios || 0,
-    obtenerTotalRecaudacionEscrutinio(item),
-    item.usuario_nombre || ''
+    obtenerTotalRecaudacionEscrutinio(item)
   ]);
 
   const csvContent = [headers.join(','), ...rows.map(r => r.join(','))].join('\n');
