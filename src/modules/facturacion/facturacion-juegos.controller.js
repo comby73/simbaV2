@@ -134,6 +134,21 @@ async function obtenerDesgloseQuini6Dinamico(fecha_inicio, fecha_fin) {
   ]);
 }
 
+async function resolverColumnaFechaControlPrevioAgencias() {
+  const cols = await query(`
+    SELECT COLUMN_NAME
+    FROM INFORMATION_SCHEMA.COLUMNS
+    WHERE TABLE_SCHEMA = DATABASE()
+      AND TABLE_NAME = 'control_previo_agencias'
+      AND COLUMN_NAME IN ('fecha', 'fecha_sorteo')
+  `);
+
+  const disponibles = new Set((cols || []).map(c => c.COLUMN_NAME));
+  if (disponibles.has('fecha')) return 'fecha';
+  if (disponibles.has('fecha_sorteo')) return 'fecha_sorteo';
+  return null;
+}
+
 // ============================================================
 // CONFIGURACIÓN SAP POR JUEGO
 // caba:  [material_completo, material_reducido]
@@ -255,6 +270,14 @@ const getFacturacionJuegosUTE = async (req, res) => {
       });
     }
 
+    const colFechaCPA = await resolverColumnaFechaControlPrevioAgencias();
+    if (!colFechaCPA) {
+      return res.status(500).json({
+        success: false,
+        message: "No se encontró columna de fecha en control_previo_agencias (esperada: 'fecha' o 'fecha_sorteo')"
+      });
+    }
+
     // --- Consulta: recaudación agrupada por juego y canal ---
     const sql = `
       SELECT
@@ -275,7 +298,7 @@ const getFacturacionJuegosUTE = async (req, res) => {
         SUM(cpa.total_recaudacion) AS rec_total,
         COUNT(DISTINCT cpa.numero_sorteo) AS cant_sorteos
       FROM control_previo_agencias cpa
-      WHERE cpa.fecha >= ? AND cpa.fecha <= ?
+      WHERE cpa.${colFechaCPA} >= ? AND cpa.${colFechaCPA} <= ?
       GROUP BY LOWER(TRIM(cpa.juego))
       ORDER BY LOWER(TRIM(cpa.juego))
     `;
@@ -302,6 +325,7 @@ const getFacturacionJuegosUTE = async (req, res) => {
               caba: "codigo_provincia='51' y codigo_agencia NOT IN ('88880','5188880')",
               provincias: "codigo_provincia != '51'"
             },
+            columnaFechaControlPrevioAgencias: colFechaCPA,
             mapeoExcel: {
               hoja1: 'mensual gral. / Hoja1: detalle por juego y canal (recaudación + billing neto)',
               totalGral: 'Tarjeta de totales y subtotal HES',
@@ -600,6 +624,7 @@ const getFacturacionJuegosUTE = async (req, res) => {
             caba: "codigo_provincia='51' y codigo_agencia NOT IN ('88880','5188880')",
             provincias: "codigo_provincia != '51'"
           },
+          columnaFechaControlPrevioAgencias: colFechaCPA,
           mapeoExcel: {
             hoja1: 'mensual gral. / Hoja1: detalle por juego y canal (recaudación + billing neto)',
             totalGral: 'Tarjeta de totales y subtotal HES',

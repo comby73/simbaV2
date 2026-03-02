@@ -380,3 +380,17 @@ const juegosOfflineAPI = {
     }
   }
 };
+
+// Compatibilidad con versiones anteriores cacheadas del frontend
+if (!juegosOfflineAPI.facturacionJuegos) {
+  juegosOfflineAPI.facturacionJuegos = {
+    getUTE: (params = {}) => {
+      const q = new URLSearchParams(params).toString();
+      return apiRequest(`/facturacion/juegos-ute${q ? `?${q}` : ''}`);
+    }
+  };
+}
+
+window.juegosOfflineAPI = juegosOfflineAPI;
+window.API = window.API || {};
+window.API.facturacionJuegos = juegosOfflineAPI.facturacionJuegos;
