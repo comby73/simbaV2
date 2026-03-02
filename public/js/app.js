@@ -14824,11 +14824,21 @@ async function calcularFacturacionJuegosUTE() {
   document.getElementById('fjg-resultados')?.classList.add('hidden');
 
   try {
-    const resp = await juegosOfflineAPI.facturacionJuegos.getUTE({
+    const params = {
       fecha_inicio: fechaInicio,
-      fecha_fin:    fechaFin,
+      fecha_fin: fechaFin,
       tope
-    });
+    };
+
+    const clienteUTE = juegosOfflineAPI?.facturacionJuegos?.getUTE;
+    let resp;
+
+    if (typeof clienteUTE === 'function') {
+      resp = await clienteUTE(params);
+    } else {
+      const q = new URLSearchParams(params).toString();
+      resp = await apiRequest(`/facturacion/juegos-ute${q ? `?${q}` : ''}`);
+    }
 
     if (!resp.success) throw new Error(resp.message || 'Error calculando facturación');
 

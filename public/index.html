@@ -3421,25 +3421,27 @@
       <!-- ======================================================== -->
       <section id="view-facturacion-juegos" class="view hidden fjg-view">
         <div class="page-header">
-          <h1><i class="fas fa-receipt"></i> Facturación Juegos Nacionales</h1>
-          <p class="fjg-subtitle">Cálculo UTE desde Control Previo con salida para detalle y HES general</p>
+          <div>
+            <h1><i class="fas fa-receipt"></i> Facturación Juegos Nacionales</h1>
+            <p class="fjg-subtitle">Cálculo UTE desde Control Previo con salida para detalle y HES general</p>
+          </div>
         </div>
 
         <!-- Filtros -->
-        <div class="card fjg-card" style="margin-bottom:1.5rem;">
+        <div class="card fjg-card" style="margin-bottom:1.5rem; border-left:4px solid var(--primary);">
           <div class="card-body">
             <div class="fjg-filter-grid">
               <div class="form-group" style="flex:1; min-width:160px;">
-                <label class="form-label">Fecha Inicio</label>
-                <input type="date" id="fjg-fecha-inicio" class="form-input">
+                <label>Fecha Inicio</label>
+                <input type="date" id="fjg-fecha-inicio" class="form-control">
               </div>
               <div class="form-group" style="flex:1; min-width:160px;">
-                <label class="form-label">Fecha Fin</label>
-                <input type="date" id="fjg-fecha-fin" class="form-input">
+                <label>Fecha Fin</label>
+                <input type="date" id="fjg-fecha-fin" class="form-control">
               </div>
               <div class="form-group" style="flex:1; min-width:180px;">
-                <label class="form-label">Tope Estipulado ($)</label>
-                <input type="number" id="fjg-tope" class="form-input" value="105000000" step="1000000">
+                <label>Tope Estipulado ($)</label>
+                <input type="number" id="fjg-tope" class="form-control" value="105000000" step="1000000">
               </div>
               <div class="fjg-actions" style="flex:0 0 auto; padding-bottom:0.1rem;">
                 <button class="btn btn-primary" onclick="calcularFacturacionJuegosUTE()">
@@ -3542,7 +3544,7 @@
               <h3 class="card-title"><i class="fas fa-table-cells-large"></i> Cuadro UTE - Total Gral.</h3>
             </div>
             <div class="card-body" style="overflow-x:auto;">
-              <table class="data-table" id="fjg-tabla-total-gral">
+              <table class="table" id="fjg-tabla-total-gral">
                 <thead>
                   <tr>
                     <th>Canal</th>
@@ -3575,7 +3577,7 @@
               </div>
             </div>
             <div class="card-body" style="overflow-x:auto;">
-              <table class="data-table" id="fjg-tabla-detalle">
+              <table class="table" id="fjg-tabla-detalle">
                 <thead>
                   <tr>
                     <th>Juego</th>
@@ -3613,7 +3615,7 @@
               Formato HES simplificado (Hoja1): columnas <strong>B, C, D, F, H</strong>.
             </div>
             <div class="card-body" style="overflow-x:auto;">
-              <table class="data-table" id="fjg-tabla-sap" style="font-size:0.85rem;">
+              <table class="table" id="fjg-tabla-sap" style="font-size:0.85rem;">
                 <thead>
                   <tr>
                     <th>B - Descripción</th>
@@ -3713,9 +3715,9 @@
   <!-- Config local (API keys) - debe cargarse primero, no se sube a git -->
   <script src="js/config.local.js" onerror="console.warn('config.local.js no encontrado - usando config por defecto')"></script>
   <script src="js/config.js?v=20260206g"></script>
-  <script src="js/api.js?v=20260227b"></script>
-  <script src="js/ocr-extractos.js?v=20260228b"></script>
-  <script src="js/app.js?v=20260228e"></script>
+  <script src="js/api.js?v=20260302a"></script>
+  <script src="js/ocr-extractos.js?v=20260302a"></script>
+  <script src="js/app.js?v=20260302a"></script>
 </body>
 
 </html>
