@@ -241,6 +241,9 @@ function navigateTo(view) {
     case 'juegos-offline':
       initJuegosOffline();
       break;
+    case 'facturacion-juegos':
+      initFacturacionJuegos();
+      break;
   }
 }
 
@@ -5637,20 +5640,36 @@ const PALABRAS_IGNORAR_LETRAS = new Set([
 
 // Extraer letras del sorteo (solo para extractos que tienen sección explícita de letras)
 function extraerLetrasDeTexto(texto) {
+  const normalizarLetrasUnicas = (arr = []) => {
+    const resultado = [];
+    const vistas = new Set();
+
+    for (const raw of arr) {
+      const letra = String(raw || '').toUpperCase().trim().charAt(0);
+      if (!/^[A-Z]$/.test(letra)) continue;
+      if (vistas.has(letra)) continue;
+      vistas.add(letra);
+      resultado.push(letra);
+      if (resultado.length >= 4) break;
+    }
+
+    return resultado;
+  };
+
   // Buscar sección explícita de letras: Único caso válido sin ambigüedad
-  const matchSeccion = texto.match(/(?:CLAVE\s+DE\s+LETRAS|LETRAS\s*GANADORAS|LETRAS)[:\s]+([A-P]\s+[A-P]\s+[A-P]\s+[A-P])/i);
+  const matchSeccion = texto.match(/(?:CLAVE\s+DE\s+LETRAS|LETRAS\s*GANADORAS|LETRAS)[:\s]+([A-Z]\s+[A-Z]\s+[A-Z]\s+[A-Z])/i);
   if (matchSeccion) {
-    return matchSeccion[1].replace(/\s+/g, '').split('');
+    return normalizarLetrasUnicas(matchSeccion[1].replace(/\s+/g, '').split(''));
   }
 
   // Buscar 4 letras separadas por espacios (formato típico del extracto cuando hay letras)
-  const matchEspaciados = texto.match(/\b([A-P])\s+([A-P])\s+([A-P])\s+([A-P])\b/);
+  const matchEspaciados = texto.match(/\b([A-Z])\s+([A-Z])\s+([A-Z])\s+([A-Z])\b/);
   if (matchEspaciados) {
     // Solo aceptar si aparece en contexto de "letra" o al final del documento
     const posMatch = texto.indexOf(matchEspaciados[0]);
     const contexto = texto.slice(Math.max(0, posMatch - 60), posMatch + 20);
     if (/letra|clave/i.test(contexto)) {
-      return [matchEspaciados[1], matchEspaciados[2], matchEspaciados[3], matchEspaciados[4]];
+      return normalizarLetrasUnicas([matchEspaciados[1], matchEspaciados[2], matchEspaciados[3], matchEspaciados[4]]);
     }
   }
 
@@ -14759,4 +14778,376 @@ function copiarLineasSAP() {
     showToast('Error al copiar', 'error');
     console.error(err);
   });
+}
+
+// ============================================================
+// FACTURACIÓN JUEGOS NACIONALES UTE
+// ============================================================
+
+// Helper moneda para esta sección
+function formatCurrency(val) {
+  return '$' + Number(val || 0).toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
+
+// Datos globales del último cálculo
+let _fjgDatosUTE = null;
+let _fjgCompacto = false;
+
+function toggleVistaCompactaFacturacionJuegos() {
+  _fjgCompacto = !_fjgCompacto;
+
+  const view = document.getElementById('view-facturacion-juegos');
+  const btn = document.getElementById('fjg-btn-compact');
+  if (!view || !btn) return;
+
+  view.classList.toggle('fjg-compact', _fjgCompacto);
+  btn.innerHTML = _fjgCompacto
+    ? '<i class="fas fa-expand-alt"></i> Vista normal'
+    : '<i class="fas fa-compress-alt"></i> Vista compacta';
+}
+
+async function calcularFacturacionJuegosUTE() {
+  const fechaInicio = document.getElementById('fjg-fecha-inicio')?.value;
+  const fechaFin    = document.getElementById('fjg-fecha-fin')?.value;
+  const tope        = document.getElementById('fjg-tope')?.value || '105000000';
+
+  if (!fechaInicio || !fechaFin) {
+    showToast('Seleccioná fecha inicio y fecha fin', 'warning');
+    return;
+  }
+  if (fechaInicio > fechaFin) {
+    showToast('La fecha inicio no puede ser mayor que la fecha fin', 'warning');
+    return;
+  }
+
+  document.getElementById('fjg-loading')?.classList.remove('hidden');
+  document.getElementById('fjg-resultados')?.classList.add('hidden');
+
+  try {
+    const resp = await juegosOfflineAPI.facturacionJuegos.getUTE({
+      fecha_inicio: fechaInicio,
+      fecha_fin:    fechaFin,
+      tope
+    });
+
+    if (!resp.success) throw new Error(resp.message || 'Error calculando facturación');
+
+    _fjgDatosUTE = resp.data;
+    renderFacturacionJuegosUTE(resp.data);
+
+  } catch (err) {
+    showToast('Error: ' + err.message, 'error');
+    console.error('[FJG]', err);
+  } finally {
+    document.getElementById('fjg-loading')?.classList.add('hidden');
+  }
+}
+
+function renderFacturacionJuegosUTE(data) {
+  renderOrigenFacturacionJuegos(data);
+  renderFlujoTotalGralFacturacionJuegos(data);
+  renderCuadroTotalGralFacturacionJuegos(data);
+
+  // --- Cards resumen ---
+  document.getElementById('fjg-total-recaudacion').textContent = formatCurrency(data.totalRecaudacion);
+  document.getElementById('fjg-tope-display').textContent       = formatCurrency(data.tope);
+  document.getElementById('fjg-excedente').textContent          = formatCurrency(data.excedenteSobreTope);
+  document.getElementById('fjg-subtotal-hes').textContent       = formatCurrency(data.subtotalHES || data.totalBillingNeto);
+  document.getElementById('fjg-iva').textContent                = formatCurrency(data.ivaTotal);
+  document.getElementById('fjg-total-con-iva').textContent      = formatCurrency(data.totalConIVA);
+
+  // --- Tabla detalle por juego ---
+  const tbody = document.getElementById('fjg-tabla-body');
+  const tfoot = document.getElementById('fjg-tabla-foot');
+  tbody.innerHTML = '';
+  tfoot.innerHTML = '';
+
+  if (!data.juegos || data.juegos.length === 0) {
+    tbody.innerHTML = `<tr><td colspan="10" class="text-center text-muted">Sin datos para el período seleccionado</td></tr>`;
+  } else {
+    let totRCABA = 0, totRProv = 0, totRInt = 0, totRTotal = 0;
+    let totBCABA = 0, totBProv = 0, totBInt = 0, totBTotal = 0;
+
+    for (const j of data.juegos) {
+      const bCABA = j.billing.caba?.total_neto  || 0;
+      const bProv = j.billing.provincias?.total_neto || 0;
+      const bInt  = j.billing.internet?.total_neto  || 0;
+      const bTot  = j.billing.total_neto;
+
+      totRCABA  += j.recaudacion.caba;
+      totRProv  += j.recaudacion.provincias;
+      totRInt   += j.recaudacion.internet;
+      totRTotal += j.recaudacion.total;
+      totBCABA  += bCABA;
+      totBProv  += bProv;
+      totBInt   += bInt;
+      totBTotal += bTot;
+
+      const notaHtml = j.nota
+        ? `<br><small class="text-muted"><i class="fas fa-info-circle"></i> ${j.nota}</small>`
+        : '';
+
+      const tr = document.createElement('tr');
+      tr.className = 'fjg-row-juego';
+      tr.innerHTML = `
+        <td>
+          <strong>${j.nombre}</strong>
+          <small class="text-muted" style="display:block;">${j.cant_sorteos} sorteo(s)</small>
+          ${notaHtml}
+        </td>
+        <td class="text-right">${j.recaudacion.caba     > 0 ? formatCurrency(j.recaudacion.caba)     : '—'}</td>
+        <td class="text-right">${j.recaudacion.provincias > 0 ? formatCurrency(j.recaudacion.provincias) : '—'}</td>
+        <td class="text-right">${j.recaudacion.internet  > 0 ? formatCurrency(j.recaudacion.internet)  : '—'}</td>
+        <td class="text-right"><strong>${formatCurrency(j.recaudacion.total)}</strong></td>
+        <td class="text-right">${bCABA > 0 ? formatCurrency(bCABA) : '—'}</td>
+        <td class="text-right">${bProv > 0 ? formatCurrency(bProv) : '—'}</td>
+        <td class="text-right">${bInt  > 0 ? formatCurrency(bInt)  : '—'}</td>
+        <td class="text-right fjg-total-cell">${formatCurrency(bTot)}</td>
+        <td></td>
+      `;
+      tbody.appendChild(tr);
+    }
+
+    // Fila totales
+    tfoot.innerHTML = `
+      <tr class="fjg-total-row">
+        <td>TOTALES</td>
+        <td class="text-right">${formatCurrency(totRCABA)}</td>
+        <td class="text-right">${formatCurrency(totRProv)}</td>
+        <td class="text-right">${formatCurrency(totRInt)}</td>
+        <td class="text-right">${formatCurrency(totRTotal)}</td>
+        <td class="text-right">${formatCurrency(totBCABA)}</td>
+        <td class="text-right">${formatCurrency(totBProv)}</td>
+        <td class="text-right">${formatCurrency(totBInt)}</td>
+        <td class="text-right fjg-total-cell">${formatCurrency(totBTotal)}</td>
+        <td></td>
+      </tr>
+    `;
+  }
+
+  // --- Tabla SAP ---
+  renderTablaLineasSAPJuegos(data.lineasSAP || []);
+
+  document.getElementById('fjg-resultados')?.classList.remove('hidden');
+}
+
+function renderTablaLineasSAPJuegos(lineas) {
+  const tbody = document.getElementById('fjg-sap-body');
+  const tfoot = document.getElementById('fjg-sap-foot');
+  tbody.innerHTML = '';
+  tfoot.innerHTML = '';
+
+  if (!lineas || lineas.length === 0) {
+    tbody.innerHTML = `<tr><td colspan="5" class="text-center text-muted">Sin líneas SAP</td></tr>`;
+    return;
+  }
+
+  let totalImporte = 0;
+
+  lineas.forEach((l) => {
+    totalImporte += l.redondeado || 0;
+
+    const tr = document.createElement('tr');
+    const refSap = `${l.material || '-'} / ${l.centro || '-'}`;
+    tr.innerHTML = `
+      <td style="max-width:320px;">${l.descripcion}</td>
+      <td class="text-center">${l.cantidad}</td>
+      <td class="text-center">${l.unidad}</td>
+      <td class="text-right"><strong>${formatCurrencyExact(l.redondeado)}</strong></td>
+      <td>${refSap}</td>
+    `;
+    tbody.appendChild(tr);
+  });
+
+  tfoot.innerHTML = `
+    <tr class="fjg-total-row">
+      <td colspan="3">SUBTOTAL HES</td>
+      <td class="text-right">${formatCurrencyExact(totalImporte)}</td>
+      <td></td>
+    </tr>
+  `;
+}
+
+function renderOrigenFacturacionJuegos(data) {
+  const fuenteEl = document.getElementById('fjg-fuente-principal');
+  const periodoEl = document.getElementById('fjg-fuente-periodo');
+  if (!fuenteEl || !periodoEl || !data) return;
+
+  const origen = data.origenDatos || {};
+  const fuente = origen.fuente || 'control_previo_agencias';
+  fuenteEl.textContent = `${fuente} (BD)`;
+  periodoEl.textContent = `Período: ${data.periodo?.inicio || '—'} a ${data.periodo?.fin || '—'}`;
+}
+
+function renderFlujoTotalGralFacturacionJuegos(data) {
+  const flujo = data?.flujoTotalGral;
+  if (!flujo) return;
+
+  const setText = (id, value) => {
+    const el = document.getElementById(id);
+    if (el) el.textContent = value;
+  };
+
+  const pct = (val) => `${((Number(val) || 0) * 100).toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}%`;
+
+  setText('fjg-flow-caba-rec', formatCurrency(flujo.onLineCapitalFederal?.recaudacion || 0));
+  setText('fjg-flow-int-rec', formatCurrency(flujo.internetCapitalFederal?.recaudacion || 0));
+  setText('fjg-flow-prov-rec', formatCurrency(flujo.consolidacionProvincias?.recaudacion || 0));
+
+  setText('fjg-flow-caba-part', `Participación: ${pct(flujo.onLineCapitalFederal?.participacion)}`);
+  setText('fjg-flow-int-part', `Participación: ${pct(flujo.internetCapitalFederal?.participacion)}`);
+  setText('fjg-flow-prov-part', `Participación: ${pct(flujo.consolidacionProvincias?.participacion)}`);
+}
+
+function renderCuadroTotalGralFacturacionJuegos(data) {
+  const tbody = document.getElementById('fjg-total-gral-body');
+  const tfoot = document.getElementById('fjg-total-gral-foot');
+  if (!tbody || !tfoot) return;
+
+  tbody.innerHTML = '';
+  tfoot.innerHTML = '';
+
+  const filas = data?.cuadroTotalGral?.filas || [];
+  const tot = data?.cuadroTotalGral?.totales || {};
+
+  if (!filas.length) {
+    tbody.innerHTML = '<tr><td colspan="8" class="text-center text-muted">Sin datos</td></tr>';
+    return;
+  }
+
+  const fmtPct = (val) => `${((Number(val) || 0) * 100).toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}%`;
+
+  for (const f of filas) {
+    const tr = document.createElement('tr');
+    tr.innerHTML = `
+      <td><strong>${f.canal}</strong></td>
+      <td class="text-right">${formatCurrency(f.recaudacion)}</td>
+      <td class="text-right">${fmtPct(f.participacion)}</td>
+      <td class="text-right">${formatCurrency(f.dentroTope)}</td>
+      <td class="text-right">${formatCurrency(f.sobreTope)}</td>
+      <td class="text-right">${formatCurrency(f.importeDentroTope)}</td>
+      <td class="text-right">${formatCurrency(f.importeSobreTope)}</td>
+      <td class="text-right fjg-total-cell">${formatCurrency(f.totalNeto)}</td>
+    `;
+    tbody.appendChild(tr);
+  }
+
+  tfoot.innerHTML = `
+    <tr class="fjg-total-row">
+      <td>TOTALES</td>
+      <td class="text-right">${formatCurrency(tot.recaudacion || 0)}</td>
+      <td class="text-right">${fmtPct(tot.participacion || 0)}</td>
+      <td class="text-right">${formatCurrency(tot.dentroTope || 0)}</td>
+      <td class="text-right">${formatCurrency(tot.sobreTope || 0)}</td>
+      <td class="text-right">${formatCurrency(tot.importeDentroTope || 0)}</td>
+      <td class="text-right">${formatCurrency(tot.importeSobreTope || 0)}</td>
+      <td class="text-right fjg-total-cell">${formatCurrency(tot.totalNeto || 0)}</td>
+    </tr>
+  `;
+}
+
+function copiarLineasSAPJuegos() {
+  if (!_fjgDatosUTE?.lineasSAP?.length) {
+    showToast('No hay líneas SAP para copiar', 'warning');
+    return;
+  }
+
+  const lineas = _fjgDatosUTE.lineasSAP;
+  // Formato Hoja1 columnas B, C, D, F, H
+  const cabecera = 'B_Descripcion\tC_Cantidad\tD_UM\tF_Importe\tH_Ref_SAP';
+  const filas = lineas.map(l =>
+    `${l.descripcion}\t${l.cantidad}\t${l.unidad}\t${(l.redondeado || 0).toFixed(3)}\t${l.material || '-'} / ${l.centro || '-'}`
+  );
+  const texto = [cabecera, ...filas].join('\n');
+
+  navigator.clipboard.writeText(texto).then(() => {
+    showToast(`${lineas.length} líneas SAP copiadas al portapapeles`, 'success');
+  }).catch(() => showToast('Error al copiar', 'error'));
+}
+
+function exportarBillingJuegosCSV() {
+  if (!_fjgDatosUTE?.juegos?.length) {
+    showToast('No hay datos para exportar', 'warning');
+    return;
+  }
+  const d = _fjgDatosUTE;
+  const rows = [
+    ['Juego', 'Recaud.CABA', 'Recaud.Provincias', 'Recaud.Internet', 'Recaud.Total',
+     'Billing.CABA', 'Billing.Provincias', 'Billing.Internet', 'Total.Neto']
+  ];
+  for (const j of d.juegos) {
+    rows.push([
+      j.nombre,
+      j.recaudacion.caba,
+      j.recaudacion.provincias,
+      j.recaudacion.internet,
+      j.recaudacion.total,
+      (j.billing.caba?.total_neto || 0).toFixed(2),
+      (j.billing.provincias?.total_neto || 0).toFixed(2),
+      (j.billing.internet?.total_neto || 0).toFixed(2),
+      j.billing.total_neto.toFixed(2)
+    ]);
+  }
+  const csv = rows.map(r => r.join(',')).join('\n');
+  descargarCSV(csv, `facturacion_juegos_${d.periodo.inicio}_${d.periodo.fin}.csv`);
+}
+
+function exportarLineasSAPJuegosCSV() {
+  if (!_fjgDatosUTE?.lineasSAP?.length) {
+    showToast('No hay líneas SAP para exportar', 'warning');
+    return;
+  }
+  const d = _fjgDatosUTE;
+  const rows = [['B_Descripcion', 'C_Cantidad', 'D_UM', 'F_Importe', 'H_Ref_SAP']];
+  for (const l of d.lineasSAP) {
+    rows.push([
+      `"${l.descripcion}"`,
+      l.cantidad,
+      l.unidad,
+      (l.redondeado || 0).toFixed(3),
+      `"${(l.material || '-') + ' / ' + (l.centro || '-')}"`
+    ]);
+  }
+  const csv = rows.map(r => r.join(',')).join('\n');
+  descargarCSV(csv, `hes_gral_${d.periodo.inicio}_${d.periodo.fin}.csv`);
+}
+
+// Helper: formato moneda exacto (3 decimales)
+function formatCurrencyExact(val) {
+  if (val === undefined || val === null) return '—';
+  return new Intl.NumberFormat('es-AR', {
+    minimumFractionDigits: 3,
+    maximumFractionDigits: 3
+  }).format(val);
+}
+
+// Helper: descargar CSV
+function descargarCSV(csv, filename) {
+  const blob = new Blob(['\uFEFF' + csv], { type: 'text/csv;charset=utf-8;' });
+  const url  = URL.createObjectURL(blob);
+  const a    = document.createElement('a');
+  a.href = url; a.download = filename; a.click();
+  URL.revokeObjectURL(url);
+}
+
+// Inicializar fechas por defecto al mostrar la vista
+function initFacturacionJuegos() {
+  const hoy   = new Date();
+  const primerDia = new Date(hoy.getFullYear(), hoy.getMonth(), 1);
+  const ultimoDia = new Date(hoy.getFullYear(), hoy.getMonth() + 1, 0);
+
+  const f  = d => d.toISOString().split('T')[0];
+  const fi = document.getElementById('fjg-fecha-inicio');
+  const ff = document.getElementById('fjg-fecha-fin');
+  if (fi && !fi.value) fi.value = f(primerDia);
+  if (ff && !ff.value) ff.value = f(ultimoDia);
+
+  const view = document.getElementById('view-facturacion-juegos');
+  const btn = document.getElementById('fjg-btn-compact');
+  if (view) view.classList.toggle('fjg-compact', _fjgCompacto);
+  if (btn) {
+    btn.innerHTML = _fjgCompacto
+      ? '<i class="fas fa-expand-alt"></i> Vista normal'
+      : '<i class="fas fa-compress-alt"></i> Vista compacta';
+  }
 }

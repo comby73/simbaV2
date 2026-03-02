@@ -368,5 +368,15 @@ const juegosOfflineAPI = {
     eliminarFacturacion: (id) => apiRequest(`/juegos-offline/hipicas/facturacion/${id}`, {
       method: 'DELETE'
     })
+  },
+
+  // ============================================================
+  // Facturación Juegos Nacionales (UTE)
+  // ============================================================
+  facturacionJuegos: {
+    getUTE: (params = {}) => {
+      const q = new URLSearchParams(params).toString();
+      return apiRequest(`/facturacion/juegos-ute${q ? `?${q}` : ''}`);
+    }
   }
 };

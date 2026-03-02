@@ -113,6 +113,9 @@
         <a class="nav-item" data-view="juegos-offline">
           <i class="fas fa-horse-head"></i> Juegos Offline
         </a>
+        <a class="nav-item" data-view="facturacion-juegos">
+          <i class="fas fa-receipt"></i> Facturación Juegos
+        </a>
 
         <div class="nav-section admin-only">Administración</div>
         <a class="nav-item admin-only" data-view="usuarios">
@@ -3413,6 +3416,222 @@
         </div>
       </section>
 
+      <!-- ======================================================== -->
+      <!-- FACTURACIÓN JUEGOS NACIONALES (UTE)                       -->
+      <!-- ======================================================== -->
+      <section id="view-facturacion-juegos" class="view hidden fjg-view">
+        <div class="page-header">
+          <h1><i class="fas fa-receipt"></i> Facturación Juegos Nacionales</h1>
+          <p class="fjg-subtitle">Cálculo UTE desde Control Previo con salida para detalle y HES general</p>
+        </div>
+
+        <!-- Filtros -->
+        <div class="card fjg-card" style="margin-bottom:1.5rem;">
+          <div class="card-body">
+            <div class="fjg-filter-grid">
+              <div class="form-group" style="flex:1; min-width:160px;">
+                <label class="form-label">Fecha Inicio</label>
+                <input type="date" id="fjg-fecha-inicio" class="form-input">
+              </div>
+              <div class="form-group" style="flex:1; min-width:160px;">
+                <label class="form-label">Fecha Fin</label>
+                <input type="date" id="fjg-fecha-fin" class="form-input">
+              </div>
+              <div class="form-group" style="flex:1; min-width:180px;">
+                <label class="form-label">Tope Estipulado ($)</label>
+                <input type="number" id="fjg-tope" class="form-input" value="105000000" step="1000000">
+              </div>
+              <div class="fjg-actions" style="flex:0 0 auto; padding-bottom:0.1rem;">
+                <button class="btn btn-primary" onclick="calcularFacturacionJuegosUTE()">
+                  <i class="fas fa-calculator"></i> Calcular
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Origen y trazabilidad -->
+        <div class="card fjg-card" style="margin-bottom:1.5rem;">
+          <div class="card-header">
+            <h3 class="card-title"><i class="fas fa-circle-info"></i> Origen de datos y cálculo</h3>
+          </div>
+          <div class="card-body fjg-source-grid">
+            <div>
+              <div class="fjg-label">Fuente principal</div>
+              <div class="fjg-value" id="fjg-fuente-principal">control_previo_agencias (BD)</div>
+              <small class="text-muted" id="fjg-fuente-periodo">Período: —</small>
+            </div>
+            <div>
+              <div class="fjg-label">Canales usados</div>
+              <div class="fjg-badges">
+                <span class="badge bg-primary">CABA (provincia 51, excepto 88880)</span>
+                <span class="badge bg-secondary">Provincias (provincia != 51)</span>
+                <span class="badge bg-info">Internet (agencia 88880 / 5188880)</span>
+              </div>
+            </div>
+            <div>
+              <div class="fjg-label">Modelo Excel aplicado</div>
+              <div class="fjg-value">Hoja 1 / Total Gral.: recaudación por juego y canal + líneas HES</div>
+              <small class="text-muted">Hojas de Turfito quedan fuera de este cálculo.</small>
+            </div>
+          </div>
+        </div>
+
+        <div class="card fjg-card" style="margin-bottom:1.5rem;">
+          <div class="card-header">
+            <h3 class="card-title"><i class="fas fa-sitemap"></i> Flujo Total Gral. (modelo Excel)</h3>
+          </div>
+          <div class="card-body fjg-flow-grid">
+            <div class="fjg-flow-item">
+              <div class="fjg-label">ON LINE - Capital Federal</div>
+              <div class="fjg-value" id="fjg-flow-caba-rec">$0</div>
+              <small class="text-muted" id="fjg-flow-caba-part">Participación: 0,00%</small>
+            </div>
+            <div class="fjg-flow-item">
+              <div class="fjg-label">INTERNET - Capital Federal</div>
+              <div class="fjg-value" id="fjg-flow-int-rec">$0</div>
+              <small class="text-muted" id="fjg-flow-int-part">Participación: 0,00%</small>
+            </div>
+            <div class="fjg-flow-item">
+              <div class="fjg-label">CONSOLIDACIÓN - Provincias</div>
+              <div class="fjg-value" id="fjg-flow-prov-rec">$0</div>
+              <small class="text-muted" id="fjg-flow-prov-part">Participación: 0,00%</small>
+            </div>
+          </div>
+        </div>
+
+        <!-- Spinner -->
+        <div id="fjg-loading" class="hidden" style="text-align:center; padding:2rem;">
+          <i class="fas fa-spinner fa-spin fa-2x"></i>
+          <p style="margin-top:0.5rem;">Calculando facturación…</p>
+        </div>
+
+        <!-- Resultados (ocultos hasta calcular) -->
+        <div id="fjg-resultados" class="hidden">
+
+          <!-- Summary cards -->
+          <div class="stats-grid fjg-kpi-grid" style="margin-bottom:1.5rem;">
+            <div class="stat-card">
+              <div class="stat-label">Recaudación Total</div>
+              <div class="stat-value" id="fjg-total-recaudacion">$0</div>
+            </div>
+            <div class="stat-card">
+              <div class="stat-label">Tope Estipulado</div>
+              <div class="stat-value" id="fjg-tope-display">$105.000.000</div>
+            </div>
+            <div class="stat-card">
+              <div class="stat-label">Excedente s/Tope</div>
+              <div class="stat-value" id="fjg-excedente">$0</div>
+            </div>
+            <div class="stat-card">
+              <div class="stat-label">Subtotal HES (Total Gral.)</div>
+              <div class="stat-value" id="fjg-subtotal-hes">$0</div>
+            </div>
+            <div class="stat-card">
+              <div class="stat-label">IVA 21%</div>
+              <div class="stat-value" id="fjg-iva">$0</div>
+            </div>
+            <div class="stat-card stat-card-primary">
+              <div class="stat-label">Total con IVA</div>
+              <div class="stat-value" id="fjg-total-con-iva">$0</div>
+            </div>
+          </div>
+
+          <div class="card fjg-card" style="margin-bottom:1.5rem;">
+            <div class="card-header">
+              <h3 class="card-title"><i class="fas fa-table-cells-large"></i> Cuadro UTE - Total Gral.</h3>
+            </div>
+            <div class="card-body" style="overflow-x:auto;">
+              <table class="data-table" id="fjg-tabla-total-gral">
+                <thead>
+                  <tr>
+                    <th>Canal</th>
+                    <th class="text-right">Recaudación</th>
+                    <th class="text-right">Participación</th>
+                    <th class="text-right">Dentro Tope</th>
+                    <th class="text-right">Sobre Tope</th>
+                    <th class="text-right">Imp. Dentro Tope</th>
+                    <th class="text-right">Imp. Sobre Tope</th>
+                    <th class="text-right">Total Neto</th>
+                  </tr>
+                </thead>
+                <tbody id="fjg-total-gral-body"></tbody>
+                <tfoot id="fjg-total-gral-foot"></tfoot>
+              </table>
+            </div>
+          </div>
+
+          <!-- Tabla detalle por juego -->
+          <div class="card" style="margin-bottom:1.5rem;">
+            <div class="card-header">
+              <h3 class="card-title"><i class="fas fa-table"></i> Detalle por Juego</h3>
+              <div style="display:flex; gap:0.5rem;">
+                <button class="btn btn-sm btn-secondary" id="fjg-btn-compact" onclick="toggleVistaCompactaFacturacionJuegos()">
+                  <i class="fas fa-compress-alt"></i> Vista compacta
+                </button>
+                <button class="btn btn-sm btn-secondary" onclick="exportarBillingJuegosCSV()">
+                  <i class="fas fa-download"></i> Exportar CSV
+                </button>
+              </div>
+            </div>
+            <div class="card-body" style="overflow-x:auto;">
+              <table class="data-table" id="fjg-tabla-detalle">
+                <thead>
+                  <tr>
+                    <th>Juego</th>
+                    <th class="text-right">Recaud. CABA</th>
+                    <th class="text-right">Recaud. Prov.</th>
+                    <th class="text-right">Recaud. Internet</th>
+                    <th class="text-right">Recaud. Total</th>
+                    <th class="text-right">Billing CABA</th>
+                    <th class="text-right">Billing Prov.</th>
+                    <th class="text-right">Billing Internet</th>
+                    <th class="text-right" style="background:#f0f7ff; font-weight:600;">Total Neto</th>
+                    <th></th>
+                  </tr>
+                </thead>
+                <tbody id="fjg-tabla-body"></tbody>
+                <tfoot id="fjg-tabla-foot"></tfoot>
+              </table>
+            </div>
+          </div>
+
+          <!-- SAP Lines -->
+          <div class="card fjg-card" id="fjg-sap-card">
+            <div class="card-header">
+              <h3 class="card-title"><i class="fas fa-list-ol"></i> Líneas SAP (HES GRAL)</h3>
+              <div style="display:flex; gap:0.5rem;">
+                <button class="btn btn-sm btn-secondary" onclick="copiarLineasSAPJuegos()">
+                  <i class="fas fa-copy"></i> Copiar
+                </button>
+                <button class="btn btn-sm btn-secondary" onclick="exportarLineasSAPJuegosCSV()">
+                  <i class="fas fa-download"></i> CSV
+                </button>
+              </div>
+            </div>
+            <div class="fjg-hes-note">
+              Formato HES simplificado (Hoja1): columnas <strong>B, C, D, F, H</strong>.
+            </div>
+            <div class="card-body" style="overflow-x:auto;">
+              <table class="data-table" id="fjg-tabla-sap" style="font-size:0.85rem;">
+                <thead>
+                  <tr>
+                    <th>B - Descripción</th>
+                    <th class="text-center">C - Cant</th>
+                    <th class="text-center">D - UM</th>
+                    <th class="text-right">F - Importe</th>
+                    <th>H - Ref. SAP</th>
+                  </tr>
+                </thead>
+                <tbody id="fjg-sap-body"></tbody>
+                <tfoot id="fjg-sap-foot"></tfoot>
+              </table>
+            </div>
+          </div>
+
+        </div><!-- /fjg-resultados -->
+      </section>
+
     </main>
   </div>
 
@@ -3495,8 +3714,8 @@
   <script src="js/config.local.js" onerror="console.warn('config.local.js no encontrado - usando config por defecto')"></script>
   <script src="js/config.js?v=20260206g"></script>
   <script src="js/api.js?v=20260227b"></script>
-  <script src="js/ocr-extractos.js?v=20260228a"></script>
-  <script src="js/app.js?v=20260228d"></script>
+  <script src="js/ocr-extractos.js?v=20260228b"></script>
+  <script src="js/app.js?v=20260228e"></script>
 </body>
 
 </html>

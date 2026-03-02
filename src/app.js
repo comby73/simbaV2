@@ -38,6 +38,7 @@ const historialRoutes = require('./modules/historial/historial.routes');
 const extractosRoutes = require('./modules/extractos/extractos.routes');
 const juegosOfflineRoutes = require('./modules/juegos-offline/juegos-offline.routes');
 const ocrRoutes = require('./modules/ocr/ocr.routes');
+const facturacionJuegosRoutes = require('./modules/facturacion/facturacion-juegos.routes');
 
 // Redirigir consola a un archivo solo en Hostinger (producción)
 if (process.env.NODE_ENV === 'production') {
@@ -90,6 +91,7 @@ app.use('/api/historial', historialRoutes);
 app.use('/api/extractos', extractosRoutes);
 app.use('/api/juegos-offline', juegosOfflineRoutes);
 app.use('/api/ocr', ocrRoutes);
+app.use('/api/facturacion', facturacionJuegosRoutes);
 
 // Ruta principal
 app.get('/', (req, res) => {

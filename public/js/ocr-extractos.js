@@ -253,7 +253,7 @@ REGLAS CRÍTICAS DE EXTRACCIÓN:
    - RESTO DE ARGENTINA (CABA, PBA, etc.): Cada número DEBE tener EXACTAMENTE 4 DÍGITOS.
 
 3. EXTRACCIÓN DE TABLA: Busca las 20 posiciones (puestos 1 al 20) y extrae el número ganador asociado.
-   - IMPORTANTE: Devuelve el array `numeros` SIEMPRE en orden de UBICACIÓN (1°, 2°, 3° ... 20°), nunca por orden visual de lectura.
+  - IMPORTANTE: Devuelve el array "numeros" SIEMPRE en orden de UBICACIÓN (1°, 2°, 3° ... 20°), nunca por orden visual de lectura.
    - CASO ENTRE RÍOS (IAFAS / TÓMBOLA): suele venir en 2 columnas.
      * Columna izquierda: ubicaciones 1° a 10°
      * Columna derecha: ubicaciones 11° a 20°
@@ -265,7 +265,7 @@ REGLAS CRÍTICAS DE EXTRACCIÓN:
 
 6. LETRAS (MUY IMPORTANTE): Busca la sección "CLAVE DE LETRAS" o "LETRAS" en la imagen.
    - Generalmente aparece con 4 letras ganadoras (ej: "A", "B", "C", "D")
-   - Las letras válidas son de la A a la P
+  - Las letras válidas son de la A a la Z (sin letras repetidas)
    - Si no hay letras visibles, devolver array vacío []
    - IMPORTANTE: Extraer las 4 letras en orden (1ra, 2da, 3ra, 4ta)
 
@@ -740,7 +740,7 @@ REGLAS DE EXTRACCIÓN CRÍTICAS:
 
 1. POCEADA sortea 20 NÚMEROS del 00 al 99 (dos dígitos cada uno: 00, 01, 02... 99)
 
-2. POCEADA sortea 4 LETRAS válidas (de la A a la P)
+2. POCEADA sortea 4 LETRAS válidas (de la A a la Z, sin repetidas)
 
 3. BUSCAR EN EL EXTRACTO:
    - Los 20 números sorteados (pueden estar en una tabla o lista)
@@ -795,7 +795,7 @@ REGLAS DE EXTRACCIÓN CRÍTICAS:
 
 2. Cada número tiene 2 dígitos (00-99) o 4 dígitos según el extracto
 
-3. También sortea 4 LETRAS válidas (de la A a la P)
+3. También sortea 4 LETRAS válidas (de la A a la Z, sin repetidas)
 
 4. BUSCAR EN EL EXTRACTO:
    - Los 20 números sorteados en orden de posición (1° al 20°)
@@ -929,15 +929,17 @@ Responde SOLO con la palabra del tipo de juego, sin explicaciones.`;
 
   // Limpiar y validar letras
   limpiarLetras(letras) {
-    const letrasValidas = 'ABCDEFGHIJKLMNOP';
+    const letrasValidas = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
     const resultado = [];
+    const vistas = new Set();
 
     for (let i = 0; i < Math.min(letras.length, 4); i++) {
       let letra = (letras[i] || '').toString().toUpperCase().trim();
       // Tomar solo el primer caracter si hay más
       letra = letra.charAt(0);
-      // Validar que sea una letra válida (A-P)
-      if (letra && letrasValidas.includes(letra)) {
+      // Validar que sea una letra válida (A-Z) y sin repetición
+      if (letra && letrasValidas.includes(letra) && !vistas.has(letra)) {
+        vistas.add(letra);
         resultado.push(letra);
       }
     }
