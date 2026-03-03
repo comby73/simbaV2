@@ -2314,7 +2314,7 @@ const obtenerDatosDashboard = async (req, res) => {
         const tombolinaData = [];
         const procesadas = new Set();
         for (const premio of premiosTombolina) {
-          const venta = ventasTombolina.find(v => v.agencia === premio.agencia);
+          const venta = ventasTombolina.find(v => v.agencia_key === premio.agencia);
           procesadas.add(premio.agencia);
           tombolinaData.push({
             agencia: premio.agencia,
@@ -2331,12 +2331,16 @@ const obtenerDatosDashboard = async (req, res) => {
           });
         }
         for (const venta of ventasTombolina) {
-          if (!procesadas.has(venta.agencia)) {
+          const agKey = venta.agencia_key;
+          if (!agKey || procesadas.has(agKey)) continue;
+          let codProv = '51';
+          if (agKey.startsWith('PROV-')) codProv = agKey.replace('PROV-', '');
+          if (!procesadas.has(agKey)) {
             tombolinaData.push({
-              agencia: venta.agencia,
-              codigo: venta.codigo,
-              codigo_provincia: venta.codigo_provincia,
-              nombre: venta.nombre,
+              agencia: agKey,
+              codigo: agKey.startsWith('PROV-') ? agKey.replace('PROV-', '') : agKey,
+              codigo_provincia: codProv,
+              nombre: codProv !== '51' ? (PROVINCIAS_NOMBRES[codProv] || `Provincia ${codProv}`) : agKey,
               total_ganadores: 0,
               total_premios: 0,
               total_tickets: parseInt(venta.total_tickets) || 0,
@@ -2385,7 +2389,7 @@ const obtenerDatosDashboard = async (req, res) => {
         const quini6Data = [];
         const procesadasQ6 = new Set();
         for (const premio of premiosQuini6) {
-          const venta = ventasQuini6.find(v => v.agencia === premio.agencia);
+          const venta = ventasQuini6.find(v => v.agencia_key === premio.agencia);
           procesadasQ6.add(premio.agencia);
           quini6Data.push({
             agencia: premio.agencia,
@@ -2402,12 +2406,16 @@ const obtenerDatosDashboard = async (req, res) => {
           });
         }
         for (const venta of ventasQuini6) {
-          if (!procesadasQ6.has(venta.agencia)) {
+          const agKey = venta.agencia_key;
+          if (!agKey || procesadasQ6.has(agKey)) continue;
+          let codProv = '51';
+          if (agKey.startsWith('PROV-')) codProv = agKey.replace('PROV-', '');
+          if (!procesadasQ6.has(agKey)) {
             quini6Data.push({
-              agencia: venta.agencia,
-              codigo: venta.codigo,
-              codigo_provincia: venta.codigo_provincia,
-              nombre: venta.nombre,
+              agencia: agKey,
+              codigo: agKey.startsWith('PROV-') ? agKey.replace('PROV-', '') : agKey,
+              codigo_provincia: codProv,
+              nombre: codProv !== '51' ? (PROVINCIAS_NOMBRES[codProv] || `Provincia ${codProv}`) : agKey,
               total_ganadores: 0,
               total_premios: 0,
               total_tickets: parseInt(venta.total_tickets) || 0,
@@ -2528,7 +2536,7 @@ const obtenerDatosDashboard = async (req, res) => {
         const lotoData = [];
         const procesadasLoto = new Set();
         for (const premio of premiosLoto) {
-          const venta = ventasLoto.find(v => v.agencia === premio.agencia);
+          const venta = ventasLoto.find(v => v.agencia_key === premio.agencia);
           procesadasLoto.add(premio.agencia);
           lotoData.push({
             agencia: premio.agencia,
@@ -2545,12 +2553,16 @@ const obtenerDatosDashboard = async (req, res) => {
           });
         }
         for (const venta of ventasLoto) {
-          if (!procesadasLoto.has(venta.agencia)) {
+          const agKey = venta.agencia_key;
+          if (!agKey || procesadasLoto.has(agKey)) continue;
+          let codProv = '51';
+          if (agKey.startsWith('PROV-')) codProv = agKey.replace('PROV-', '');
+          if (!procesadasLoto.has(agKey)) {
             lotoData.push({
-              agencia: venta.agencia,
-              codigo: venta.codigo,
-              codigo_provincia: venta.codigo_provincia,
-              nombre: venta.nombre,
+              agencia: agKey,
+              codigo: agKey.startsWith('PROV-') ? agKey.replace('PROV-', '') : agKey,
+              codigo_provincia: codProv,
+              nombre: codProv !== '51' ? (PROVINCIAS_NOMBRES[codProv] || `Provincia ${codProv}`) : agKey,
               total_ganadores: 0,
               total_premios: 0,
               total_tickets: parseInt(venta.total_tickets) || 0,
@@ -2599,7 +2611,7 @@ const obtenerDatosDashboard = async (req, res) => {
         const loto5Data = [];
         const procesadasLoto5 = new Set();
         for (const premio of premiosLoto5) {
-          const venta = ventasLoto5.find(v => v.agencia === premio.agencia);
+          const venta = ventasLoto5.find(v => v.agencia_key === premio.agencia);
           procesadasLoto5.add(premio.agencia);
           loto5Data.push({
             agencia: premio.agencia,
@@ -2616,12 +2628,16 @@ const obtenerDatosDashboard = async (req, res) => {
           });
         }
         for (const venta of ventasLoto5) {
-          if (!procesadasLoto5.has(venta.agencia)) {
+          const agKey = venta.agencia_key;
+          if (!agKey || procesadasLoto5.has(agKey)) continue;
+          let codProv = '51';
+          if (agKey.startsWith('PROV-')) codProv = agKey.replace('PROV-', '');
+          if (!procesadasLoto5.has(agKey)) {
             loto5Data.push({
-              agencia: venta.agencia,
-              codigo: venta.codigo,
-              codigo_provincia: venta.codigo_provincia,
-              nombre: venta.nombre,
+              agencia: agKey,
+              codigo: agKey.startsWith('PROV-') ? agKey.replace('PROV-', '') : agKey,
+              codigo_provincia: codProv,
+              nombre: codProv !== '51' ? (PROVINCIAS_NOMBRES[codProv] || `Provincia ${codProv}`) : agKey,
               total_ganadores: 0,
               total_premios: 0,
               total_tickets: parseInt(venta.total_tickets) || 0,
@@ -2670,7 +2686,7 @@ const obtenerDatosDashboard = async (req, res) => {
         const brincoData = [];
         const procesadasBrinco = new Set();
         for (const premio of premiosBrinco) {
-          const venta = ventasBrinco.find(v => v.agencia === premio.agencia);
+          const venta = ventasBrinco.find(v => v.agencia_key === premio.agencia);
           procesadasBrinco.add(premio.agencia);
           brincoData.push({
             agencia: premio.agencia,
@@ -2687,12 +2703,16 @@ const obtenerDatosDashboard = async (req, res) => {
           });
         }
         for (const venta of ventasBrinco) {
-          if (!procesadasBrinco.has(venta.agencia)) {
+          const agKey = venta.agencia_key;
+          if (!agKey || procesadasBrinco.has(agKey)) continue;
+          let codProv = '51';
+          if (agKey.startsWith('PROV-')) codProv = agKey.replace('PROV-', '');
+          if (!procesadasBrinco.has(agKey)) {
             brincoData.push({
-              agencia: venta.agencia,
-              codigo: venta.codigo,
-              codigo_provincia: venta.codigo_provincia,
-              nombre: venta.nombre,
+              agencia: agKey,
+              codigo: agKey.startsWith('PROV-') ? agKey.replace('PROV-', '') : agKey,
+              codigo_provincia: codProv,
+              nombre: codProv !== '51' ? (PROVINCIAS_NOMBRES[codProv] || `Provincia ${codProv}`) : agKey,
               total_ganadores: 0,
               total_premios: 0,
               total_tickets: parseInt(venta.total_tickets) || 0,

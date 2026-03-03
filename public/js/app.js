@@ -12317,8 +12317,8 @@ async function cargarFiltrosDashboard() {
 async function buscarDashboard() {
   const fechaDesde = document.getElementById('dash-fecha-desde').value;
   const fechaHasta = document.getElementById('dash-fecha-hasta').value;
-  const sorteoDesde = document.getElementById('dash-sorteo-desde').value;
-  const sorteoHasta = document.getElementById('dash-sorteo-hasta').value;
+  let sorteoDesde = document.getElementById('dash-sorteo-desde').value;
+  let sorteoHasta = document.getElementById('dash-sorteo-hasta').value;
   const agencia = document.getElementById('dash-agencia').value;
   const tipoConsulta = document.getElementById('dash-tipo-consulta').value;
 
@@ -12327,6 +12327,21 @@ async function buscarDashboard() {
   if (!dashboardSelectedGames.includes('todos')) {
     if (dashboardSelectedGames.length === 1) {
       juego = dashboardSelectedGames[0];
+    }
+  }
+
+  // Evitar filtro de sorteo incompatible (p. ej. 51900-52000) para juegos de sorteo corto
+  if (['quini6', 'brinco', 'loto', 'loto5'].includes(juego)) {
+    const sd = parseInt(sorteoDesde, 10);
+    const sh = parseInt(sorteoHasta, 10);
+    if ((Number.isFinite(sd) && sd > 9999) || (Number.isFinite(sh) && sh > 9999)) {
+      sorteoDesde = '';
+      sorteoHasta = '';
+      const sorteoDesdeEl = document.getElementById('dash-sorteo-desde');
+      const sorteoHastaEl = document.getElementById('dash-sorteo-hasta');
+      if (sorteoDesdeEl) sorteoDesdeEl.value = '';
+      if (sorteoHastaEl) sorteoHastaEl.value = '';
+      showToast('Se limpiaron filtros de sorteo incompatibles para este juego', 'info');
     }
   }
 
