@@ -716,8 +716,11 @@ const listarControlPrevioGeneral = async (req, res) => {
     // Obtener BRINCO si no se especifica juego o es brinco
     if (!juego || juego === 'brinco') {
       try {
+        const colFechaB = await resolverColumnaFechaTabla('control_previo_brinco');
+        const exprFechaB = colFechaB ? `cp.${colFechaB}` : 'DATE(cp.created_at)';
+
         let sqlB = `
-          SELECT cp.id, cp.numero_sorteo, cp.fecha, cp.archivo,
+          SELECT cp.id, cp.numero_sorteo, ${exprFechaB} as fecha, cp.archivo,
                  cp.registros_validos as total_registros,
                  cp.apuestas_total as total_apuestas,
                  cp.registros_anulados as total_anulados,
@@ -731,12 +734,50 @@ const listarControlPrevioGeneral = async (req, res) => {
         `;
         const paramsB = [];
 
-        if (fechaDesde) { sqlB += ' AND cp.fecha >= ?'; paramsB.push(fechaDesde); }
-        if (fechaHasta) { sqlB += ' AND cp.fecha <= ?'; paramsB.push(fechaHasta); }
+        if (fechaDesde) { sqlB += ` AND ${exprFechaB} >= ?`; paramsB.push(fechaDesde); }
+        if (fechaHasta) { sqlB += ` AND ${exprFechaB} <= ?`; paramsB.push(fechaHasta); }
 
-        sqlB += ` ORDER BY cp.fecha DESC, cp.created_at DESC LIMIT ${maxLimit}`;
+        sqlB += ` ORDER BY ${exprFechaB} DESC, cp.created_at DESC LIMIT ${maxLimit}`;
 
-        const brincoData = await query(sqlB, paramsB);
+        let brincoData;
+        try {
+          brincoData = await query(sqlB, paramsB);
+        } catch (errBrinco) {
+          if (!String(errBrinco?.message || '').includes('Unknown column')) {
+            throw errBrinco;
+          }
+
+          const colFechaBLegacy = await resolverColumnaFechaTabla('control_previo_brinco');
+          const exprFechaBLegacy = colFechaBLegacy ? `cp.${colFechaBLegacy}` : 'DATE(cp.created_at)';
+
+          let sqlBLegacy = `
+            SELECT
+              cp.id,
+              cp.numero_sorteo,
+              ${exprFechaBLegacy} as fecha,
+              cp.nombre_archivo_zip as archivo,
+              cp.total_registros,
+              cp.total_apuestas,
+              cp.total_anulados,
+              cp.total_recaudacion,
+              'U' as modalidad,
+              cp.usuario_id,
+              cp.created_at,
+              cp.updated_at,
+              cp.usuario_nombre,
+              'brinco' as juego
+            FROM control_previo_brinco cp
+            WHERE 1=1
+          `;
+          const paramsBLegacy = [];
+
+          if (fechaDesde) { sqlBLegacy += ` AND ${exprFechaBLegacy} >= ?`; paramsBLegacy.push(fechaDesde); }
+          if (fechaHasta) { sqlBLegacy += ` AND ${exprFechaBLegacy} <= ?`; paramsBLegacy.push(fechaHasta); }
+
+          sqlBLegacy += ` ORDER BY ${exprFechaBLegacy} DESC, cp.created_at DESC LIMIT ${maxLimit}`;
+          brincoData = await query(sqlBLegacy, paramsBLegacy);
+        }
+
         resultados = resultados.concat(brincoData);
       } catch (e) {
         console.log('Tabla control_previo_brinco no disponible');
@@ -746,8 +787,11 @@ const listarControlPrevioGeneral = async (req, res) => {
     // Obtener QUINI 6 si no se especifica juego o es quini6
     if (!juego || juego === 'quini6') {
       try {
+        const colFechaQ6 = await resolverColumnaFechaTabla('control_previo_quini6');
+        const exprFechaQ6 = colFechaQ6 ? `cp.${colFechaQ6}` : 'DATE(cp.created_at)';
+
         let sqlQ6 = `
-          SELECT cp.id, cp.numero_sorteo, cp.fecha, cp.archivo,
+          SELECT cp.id, cp.numero_sorteo, ${exprFechaQ6} as fecha, cp.archivo,
                  cp.registros_validos as total_registros,
                  cp.apuestas_total as total_apuestas,
                  cp.registros_anulados as total_anulados,
@@ -761,12 +805,50 @@ const listarControlPrevioGeneral = async (req, res) => {
         `;
         const paramsQ6 = [];
 
-        if (fechaDesde) { sqlQ6 += ' AND cp.fecha >= ?'; paramsQ6.push(fechaDesde); }
-        if (fechaHasta) { sqlQ6 += ' AND cp.fecha <= ?'; paramsQ6.push(fechaHasta); }
+        if (fechaDesde) { sqlQ6 += ` AND ${exprFechaQ6} >= ?`; paramsQ6.push(fechaDesde); }
+        if (fechaHasta) { sqlQ6 += ` AND ${exprFechaQ6} <= ?`; paramsQ6.push(fechaHasta); }
 
-        sqlQ6 += ` ORDER BY cp.fecha DESC, cp.created_at DESC LIMIT ${maxLimit}`;
+        sqlQ6 += ` ORDER BY ${exprFechaQ6} DESC, cp.created_at DESC LIMIT ${maxLimit}`;
 
-        const quini6Data = await query(sqlQ6, paramsQ6);
+        let quini6Data;
+        try {
+          quini6Data = await query(sqlQ6, paramsQ6);
+        } catch (errQuini6) {
+          if (!String(errQuini6?.message || '').includes('Unknown column')) {
+            throw errQuini6;
+          }
+
+          const colFechaQ6Legacy = await resolverColumnaFechaTabla('control_previo_quini6');
+          const exprFechaQ6Legacy = colFechaQ6Legacy ? `cp.${colFechaQ6Legacy}` : 'DATE(cp.created_at)';
+
+          let sqlQ6Legacy = `
+            SELECT
+              cp.id,
+              cp.numero_sorteo,
+              ${exprFechaQ6Legacy} as fecha,
+              cp.nombre_archivo_zip as archivo,
+              cp.total_registros,
+              cp.total_apuestas,
+              cp.total_anulados,
+              cp.total_recaudacion,
+              'U' as modalidad,
+              cp.usuario_id,
+              cp.created_at,
+              cp.updated_at,
+              cp.usuario_nombre,
+              'quini6' as juego
+            FROM control_previo_quini6 cp
+            WHERE 1=1
+          `;
+          const paramsQ6Legacy = [];
+
+          if (fechaDesde) { sqlQ6Legacy += ` AND ${exprFechaQ6Legacy} >= ?`; paramsQ6Legacy.push(fechaDesde); }
+          if (fechaHasta) { sqlQ6Legacy += ` AND ${exprFechaQ6Legacy} <= ?`; paramsQ6Legacy.push(fechaHasta); }
+
+          sqlQ6Legacy += ` ORDER BY ${exprFechaQ6Legacy} DESC, cp.created_at DESC LIMIT ${maxLimit}`;
+          quini6Data = await query(sqlQ6Legacy, paramsQ6Legacy);
+        }
+
         resultados = resultados.concat(quini6Data);
       } catch (e) {
         console.log('Tabla control_previo_quini6 no disponible');
