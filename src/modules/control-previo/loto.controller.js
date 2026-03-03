@@ -715,6 +715,33 @@ function cargarDistribucionLoto() {
   }
 }
 
+function normalizarFechaControlPrevio(value) {
+  if (!value) return null;
+
+  const raw = String(value).trim();
+  if (!raw) return null;
+
+  if (/^\d{8}$/.test(raw)) {
+    return `${raw.substring(0, 4)}-${raw.substring(4, 6)}-${raw.substring(6, 8)}`;
+  }
+
+  if (/^\d{4}-\d{2}-\d{2}$/.test(raw)) {
+    return raw;
+  }
+
+  if (/^\d{2}\/\d{2}\/\d{4}$/.test(raw)) {
+    const [dd, mm, yyyy] = raw.split('/');
+    return `${yyyy}-${mm}-${dd}`;
+  }
+
+  const parsed = new Date(raw);
+  if (!Number.isNaN(parsed.getTime())) {
+    return parsed.toISOString().split('T')[0];
+  }
+
+  return null;
+}
+
 /**
  * Guarda los resultados del control previo de Loto en la BD
  * Alimenta control_previo_loto Y control_previo_agencias (para Dashboard)
@@ -728,41 +755,97 @@ async function guardarControlPrevioLoto(resultado, user, nombreArchivo) {
   let fecha = await buscarFechaProgramacion('loto', sorteoNum);
   if (fecha) {
     console.log(`📅 Loto sorteo ${sorteoNum}: fecha desde programación = ${fecha}`);
-  } else {
-    throw new Error(`No se encontró fecha de sorteo para Loto (${sorteoNum}) en programación`);
   }
 
-  const insertResult = await query(`
-    INSERT INTO control_previo_loto
-    (numero_sorteo, fecha, archivo, registros_validos, registros_anulados,
-     apuestas_total, recaudacion, datos_json, usuario_id)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-    ON DUPLICATE KEY UPDATE
-      fecha = VALUES(fecha),
-      archivo = VALUES(archivo),
-      registros_validos = VALUES(registros_validos),
-      registros_anulados = VALUES(registros_anulados),
-      apuestas_total = VALUES(apuestas_total),
-      recaudacion = VALUES(recaudacion),
-      datos_json = VALUES(datos_json),
-      usuario_id = VALUES(usuario_id),
-      updated_at = CURRENT_TIMESTAMP
-  `, [
-    sorteoNum,
-    fecha,
-    nombreArchivo,
-    resumen.registros || 0,
-    resumen.anulados || 0,
-    resumen.apuestasTotal || 0,
-    resumen.recaudacion || 0,
-    JSON.stringify(resultado),
-    user?.id || null
-  ]);
+  // Fallback: XML oficial o fecha de proceso
+  if (!fecha) {
+    fecha = normalizarFechaControlPrevio(resultado?.datosOficiales?.fecha);
+  }
+  if (!fecha) {
+    fecha = normalizarFechaControlPrevio(resultado?.fechaProcesamiento) || new Date().toISOString().split('T')[0];
+    console.warn(`⚠️ Loto ${sorteoNum}: fecha no encontrada en programación/XML, se usa ${fecha}`);
+  }
+
+  let insertResult;
+  try {
+    insertResult = await query(`
+      INSERT INTO control_previo_loto
+      (numero_sorteo, fecha, archivo, registros_validos, registros_anulados,
+       apuestas_total, recaudacion, datos_json, usuario_id)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ON DUPLICATE KEY UPDATE
+        fecha = VALUES(fecha),
+        archivo = VALUES(archivo),
+        registros_validos = VALUES(registros_validos),
+        registros_anulados = VALUES(registros_anulados),
+        apuestas_total = VALUES(apuestas_total),
+        recaudacion = VALUES(recaudacion),
+        datos_json = VALUES(datos_json),
+        usuario_id = VALUES(usuario_id),
+        updated_at = CURRENT_TIMESTAMP
+    `, [
+      sorteoNum,
+      fecha,
+      nombreArchivo,
+      resumen.registros || 0,
+      resumen.anulados || 0,
+      resumen.apuestasTotal || 0,
+      resumen.recaudacion || 0,
+      JSON.stringify(resultado),
+      user?.id || null
+    ]);
+  } catch (errorInsert) {
+    if (!String(errorInsert?.message || '').includes('Unknown column')) {
+      throw errorInsert;
+    }
+
+    // Compatibilidad con esquema legacy de control_previo_loto
+    insertResult = await query(`
+      INSERT INTO control_previo_loto
+      (fecha, numero_sorteo, total_registros, total_tickets, total_apuestas, total_anulados,
+       total_recaudacion, provincias, nombre_archivo_zip, hash_archivo, hash_verificado,
+       comparacion_xml, datos_oficiales, datos_adicionales, usuario_id, usuario_nombre)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ON DUPLICATE KEY UPDATE
+        total_registros = VALUES(total_registros),
+        total_tickets = VALUES(total_tickets),
+        total_apuestas = VALUES(total_apuestas),
+        total_anulados = VALUES(total_anulados),
+        total_recaudacion = VALUES(total_recaudacion),
+        provincias = VALUES(provincias),
+        nombre_archivo_zip = VALUES(nombre_archivo_zip),
+        hash_archivo = VALUES(hash_archivo),
+        hash_verificado = VALUES(hash_verificado),
+        comparacion_xml = VALUES(comparacion_xml),
+        datos_oficiales = VALUES(datos_oficiales),
+        datos_adicionales = VALUES(datos_adicionales),
+        usuario_id = VALUES(usuario_id),
+        usuario_nombre = VALUES(usuario_nombre),
+        updated_at = CURRENT_TIMESTAMP
+    `, [
+      fecha,
+      sorteoNum,
+      resumen.registros || 0,
+      resumen.registros || 0,
+      resumen.apuestasTotal || 0,
+      resumen.anulados || 0,
+      resumen.recaudacion || 0,
+      JSON.stringify(resultado?.provincias || {}),
+      nombreArchivo,
+      resultado?.seguridad?.hashCalculado || null,
+      !!resultado?.seguridad?.verificado,
+      resultado?.comparacion ? JSON.stringify(resultado.comparacion) : null,
+      resultado?.datosOficiales ? JSON.stringify(resultado.datosOficiales) : null,
+      JSON.stringify({ modalidades: resultado?.modalidades || {}, ventaWeb: resumen?.ventaWeb || 0 }),
+      user?.id || null,
+      user?.nombre || 'Sistema'
+    ]);
+  }
 
   // Obtener el ID para guardar agencias
   let controlPrevioId = insertResult.insertId;
   if (!controlPrevioId) {
-    const [row] = await query('SELECT id FROM control_previo_loto WHERE numero_sorteo = ?', [sorteo]);
+    const [row] = await query('SELECT id FROM control_previo_loto WHERE numero_sorteo = ? ORDER BY id DESC LIMIT 1', [sorteoNum]);
     controlPrevioId = row?.id || 0;
   }
 
@@ -792,14 +875,14 @@ async function guardarControlPrevioLoto(resultado, user, nombreArchivo) {
       }
 
       // Eliminar previos y insertar
-      await query('DELETE FROM control_previo_agencias WHERE juego = ? AND numero_sorteo = ?', ['loto', sorteo]);
+      await query('DELETE FROM control_previo_agencias WHERE juego = ? AND numero_sorteo = ?', ['loto', sorteoNum]);
       
       const valores = [];
       const placeholders = [];
       for (const [codigo, ag] of agenciasMap) {
         placeholders.push('(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)');
         valores.push(
-          controlPrevioId, 'loto', fechaControl, sorteo, 'U',
+          controlPrevioId, 'loto', fechaControl, sorteoNum, 'U',
           codigo, ag.codigoProvincia,
           ag.ticketsSet.size, ag.totalApuestas, 0, ag.totalRecaudacion
         );
@@ -811,7 +894,7 @@ async function guardarControlPrevioLoto(resultado, user, nombreArchivo) {
              codigo_provincia, total_tickets, total_apuestas, total_anulados, total_recaudacion)
           VALUES ${placeholders.join(', ')}
         `, valores);
-        console.log(`✅ Guardadas ${agenciasMap.size} agencias para Control Previo LOTO (sorteo: ${sorteo})`);
+        console.log(`✅ Guardadas ${agenciasMap.size} agencias para Control Previo LOTO (sorteo: ${sorteoNum})`);
       }
     } catch (errAg) {
       console.error('⚠️ Error guardando agencias Loto (no crítico):', errAg.message);

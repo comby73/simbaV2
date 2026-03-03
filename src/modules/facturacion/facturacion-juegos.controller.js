@@ -304,11 +304,16 @@ const getFacturacionJuegosUTE = async (req, res) => {
           THEN cpa.total_recaudacion ELSE 0
         END) AS rec_internet,
         SUM(CASE
+          WHEN LOWER(TRIM(cpa.juego)) IN ('quini6','brinco')
+           AND cpa.codigo_agencia NOT IN ('88880','5188880')
+          THEN cpa.total_recaudacion
           WHEN cpa.codigo_provincia = '51'
            AND cpa.codigo_agencia NOT IN ('88880','5188880')
           THEN cpa.total_recaudacion ELSE 0
         END) AS rec_caba,
         SUM(CASE
+          WHEN LOWER(TRIM(cpa.juego)) IN ('quini6','brinco')
+          THEN 0
           WHEN cpa.codigo_provincia != '51'
           THEN cpa.total_recaudacion ELSE 0
         END) AS rec_provincias,
@@ -339,8 +344,8 @@ const getFacturacionJuegosUTE = async (req, res) => {
             descripcion: 'Recaudación agrupada por juego/canal desde Control Previo',
             clasificacionCanales: {
               internet: "codigo_agencia IN ('88880','5188880')",
-              caba: "codigo_provincia='51' y codigo_agencia NOT IN ('88880','5188880')",
-              provincias: "codigo_provincia != '51'"
+              caba: "codigo_provincia='51' y codigo_agencia NOT IN ('88880','5188880') (quini6/brinco siempre CABA salvo web)",
+              provincias: "codigo_provincia != '51' (quini6/brinco excluidos)"
             },
             columnaFechaControlPrevioAgencias: colFechaCPA,
             mapeoExcel: {

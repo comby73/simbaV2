@@ -3204,7 +3204,7 @@ let cpstExtractoLoto = null; // {tradicional: [6], match: [6], desquite: [6], sa
 let cpstExtractoLoto5 = null; // {numeros: [5 nums 0-36]}
 let cpstExtractoBrinco = null; // {tradicional: {numeros: [6], premios: {}}, junior: {numeros: [6], premios: {}, aciertosRequeridos: 5}}
 let cpstExtractoQuini6 = null; // {tradicional: {primera: [6], segunda: [6]}, revancha: [6], siempreSale: [6], premioExtra: [6], siempreSaleAciertos: 6}
-let cpstQuinielaYaZipFile = null; // Archivo ZIP cargado para Quiniela Ya
+let cpstQuinielaYaZipFiles = []; // Archivos ZIP cargados para Quiniela Ya
 
 function resetearControlPosteriorParaNuevaCarga() {
   cpResultadosActuales = null;
@@ -3214,7 +3214,7 @@ function resetearControlPosteriorParaNuevaCarga() {
   cpstDatosControlPrevio = null;
   cpstNumeroSorteo = '';
   cpstModalidadSorteo = '';
-  cpstQuinielaYaZipFile = null;
+  cpstQuinielaYaZipFiles = [];
 
   document.getElementById('cpst-datos-cargados')?.classList.add('hidden');
 
@@ -4667,19 +4667,20 @@ function detectarModalidadSorteo(tiposSorteo) {
 async function cargarZipPosterior(input) {
   if (!input.files.length) return;
 
-  const file = input.files[0];
+  const files = Array.from(input.files || []);
+  const file = files[0];
 
   // Limpiar todo el estado previo antes de una nueva carga de ZIP
   resetearControlPosteriorParaNuevaCarga();
 
   if (cpstJuegoSeleccionado === 'Quiniela Ya') {
-    cpstQuinielaYaZipFile = file;
+    cpstQuinielaYaZipFiles = files.filter(f => /\.zip$/i.test(f.name));
     cpstDatosControlPrevio = null;
     cpstRegistrosNTF = [];
     cpstNumeroSorteo = '';
 
     document.getElementById('cpst-datos-cargados')?.classList.remove('hidden');
-    document.getElementById('cpst-sorteo').textContent = 'Pendiente';
+    document.getElementById('cpst-sorteo').textContent = `${cpstQuinielaYaZipFiles.length} ZIP`;
     document.getElementById('cpst-registros').textContent = '-';
     document.getElementById('cpst-recaudacion').textContent = '-';
     const juegoBadge = document.getElementById('cpst-juego-badge');
@@ -4687,7 +4688,12 @@ async function cargarZipPosterior(input) {
     const modalidadBadge = document.getElementById('cpst-modalidad-badge');
     if (modalidadBadge) modalidadBadge.textContent = 'Sin extracto';
 
-    showToast(`ZIP cargado para Quiniela Ya: ${file.name}`, 'success');
+    if (cpstQuinielaYaZipFiles.length === 0) {
+      showToast('Seleccione al menos un archivo .zip válido para Quiniela Ya', 'warning');
+      return;
+    }
+
+    showToast(`${cpstQuinielaYaZipFiles.length} ZIP cargado(s) para Quiniela Ya`, 'success');
     return;
   }
 
@@ -4703,13 +4709,13 @@ async function cargarZipPosterior(input) {
 
   // Quiniela Ya: solo almacenar el ZIP, el escrutinio se ejecuta con el botón
   if (juegoConfig.nombre === 'Quiniela Ya') {
-    cpstQuinielaYaZipFile = file;
+    cpstQuinielaYaZipFiles = files.filter(f => /\.zip$/i.test(f.name));
     cpstDatosControlPrevio = null;
     cpstRegistrosNTF = [];
     cpstNumeroSorteo = '';
 
     document.getElementById('cpst-datos-cargados')?.classList.remove('hidden');
-    document.getElementById('cpst-sorteo').textContent = 'Pendiente';
+    document.getElementById('cpst-sorteo').textContent = `${cpstQuinielaYaZipFiles.length} ZIP`;
     document.getElementById('cpst-registros').textContent = '-';
     document.getElementById('cpst-recaudacion').textContent = '-';
     const juegoBadge = document.getElementById('cpst-juego-badge');
@@ -4717,7 +4723,12 @@ async function cargarZipPosterior(input) {
     const modalidadBadge = document.getElementById('cpst-modalidad-badge');
     if (modalidadBadge) modalidadBadge.textContent = 'Sin extracto';
 
-    showToast(`ZIP cargado para Quiniela Ya: ${file.name}`, 'success');
+    if (cpstQuinielaYaZipFiles.length === 0) {
+      showToast('Seleccione al menos un archivo .zip válido para Quiniela Ya', 'warning');
+      return;
+    }
+
+    showToast(`${cpstQuinielaYaZipFiles.length} ZIP cargado(s) para Quiniela Ya`, 'success');
     return;
   }
 
@@ -7128,34 +7139,55 @@ function showModalSimple(titulo, contenido) {
 
 async function ejecutarEscrutinio() {
   if (cpstJuegoSeleccionado === 'Quiniela Ya') {
-    if (!cpstQuinielaYaZipFile) {
-      showToast('Cargue el ZIP de Quiniela Ya en "Datos del Sorteo"', 'warning');
+    if (!Array.isArray(cpstQuinielaYaZipFiles) || cpstQuinielaYaZipFiles.length === 0) {
+      showToast('Cargue uno o más ZIP de Quiniela Ya en "Datos del Sorteo"', 'warning');
       return;
     }
 
     try {
-      showToast('Procesando Quiniela Ya...', 'info');
-      let response;
-      try {
-        response = await controlPosteriorAPI.escrutinioQuinielaYa(cpstQuinielaYaZipFile, false);
-      } catch (error) {
-        if (error.status === 409 && error.payload?.code === 'OVERWRITE_REQUIRED') {
-          const sorteo = error.payload?.data?.sorteo;
-          const ok = confirm(`Ya existen datos para el sorteo ${sorteo}. ¿Desea sobrescribirlos?`);
-          if (!ok) {
-            showToast('Operación cancelada por el usuario', 'info');
-            return;
+      const total = cpstQuinielaYaZipFiles.length;
+      let okCount = 0;
+      let errorCount = 0;
+      let lastResponse = null;
+
+      for (let i = 0; i < total; i++) {
+        const zipFile = cpstQuinielaYaZipFiles[i];
+        showToast(`Procesando Quiniela Ya ${i + 1}/${total}: ${zipFile.name}`, 'info');
+
+        let response;
+        try {
+          response = await controlPosteriorAPI.escrutinioQuinielaYa(zipFile, false);
+        } catch (error) {
+          if (error.status === 409 && error.payload?.code === 'OVERWRITE_REQUIRED') {
+            const sorteo = error.payload?.data?.sorteo;
+            const ok = confirm(`(${i + 1}/${total}) Ya existen datos para el sorteo ${sorteo} (${zipFile.name}). ¿Desea sobrescribirlos?`);
+            if (!ok) {
+              errorCount++;
+              continue;
+            }
+            response = await controlPosteriorAPI.escrutinioQuinielaYa(zipFile, true);
+          } else {
+            console.error('Error Quiniela Ya:', error);
+            errorCount++;
+            continue;
           }
-          response = await controlPosteriorAPI.escrutinioQuinielaYa(cpstQuinielaYaZipFile, true);
-        } else {
-          throw error;
         }
+
+        lastResponse = response;
+        okCount++;
       }
 
-      cpstResultados = response.data;
-      sincronizarMetaSorteoPosterior(cpstResultados, null);
-      mostrarResultadosEscrutinioQuinielaYa(cpstResultados);
-      showToast('Quiniela Ya procesada correctamente', 'success');
+      if (lastResponse?.data) {
+        cpstResultados = lastResponse.data;
+        sincronizarMetaSorteoPosterior(cpstResultados, null);
+        mostrarResultadosEscrutinioQuinielaYa(cpstResultados);
+      }
+
+      if (errorCount > 0) {
+        showToast(`Quiniela Ya finalizada: ${okCount} OK, ${errorCount} con error/cancelado`, 'warning');
+      } else {
+        showToast(`Quiniela Ya procesada correctamente (${okCount}/${total})`, 'success');
+      }
     } catch (error) {
       console.error('Error Quiniela Ya:', error);
       showToast(error.message || 'Error procesando Quiniela Ya', 'error');

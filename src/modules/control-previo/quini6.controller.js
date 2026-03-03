@@ -224,8 +224,13 @@ async function procesarArchivoNTF(contenido) {
       numeroSorteo = extraerCampo(linea, NTF_GENERIC.NUMERO_SORTEO);
     }
     
-    const provincia = extraerCampo(linea, NTF_GENERIC.PROVINCIA);
-    const agencia = extraerCampo(linea, NTF_GENERIC.AGENCIA);
+    const provinciaRaw = extraerCampo(linea, NTF_GENERIC.PROVINCIA);
+    const agenciaRaw = extraerCampo(linea, NTF_GENERIC.AGENCIA);
+    const agenciaNormalizada = String(agenciaRaw || '').padStart(5, '0');
+    const esVentaWeb = agenciaNormalizada === '88880';
+    const provincia = '51'; // Regla de negocio: QUINI 6 se liquida en CABA
+    const agencia = agenciaNormalizada;
+    const ctaCte = esVentaWeb ? '5188880' : `51${agenciaNormalizada}`;
     const ticket = extraerCampo(linea, NTF_GENERIC.NUMERO_TICKET);
     const fechaVenta = extraerCampo(linea, NTF_GENERIC.FECHA_VENTA);
     const horaVenta = extraerCampo(linea, NTF_GENERIC.HORA_VENTA);
@@ -255,7 +260,9 @@ async function procesarArchivoNTF(contenido) {
       sorteo: numeroSorteo,
       provincia,
       agencia,
-      ctaCte: `${provincia}${agencia}`,
+      ctaCte,
+      esVentaWeb,
+      provinciaOriginal: provinciaRaw,
       ticket,
       fechaVenta,
       horaVenta,
@@ -313,10 +320,11 @@ async function procesarArchivoNTF(contenido) {
     }
     
     // Estadísticas por provincia
-    const provinciaKey = provincia || 'DESCONOCIDA';
+    const provinciaKey = '51';
     if (!porProvincia[provinciaKey]) {
       porProvincia[provinciaKey] = {
-        nombre: PROVINCIAS[provinciaKey] || provinciaKey,
+        codigo: provinciaKey,
+        nombre: PROVINCIAS[provinciaKey]?.nombre || 'Ciudad Autónoma de Buenos Aires',
         registros: 0,
         cancelados: 0,
         recaudacion: 0,
@@ -332,11 +340,13 @@ async function procesarArchivoNTF(contenido) {
     }
     
     // Estadísticas por agencia
-    const agenciaKey = `${provincia}${agencia}`;
+    const agenciaKey = ctaCte;
     if (!porAgencia[agenciaKey]) {
       porAgencia[agenciaKey] = {
         provincia,
         agencia,
+        ctaCte: agenciaKey,
+        esVentaWeb,
         registros: 0,
         cancelados: 0,
         recaudacion: 0,
@@ -888,7 +898,9 @@ async function guardarControlPrevioQuini6DB(resultadoNTF, resultadoXML, user, no
       const placeholders = [];
 
       for (const ag of porAgencia) {
-        const codigoAgencia = (ag.provincia || '51') + (ag.agencia || '00000').padStart(5, '0');
+        const agenciaNormalizada = String(ag.agencia || '').padStart(5, '0');
+        const esVentaWeb = agenciaNormalizada === '88880';
+        const codigoAgencia = esVentaWeb ? '5188880' : `51${agenciaNormalizada}`;
         placeholders.push('(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)');
         valores.push(
           controlPrevioId,
@@ -897,7 +909,7 @@ async function guardarControlPrevioQuini6DB(resultadoNTF, resultadoXML, user, no
           sorteo,
           'U', // Quini6 modalidad única
           codigoAgencia,
-          ag.provincia || '51',
+          '51',
           ag.registros || 0,      // total_tickets
           ag.apuestasSimples || 0, // total_apuestas
           ag.cancelados || 0,      // total_anulados

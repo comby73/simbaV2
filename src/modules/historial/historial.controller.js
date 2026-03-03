@@ -19,6 +19,18 @@ const {
 } = require('../../shared/escrutinio.helper');
 const { obtenerHistorialControlPrevio } = require('../../shared/control-previo.helper');
 
+async function resolverColumnaFechaTabla(tableName) {
+  for (const col of ['fecha', 'fecha_sorteo']) {
+    try {
+      await query(`SELECT \`${col}\` FROM \`${tableName}\` LIMIT 0`);
+      return col;
+    } catch (_) {
+      // intentar próxima columna
+    }
+  }
+  return null;
+}
+
 /**
  * GET /api/historial/control-previo/:juego
  * Lista el historial de control previo
@@ -591,20 +603,76 @@ const listarControlPrevioGeneral = async (req, res) => {
     // Obtener Loto si no se especifica juego o es loto
     if (!juego || juego === 'loto') {
       try {
+        const colFechaLoto = await resolverColumnaFechaTabla('control_previo_loto');
+        const exprFechaLoto = colFechaLoto ? `cp.${colFechaLoto}` : 'DATE(cp.created_at)';
+
         let sqlL = `
-          SELECT cp.*, 'U' as modalidad, u.nombre as usuario_nombre, 'loto' as juego
+          SELECT
+            cp.id,
+            cp.numero_sorteo,
+            ${exprFechaLoto} as fecha,
+            cp.archivo as nombre_archivo_zip,
+            cp.registros_validos as total_registros,
+            cp.apuestas_total as total_apuestas,
+            cp.registros_anulados as total_anulados,
+            cp.recaudacion as total_recaudacion,
+            'U' as modalidad,
+            cp.usuario_id,
+            cp.created_at,
+            cp.updated_at,
+            u.nombre as usuario_nombre,
+            'loto' as juego
           FROM control_previo_loto cp
           LEFT JOIN usuarios u ON cp.usuario_id = u.id
           WHERE 1=1
         `;
         const paramsL = [];
 
-        if (fechaDesde) { sqlL += ' AND cp.fecha >= ?'; paramsL.push(fechaDesde); }
-        if (fechaHasta) { sqlL += ' AND cp.fecha <= ?'; paramsL.push(fechaHasta); }
+        if (fechaDesde) { sqlL += ` AND ${exprFechaLoto} >= ?`; paramsL.push(fechaDesde); }
+        if (fechaHasta) { sqlL += ` AND ${exprFechaLoto} <= ?`; paramsL.push(fechaHasta); }
 
-        sqlL += ` ORDER BY cp.fecha DESC, cp.created_at DESC LIMIT ${maxLimit}`;
+        sqlL += ` ORDER BY ${exprFechaLoto} DESC, cp.created_at DESC LIMIT ${maxLimit}`;
 
-        const lotoData = await query(sqlL, paramsL);
+        let lotoData;
+        try {
+          lotoData = await query(sqlL, paramsL);
+        } catch (errLoto) {
+          if (!String(errLoto?.message || '').includes('Unknown column')) {
+            throw errLoto;
+          }
+
+          // Compatibilidad con esquema legacy
+          const colFechaLotoLegacy = await resolverColumnaFechaTabla('control_previo_loto');
+          const exprFechaLotoLegacy = colFechaLotoLegacy ? `cp.${colFechaLotoLegacy}` : 'DATE(cp.created_at)';
+
+          let sqlLLegacy = `
+            SELECT
+              cp.id,
+              cp.numero_sorteo,
+              ${exprFechaLotoLegacy} as fecha,
+              cp.nombre_archivo_zip,
+              cp.total_registros,
+              cp.total_apuestas,
+              cp.total_anulados,
+              cp.total_recaudacion,
+              'U' as modalidad,
+              cp.usuario_id,
+              cp.created_at,
+              cp.updated_at,
+              cp.usuario_nombre,
+              'loto' as juego
+            FROM control_previo_loto cp
+            WHERE 1=1
+          `;
+          const paramsLegacy = [];
+
+          if (fechaDesde) { sqlLLegacy += ` AND ${exprFechaLotoLegacy} >= ?`; paramsLegacy.push(fechaDesde); }
+          if (fechaHasta) { sqlLLegacy += ` AND ${exprFechaLotoLegacy} <= ?`; paramsLegacy.push(fechaHasta); }
+
+          sqlLLegacy += ` ORDER BY ${exprFechaLotoLegacy} DESC, cp.created_at DESC LIMIT ${maxLimit}`;
+          lotoData = await query(sqlLLegacy, paramsLegacy);
+        }
+
         resultados = resultados.concat(lotoData);
       } catch (e) {
         // Tabla puede no existir todavía
@@ -615,8 +683,11 @@ const listarControlPrevioGeneral = async (req, res) => {
     // Obtener Loto 5 si no se especifica juego o es loto5
     if (!juego || juego === 'loto5') {
       try {
+        const colFechaL5 = await resolverColumnaFechaTabla('control_previo_loto5');
+        const exprFechaL5 = colFechaL5 ? `cp.${colFechaL5}` : 'DATE(cp.created_at)';
+
         let sqlL5 = `
-          SELECT cp.id, cp.numero_sorteo, cp.fecha, cp.archivo,
+          SELECT cp.id, cp.numero_sorteo, ${exprFechaL5} as fecha, cp.archivo,
                  cp.registros_validos as total_registros,
                  cp.apuestas_total as total_apuestas,
                  cp.registros_anulados as total_anulados,
@@ -630,10 +701,10 @@ const listarControlPrevioGeneral = async (req, res) => {
         `;
         const paramsL5 = [];
 
-        if (fechaDesde) { sqlL5 += ' AND cp.fecha >= ?'; paramsL5.push(fechaDesde); }
-        if (fechaHasta) { sqlL5 += ' AND cp.fecha <= ?'; paramsL5.push(fechaHasta); }
+        if (fechaDesde) { sqlL5 += ` AND ${exprFechaL5} >= ?`; paramsL5.push(fechaDesde); }
+        if (fechaHasta) { sqlL5 += ` AND ${exprFechaL5} <= ?`; paramsL5.push(fechaHasta); }
 
-        sqlL5 += ` ORDER BY cp.fecha DESC, cp.created_at DESC LIMIT ${maxLimit}`;
+        sqlL5 += ` ORDER BY ${exprFechaL5} DESC, cp.created_at DESC LIMIT ${maxLimit}`;
 
         const loto5Data = await query(sqlL5, paramsL5);
         resultados = resultados.concat(loto5Data);

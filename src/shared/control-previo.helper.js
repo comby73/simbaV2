@@ -620,10 +620,13 @@ async function buscarFechaProgramacion(tipoJuego, numeroSorteo, modalidad = null
     // Mapeo de tipoJuego a tipo_juego/juego en BD
     const mapeoTipos = {
       'quiniela': 'quiniela',
+      'quinielaya': 'quinielaya',
       'poceada': 'poceada',
       'tombolina': 'tombolina',
       'loto': 'loto',
-      'loto5': 'loto5'
+      'loto5': 'loto5',
+      'brinco': 'brinco',
+      'quini6': 'quini6'
     };
 
     const tipoJuegoDB = mapeoTipos[tipoJuego.toLowerCase()] || tipoJuego;

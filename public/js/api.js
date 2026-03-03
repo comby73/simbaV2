@@ -256,13 +256,21 @@ const controlPosteriorAPI = {
     formData.append('archivo', file);
     formData.append('overwrite', overwrite ? 'true' : 'false');
     const token = getToken();
+    const headers = token ? { 'Authorization': `Bearer ${token}` } : {};
     const response = await fetch(`${API_BASE}/control-posterior/quinielaya/escrutinio`, {
       method: 'POST',
-      headers: { 'Authorization': `Bearer ${token}` },
+      headers,
       body: formData
     });
-    const data = await response.json();
+    const contentType = response.headers.get('content-type');
+    const data = contentType && contentType.includes('application/json')
+      ? await response.json()
+      : { message: await response.text() };
     if (!response.ok) {
+      if (response.status === 401) {
+        console.warn('[SIMBA] Sesión expirada o no autorizada (401)');
+        handleLogout();
+      }
       const err = new Error(data.message || 'Error procesando Quiniela Ya');
       err.status = response.status;
       err.payload = data;
