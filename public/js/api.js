@@ -20,6 +20,27 @@ const getUser = () => {
 const setUser = (user) => localStorage.setItem('cl_user', JSON.stringify(user));
 const removeUser = () => localStorage.removeItem('cl_user');
 
+async function parseResponseSafe(response) {
+  const contentType = (response.headers.get('content-type') || '').toLowerCase();
+
+  if (contentType.includes('application/json')) {
+    try {
+      return await response.json();
+    } catch (_) {
+      return {};
+    }
+  }
+
+  const text = await response.text().catch(() => '');
+  if (!text) return {};
+
+  try {
+    return JSON.parse(text);
+  } catch (_) {
+    return { message: text };
+  }
+}
+
 async function apiRequest(endpoint, options = {}) {
   const url = `${API_BASE}${endpoint}`;
   const token = getToken();
@@ -201,8 +222,14 @@ const controlPrevioAPI = {
       headers: { 'Authorization': `Bearer ${token}` },
       body: formData
     });
-    const data = await response.json();
-    if (!response.ok) throw new Error(data.message || 'Error procesando QUINI 6');
+    const data = await parseResponseSafe(response);
+    if (!response.ok) {
+      if (response.status === 401) {
+        console.warn('[SIMBA] Sesión expirada o no autorizada (401)');
+        handleLogout();
+      }
+      throw new Error(data.message || `Error procesando QUINI 6 (HTTP ${response.status})`);
+    }
     return data;
   },
 
