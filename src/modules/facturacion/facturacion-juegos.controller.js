@@ -151,22 +151,15 @@ async function obtenerDesgloseQuini6Dinamico(fecha_inicio, fecha_fin) {
 }
 
 async function resolverColumnaFecha(tableName) {
-  try {
-    const cols = await query(`
-      SELECT COLUMN_NAME
-      FROM INFORMATION_SCHEMA.COLUMNS
-      WHERE TABLE_SCHEMA = DATABASE()
-        AND TABLE_NAME = ?
-        AND COLUMN_NAME IN ('fecha', 'fecha_sorteo')
-    `, [tableName]);
-
-    const disponibles = new Set((cols || []).map(c => c.COLUMN_NAME));
-    if (disponibles.has('fecha')) return 'fecha';
-    if (disponibles.has('fecha_sorteo')) return 'fecha_sorteo';
-    return null;
-  } catch {
-    return null;
+  for (const col of ['fecha', 'fecha_sorteo']) {
+    try {
+      await query(`SELECT \`${col}\` FROM \`${tableName}\` LIMIT 0`);
+      return col;
+    } catch {
+      // columna no existe, probar la siguiente
+    }
   }
+  return null;
 }
 
 async function resolverColumnaFechaControlPrevioAgencias() {
