@@ -65,11 +65,19 @@ function normalizarDesglose(rows, itemsBase) {
 }
 
 async function obtenerDesgloseLotoDinamico(fecha_inicio, fecha_fin) {
-  const rows = await query(`
-    SELECT datos_json
-    FROM control_previo_loto
-    WHERE fecha >= ? AND fecha <= ?
-  `, [fecha_inicio, fecha_fin]);
+  const colFecha = await resolverColumnaFecha('control_previo_loto');
+  if (!colFecha) return null;
+
+  let rows;
+  try {
+    rows = await query(`
+      SELECT datos_json
+      FROM control_previo_loto
+      WHERE ${colFecha} >= ? AND ${colFecha} <= ?
+    `, [fecha_inicio, fecha_fin]);
+  } catch {
+    return null;
+  }
 
   if (!rows?.length) return null;
 
@@ -103,11 +111,19 @@ async function obtenerDesgloseLotoDinamico(fecha_inicio, fecha_fin) {
 }
 
 async function obtenerDesgloseQuini6Dinamico(fecha_inicio, fecha_fin) {
-  const rows = await query(`
-    SELECT datos_json
-    FROM control_previo_quini6
-    WHERE fecha >= ? AND fecha <= ?
-  `, [fecha_inicio, fecha_fin]);
+  const colFecha = await resolverColumnaFecha('control_previo_quini6');
+  if (!colFecha) return null;
+
+  let rows;
+  try {
+    rows = await query(`
+      SELECT datos_json
+      FROM control_previo_quini6
+      WHERE ${colFecha} >= ? AND ${colFecha} <= ?
+    `, [fecha_inicio, fecha_fin]);
+  } catch {
+    return null;
+  }
 
   if (!rows?.length) return null;
 
@@ -134,19 +150,27 @@ async function obtenerDesgloseQuini6Dinamico(fecha_inicio, fecha_fin) {
   ]);
 }
 
-async function resolverColumnaFechaControlPrevioAgencias() {
-  const cols = await query(`
-    SELECT COLUMN_NAME
-    FROM INFORMATION_SCHEMA.COLUMNS
-    WHERE TABLE_SCHEMA = DATABASE()
-      AND TABLE_NAME = 'control_previo_agencias'
-      AND COLUMN_NAME IN ('fecha', 'fecha_sorteo')
-  `);
+async function resolverColumnaFecha(tableName) {
+  try {
+    const cols = await query(`
+      SELECT COLUMN_NAME
+      FROM INFORMATION_SCHEMA.COLUMNS
+      WHERE TABLE_SCHEMA = DATABASE()
+        AND TABLE_NAME = ?
+        AND COLUMN_NAME IN ('fecha', 'fecha_sorteo')
+    `, [tableName]);
 
-  const disponibles = new Set((cols || []).map(c => c.COLUMN_NAME));
-  if (disponibles.has('fecha')) return 'fecha';
-  if (disponibles.has('fecha_sorteo')) return 'fecha_sorteo';
-  return null;
+    const disponibles = new Set((cols || []).map(c => c.COLUMN_NAME));
+    if (disponibles.has('fecha')) return 'fecha';
+    if (disponibles.has('fecha_sorteo')) return 'fecha_sorteo';
+    return null;
+  } catch {
+    return null;
+  }
+}
+
+async function resolverColumnaFechaControlPrevioAgencias() {
+  return resolverColumnaFecha('control_previo_agencias');
 }
 
 // ============================================================
