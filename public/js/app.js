@@ -875,6 +875,45 @@ function formatFileSize(bytes) {
 let cpArchivoSeleccionado = null;
 let cpResultadosActuales = null;
 let cpRegistrosNTF = []; // NUEVO: Registros parseados del TXT para Control Posterior
+let processClockTimer = null;
+let processClockStartTs = 0;
+
+function formatElapsedProcessTime(ms) {
+  const totalSegundos = Math.max(0, Math.floor(ms / 1000));
+  const minutos = Math.floor(totalSegundos / 60).toString().padStart(2, '0');
+  const segundos = (totalSegundos % 60).toString().padStart(2, '0');
+  return `${minutos}:${segundos}`;
+}
+
+function startProcessClock(label = 'Procesando') {
+  const indicator = document.getElementById('process-clock-indicator');
+  const labelEl = document.getElementById('process-clock-label');
+  const timeEl = document.getElementById('process-clock-time');
+  if (!indicator || !labelEl || !timeEl) return;
+
+  stopProcessClock();
+
+  processClockStartTs = Date.now();
+  labelEl.textContent = label;
+  timeEl.textContent = '00:00';
+  indicator.classList.remove('hidden');
+
+  processClockTimer = setInterval(() => {
+    const elapsed = Date.now() - processClockStartTs;
+    timeEl.textContent = formatElapsedProcessTime(elapsed);
+  }, 1000);
+}
+
+function stopProcessClock() {
+  const indicator = document.getElementById('process-clock-indicator');
+  if (processClockTimer) {
+    clearInterval(processClockTimer);
+    processClockTimer = null;
+  }
+  if (indicator) {
+    indicator.classList.add('hidden');
+  }
+}
 
 function resetearControlPrevioParaNuevaCarga({ preservarArchivoSeleccionado = false } = {}) {
   cpResultadosActuales = null;
@@ -964,6 +1003,7 @@ async function procesarControlPrevio() {
   resetearControlPrevioParaNuevaCarga({ preservarArchivoSeleccionado: true });
 
   showToast(`Procesando ${juegoConfig.nombre}...`, 'info');
+  startProcessClock(`Control Previo · ${juegoConfig.nombre}`);
 
   try {
     const response = await controlPrevioAPI[juegoConfig.api](cpArchivoSeleccionado);
@@ -978,6 +1018,8 @@ async function procesarControlPrevio() {
   } catch (error) {
     console.error('Error:', error);
     showToast(error.message || 'Error procesando archivo', 'error');
+  } finally {
+    stopProcessClock();
   }
 }
 
@@ -1360,6 +1402,18 @@ function mostrarResultadosCP(data) {
 
 function limpiarControlPrevio() {
   resetearControlPrevioParaNuevaCarga();
+}
+
+function reiniciarControlPrevio() {
+  resetearControlPrevioParaNuevaCarga();
+  const gameBadge = document.getElementById('cp-juego-detectado');
+  if (gameBadge) {
+    gameBadge.textContent = '';
+    gameBadge.className = 'badge';
+  }
+  document.getElementById('cp-titulo').textContent = 'Control Previo';
+  document.getElementById('cp-subtitulo').textContent = 'Procesamiento y validación de archivos NTF';
+  showToast('Control Previo reiniciado. Ya podés cargar otro ZIP.', 'info');
 }
 
 async function guardarControlPrevio() {
@@ -4936,8 +4990,10 @@ function cargarExtractoXML(input) {
 
 // Procesar múltiples archivos XML
 async function procesarMultiplesXML(files) {
-  const archivosInfo = [];
-  const modalidades = {};
+  startProcessClock('Control Posterior · Procesando XML');
+  try {
+    const archivosInfo = [];
+    const modalidades = {};
 
   // Primero analizar todos los archivos - LEER CONTENIDO para obtener modalidad real
   for (const file of files) {
@@ -5066,10 +5122,13 @@ async function procesarMultiplesXML(files) {
 
   renderExtractosList();
 
-  if (procesados > 0) {
-    showToast(`✓ ${procesados} extractos cargados de ${MODALIDADES_XML[modalidad]}${errores > 0 ? ` (${errores} errores)` : ''}`, 'success');
-  } else {
-    showToast('No se pudieron cargar los extractos', 'error');
+    if (procesados > 0) {
+      showToast(`✓ ${procesados} extractos cargados de ${MODALIDADES_XML[modalidad]}${errores > 0 ? ` (${errores} errores)` : ''}`, 'success');
+    } else {
+      showToast('No se pudieron cargar los extractos', 'error');
+    }
+  } finally {
+    stopProcessClock();
   }
 }
 
@@ -6295,6 +6354,7 @@ async function procesarArchivosInteligente(files) {
   if (!files || files.length === 0) return;
 
   resetearExtractosPosteriorParaNuevaCarga();
+  startProcessClock('Control Posterior · Carga inteligente');
 
   const statusDiv = document.getElementById('cpst-procesamiento-status');
   const mensajeDiv = document.getElementById('cpst-procesamiento-mensaje');
@@ -6349,6 +6409,7 @@ async function procesarArchivosInteligente(files) {
     }
 
     renderExtractosListInteligente();
+    stopProcessClock();
   }, 500);
 
   // Limpiar input para permitir re-selección del mismo archivo

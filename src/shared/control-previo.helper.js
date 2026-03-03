@@ -613,11 +613,11 @@ async function guardarControlPrevioTombolina(resultado, usuario, nombreArchivo) 
  * @returns {Promise<string|null>} - Fecha en formato YYYY-MM-DD o null
  */
 async function buscarFechaProgramacion(tipoJuego, numeroSorteo, modalidad = null) {
-  try {
+  const ejecutarBusqueda = async (columnaJuego) => {
     // Normalizar numero_sorteo (sin ceros a la izquierda para comparar)
     const sorteoNormalizado = String(parseInt(numeroSorteo, 10));
-    
-    // Mapeo de tipoJuego a tipo_juego en BD
+
+    // Mapeo de tipoJuego a tipo_juego/juego en BD
     const mapeoTipos = {
       'quiniela': 'quiniela',
       'poceada': 'poceada',
@@ -625,32 +625,48 @@ async function buscarFechaProgramacion(tipoJuego, numeroSorteo, modalidad = null
       'loto': 'loto',
       'loto5': 'loto5'
     };
-    
+
     const tipoJuegoDB = mapeoTipos[tipoJuego.toLowerCase()] || tipoJuego;
-    
+
     let sql = `
       SELECT fecha_sorteo 
       FROM programacion_sorteos 
-      WHERE tipo_juego = ? 
+      WHERE ${columnaJuego} = ? 
         AND (numero_sorteo = ? OR numero_sorteo = ?)
     `;
     const params = [tipoJuegoDB, sorteoNormalizado, String(numeroSorteo)];
-    
-    // Si hay modalidad, filtrar por ella también
+
     if (modalidad && tipoJuego === 'quiniela') {
       sql += ' AND modalidad_codigo = ?';
       params.push(modalidad);
     }
-    
-    sql += ' LIMIT 1';
-    
+
+    sql += ' ORDER BY fecha_sorteo DESC LIMIT 1';
+
     const rows = await query(sql, params);
-    
     if (rows && rows.length > 0 && rows[0].fecha_sorteo) {
       const fecha = new Date(rows[0].fecha_sorteo);
-      return fecha.toISOString().split('T')[0]; // YYYY-MM-DD
+      return fecha.toISOString().split('T')[0];
     }
-    
+
+    return null;
+  };
+
+  try {
+    try {
+      const fechaTipoJuego = await ejecutarBusqueda('tipo_juego');
+      if (fechaTipoJuego) return fechaTipoJuego;
+    } catch (errTipo) {
+      if (!String(errTipo?.message || '').includes('Unknown column')) throw errTipo;
+    }
+
+    try {
+      const fechaJuego = await ejecutarBusqueda('juego');
+      if (fechaJuego) return fechaJuego;
+    } catch (errJuego) {
+      if (!String(errJuego?.message || '').includes('Unknown column')) throw errJuego;
+    }
+
     return null;
   } catch (error) {
     console.warn('⚠️ Error buscando fecha en programación:', error.message);

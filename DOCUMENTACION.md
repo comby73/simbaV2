@@ -1,957 +1,323 @@
-# SIMBA V2 - Sistema de Control de Loterías
+# SIMBA V2 - Documentación Técnica y Operativa
 
-## 🚀 Actualización Integral - 26/27 Febrero 2026
-
-### 1) Consistencia de metadatos de sorteo (todos los juegos)
-
-Se consolidó la normalización de numero de sorteo y fecha de sorteo en Control Previo y Control Posterior para evitar:
-- sorteo en 0 o vacío,
-- fecha inconsistente entre fuentes (programación, CP, extracto, escrutinio),
-- divergencias entre módulos al renderizar resultados.
-
-Implementación principal en frontend:
-- Resolver metadatos por prioridad de fuentes.
-- Sincronización al ejecutar escrutinio para Quiniela, Quiniela Ya, Poceada, Tombolina, Loto, Loto 5, Brinco y Quini 6.
-
-Resultado:
-- badges y payloads con sorteo/fecha consistentes,
-- menor riesgo de reproceso sobre claves equivocadas,
-- trazabilidad homogénea en reportes y actas.
-
-### 2) Reproceso por clave lógica de sorteo
-
-Se unificó la lógica de reemplazo de procesos para evitar depender de fecha:
-- Quiniela: numero_sorteo + modalidad.
-- Poceada/Tombolina: numero_sorteo.
-
-Impacto:
-- menos duplicados en reprocesos,
-- menor riesgo de sobrescritura incorrecta por diferencias de fecha operativa.
-
-### 3) Historial y modales de detalle
-
-Se ampliaron datos de ganadores en modal de escrutinio:
-- primer premio y ganadores individuales,
-- agencia, cuenta corriente, provincia,
-- dirección/localidad de agencia (especialmente útil en CABA).
-
-También se corrigió el detalle de Control Previo para juegos de modalidad única (ej. Quini 6) normalizando aliases de columnas esperados por frontend.
-
-### 4) Correcciones Poceada
-
-Se corrigió un caso de sorteo no resuelto (Sorteo 0) y se reforzó persistencia de detalle individual de ganadores para visualización confiable en modal/historial.
-
-### 5) Extractos Web: diferencias local vs producción (batch PDF/imagen)
-
-Se atacó un conjunto de causas que explicaban por qué en web “solo leía uno” o terminaba todo en CABA:
-
-1. Fix backend SQL en resolución de provincia
-- Error detectado: Incorrect parameter count in native function UPPER.
-- Causa: envío de objeto (no string) a UPPER en búsqueda de provincia.
-- Solución: normalización robusta a texto y ampliación de matching por código/nombre.
-
-2. Priorización de metadata del nombre de archivo en carga inteligente
-- En batch, provincia y modalidad se priorizan desde nombre de archivo (cuando existe señal confiable), para evitar sobrescrituras por detección OCR errática.
-
-3. Fallback OCR sin default forzado a CABA
-- Si OCR principal falla, el fallback ya no asigna CABA por defecto.
-- Prioridad: nombre de archivo → texto OCR → (opcional) UI en contexto manual.
-
-4. Validación contra sorteo cargado (regla operativa)
-- El archivo se procesa solo si coincide modalidad y fecha con el sorteo activo.
-- Si no coincide, se descarta con aviso.
-
-5. Depuración de duplicados en lista de extractos desde BD
-- En precarga, se deduplica por provincia y se conserva el registro más reciente.
-
-### 6) Letras manuales (Quiniela/Poceada/Tombolina)
-
-Se amplió validación de letras manuales para aceptar A-Z (26 letras), reemplazando restricciones anteriores a subconjuntos.
-
-### 7) Redoblona Quiniela (superposición de rangos)
-
-Se corrigió la asignación de aciertos cuando el mismo número aparece en ambas ventanas de búsqueda (rangos superpuestos):
-- se evita reutilizar indebidamente una misma posición para ambas fases,
-- se distribuyen coincidencias de forma válida,
-- se preserva el cálculo de tope y pago según reglas existentes.
-
-Caso típico cubierto:
-- número repetido en posición dentro de 1-10 y también 1-20,
-- ahora computa correctamente para ambas fases cuando corresponde.
-
-### 8) Commits relevantes de esta actualización
-
-- 7c6e877 Normalize sorteo and fecha metadata across control previo/posterior results
-- ce4ebcd Fix provincia resolution in extractos to avoid UPPER parameter error
-- 61199f8 Fix manual letter validation and redoblona overlap assignment
-- f25d941 Fix batch PDF province detection using filename fallback
-- 305b051 Avoid CABA default in smart batch fallback OCR
-- 598a7bd Validate batch files by sorteo date/modality and dedupe BD extractos
-
-### 9) Recomendaciones operativas de despliegue
-
-Para validar en web luego de deploy:
-- recarga forzada de assets (Ctrl+F5),
-- confirmar rama observada (main vs principal),
-- probar batch con mezcla de provincias y verificar estados por archivo,
-- revisar lista de extractos: no deben aparecer duplicados por provincia.
+**Última actualización:** 03/03/2026  
+**Repositorio:** simbaV2 (`main`)  
+**Versión de referencia:** `APP_VERSION` expuesta por `/api/version`
 
 ---
 
-## 📋 Descripción General
+## 1) Qué es SIMBA V2
 
-Sistema web para el **control y análisis de sorteos de lotería** de LOTBA (Lotería de Buenos Aires). Diseñado como sistema **polimórfico** que detecta automáticamente el tipo de juego desde los archivos NTF.
+SIMBA V2 es un sistema web para **control previo**, **control posterior (escrutinio)**, **gestión de extractos**, **actas**, **historial** y **reportes operativos** de juegos de lotería.
 
-**Juegos soportados (7 + Hipicas):**
-- **Quiniela** - 5 modalidades (Previa, Primera, Matutina, Vespertina, Nocturna)
-- **Poceada** - 8 números de 20 sorteados, 3 niveles de premio + acumulados
-- **Tombolina** - 3-7 números, premios variables por cantidad y aciertos
-- **Loto (6/45 + PLUS)** - 5 modalidades (Tradicional, Match, Desquite, Sale o Sale, Multiplicador)
-- **Loto 5** - 5 números del 0-36, 3 niveles de premio
-- **BRINCO** - 6 números del 1-41, modalidades Tradicional y Junior Siempre Sale
-- **QUINI 6** - 6 números del 01-45, 5 modalidades (Trad. Primera, Trad. Segunda, Revancha, Siempre Sale, Premio Extra)
-- **Hipicas (Turfito)** - Juego offline, facturación de hipódromos
-
-**Funcionalidades principales:**
-1. **Control Previo** - Procesamiento de archivos ZIP/NTF antes del sorteo
-2. **Actas Notariales** - Generación de documentos legales PDF para escribanos
-3. **Control Posterior (Escrutinio)** - Verificación de ganadores comparando apuestas vs extractos
-4. **Reportes/Dashboard** - Estadísticas consolidadas por juego, fecha, agencia
-5. **Historial** - Consulta de sorteos procesados y escrutinios previos
-6. **Programación** - Carga de sorteos programados desde Excel
-7. **Extractos** - Carga manual, por XML o por OCR (IA) de números sorteados
-8. **Agencias** - Gestión de base de datos de agencias desde Excel
-9. **Juegos Offline** - Procesamiento de facturación de hipódromos (Turfito)
+Está orientado a operación diaria de sorteos y auditoría posterior, con trazabilidad por usuario y separación por permisos.
 
 ---
 
-## 🏗️ Arquitectura
+## 2) Juegos soportados
 
-```
-┌─────────────────────────────────────────────────────────────┐
-│                      FRONTEND                                │
-│  HTML + CSS + JavaScript (Vanilla)                          │
-│  SPA con navegación por hash/secciones                      │
-│  OCR con IA multi-proveedor (Groq → OpenAI)                │
-│  Puerto: 3000 (servido por Express) o 80 (Apache proxy)     │
-└─────────────────────────────────────────────────────────────┘
-                              │
-                              ▼
-┌─────────────────────────────────────────────────────────────┐
-│                      BACKEND                                 │
-│  Node.js + Express.js (24 controllers, 11 route files)      │
-│  JWT Authentication + RBAC (4 roles)                        │
-│  PDFKit (actas/reportes) + ExcelJS (importación)            │
-│  Multer (uploads) + ADM-ZIP (procesamiento)                  │
-└─────────────────────────────────────────────────────────────┘
-                              │
-                              ▼
-┌─────────────────────────────────────────────────────────────┐
-│                      DATABASE                                │
-│  MySQL (control_loterias)                                   │
-│  XAMPP localhost:3306 / Hostinger (producción)               │
-│  ~30 tablas (7 juegos × ~4 tablas + auxiliares)              │
-└─────────────────────────────────────────────────────────────┘
-```
+- Quiniela
+- Poceada
+- Tombolina
+- Loto
+- Loto 5
+- Brinco
+- Quini 6
+- Quiniela Ya (en flujo de control posterior)
+- Juegos offline (Hipicas/Turfito; estructura preparada para otros)
 
 ---
 
-## 📁 Estructura de Archivos
+## 3) Arquitectura actual
 
-```
-simbaV2/
-├── public/                         # Frontend (SPA)
-│   ├── index.html                  # Página principal (~2000+ líneas)
-│   ├── css/
-│   │   └── styles.css              # Estilos (tema oscuro + responsive)
-│   └── js/
-│       ├── app.js                  # Lógica principal (~12,700 líneas)
-│       ├── api.js                  # Cliente API (346 líneas, 7 objetos API)
-│       ├── config.js              # Config OCR + proveedores IA
-│       ├── config.local.js        # API keys (NO versionado, .gitignore)
-│       └── ocr-extractos.js       # OCR multi-proveedor (793 líneas)
-│
-├── src/                            # Backend
-│   ├── app.js                      # Express server + rutas registradas
-│   ├── config/
-│   │   ├── database.js             # Conexión MySQL (local/producción)
-│   │   └── distribucion-juegos.json # Config de premios Poceada/Quiniela
-│   ├── shared/
-│   │   ├── helpers.js              # Utilidades (fechas, provincias, formateo)
-│   │   ├── middleware.js           # Auth JWT + RBAC + auditoría
-│   │   ├── control-previo.helper.js # Guardar control previo en BD (567 líneas)
-│   │   └── escrutinio.helper.js    # Guardar escrutinios en BD (581 líneas)
-│   └── modules/
-│       ├── auth/                   # Login, JWT, perfil
-│       ├── users/                  # CRUD usuarios + roles
-│       ├── control-previo/         # 8 controllers (1 por juego + main)
-│       ├── control-posterior/      # 8 controllers (escrutinio por juego + extracto)
-│       ├── actas/                  # Generación PDFs (3044 líneas)
-│       ├── agencias/               # Carga Excel de agencias
-│       ├── programacion/           # Programación de sorteos
-│       ├── historial/              # Dashboard + historial (2350 líneas)
-│       ├── extractos/              # CRUD de extractos
-│       └── juegos-offline/         # Hipicas (Turfito)
-│
-├── config/
-│   └── loto-distribucion.json      # Config premios Loto Plus
-│
-├── database/
-│   ├── init.js                     # Schema completo de BD
-│   ├── seed.js                     # Datos de prueba
-│   ├── seed_agencias.js            # Agencias de prueba
-│   ├── reset_admin.js              # Reset de admin
-│   └── migration_*.js              # 13 migraciones (brinco, quini6, loto, etc.)
-│
-├── uploads/                        # Archivos subidos
-│   ├── ntf/                        # ZIPs procesados
-│   ├── extractos/                  # Extractos guardados
-│   └── temp/                       # Temporales
-│
-├── logs/                           # Logs del servidor
-├── DOCUMENTACION.md                # Este archivo
-├── prompt.md                       # Historial de desarrollo
-└── package.json                    # v2.3.0, Node.js
-```
+### Backend
+- Node.js + Express
+- Punto de entrada: `src/app.js` (con `app.js` raíz como puente)
+- API REST bajo `/api/*`
+- Seguridad: `helmet`, `cors`, JWT, control por rol y por permiso
+
+### Frontend
+- SPA en Vanilla JS
+- `public/index.html` + `public/js/app.js` (lógica principal)
+- Cliente HTTP centralizado en `public/js/api.js`
+- OCR con configuración en `public/js/config.js` y claves locales en `config.local.js`
+
+### Base de datos
+- MySQL (XAMPP local y entorno productivo)
+- Inicialización base en `database/init.js`
+- Evolución por scripts `database/migration_*.js`
+
+### Almacenamiento de archivos
+- `uploads/ntf`: insumos de control previo
+- `uploads/extractos`: extractos y archivos asociados
+- `uploads/temp`: staging de cargas
 
 ---
 
-## 🔐 Sistema de Autenticación
+## 4) Estructura funcional (estado real)
 
-### Roles y Permisos (RBAC)
+### 4.1 Módulos backend registrados en `src/app.js`
 
-| Rol | Descripción | Permisos |
-|-----|-------------|----------|
-| `admin` | Administrador | Acceso total al sistema |
-| `operador` | Operador de sorteos | control_previo, actas |
-| `analista` | Analista de datos | control_previo, control_posterior, reportes |
-| `auditor` | Auditor externo | Solo lectura de resultados |
+- `/api/auth` → login, verify, profile, cambio de contraseña
+- `/api/users` → usuarios y roles
+- `/api/control-previo` → procesamiento de ZIP/NTF por juego + guardado
+- `/api/control-posterior` → escrutinio por juego + exportaciones puntuales
+- `/api/actas` → generación de actas PDF
+- `/api/agencias` → consulta y carga desde Excel
+- `/api/programacion` → carga/consulta de programación de sorteos
+- `/api/historial` → dashboard, búsquedas, listados y detalle CP/CPST
+- `/api/extractos` → CRUD de extractos y carga masiva
+- `/api/juegos-offline` → facturación/ventas de Hipicas
+- `/api/ocr` → proxy de OCR del lado servidor
 
-### Implementación
-- **JWT** gestionado por `src/shared/middleware.js`
-- `authenticate` - Verifica token JWT en cada request
-- `requirePermission('modulo.accion')` - Verifica permisos por rol
-- `registrarAuditoria` - Log de acciones del usuario
-- Tokens almacenados en localStorage del frontend
+### 4.2 Frontend
 
----
+`public/js/app.js` gobierna:
+- login y sesión,
+- navegación de vistas,
+- control previo,
+- control posterior,
+- extractos,
+- programación,
+- historial/dashboard,
+- actas y juegos offline.
 
-## 📊 MÓDULO: Control Previo
-
-### Procesamiento Universal de Archivos
-
-**Controller principal:** `src/modules/control-previo/main.controller.js`
-
-El sistema detecta automáticamente el juego por el **código NTF** (posiciones 3-4 del archivo TXT):
-
-| Código NTF | Juego | Prefijo Archivo | Controller |
-|------------|-------|-----------------|------------|
-| 80 | Quiniela | QNL | `quiniela.controller.js` (773 líneas) |
-| 82 | Poceada | PCD / TMB | `poceada.controller.js` (1039 líneas) |
-| 74 | Tombolina | TMB | `tombolina.controller.js` (210 líneas) |
-| 09 | Loto Plus | LOTO / LOT / LTO | `loto.controller.js` (735 líneas) |
-| 05 | Loto 5 | LT5 | `loto5.controller.js` (569 líneas) |
-| 13 | BRINCO | BRN | `brinco.controller.js` (592 líneas) |
-| 69 | QUINI 6 | QN6 | `quini6.controller.js` (888 líneas) |
-
-### Flujo de Procesamiento
-1. Usuario sube archivo **ZIP** (drag & drop o selección)
-2. El ZIP contiene: **TXT** (NTF v2), **XML**, **HASH**, **PDF**
-3. El sistema detecta el juego por código NTF o prefijo de archivo
-4. Se parsea el TXT línea por línea (formato de longitud fija, 200+ caracteres)
-5. Se comparan datos del TXT vs XML oficial
-6. Se verifican archivos HASH (SHA-512)
-7. Se muestran estadísticas y discrepancias en el frontend
-8. Se guarda en base de datos
-
-### Formato NTF v2 (Genérico - 200 caracteres base)
-
-Todos los juegos comparten una parte genérica:
-
-| Campo | Posición (0-based) | Longitud | Descripción |
-|-------|-------------------|----------|-------------|
-| PROVINCIA | 13 | 2 | Código de provincia (51=CABA, etc.) |
-| AGENCIA | 15 | 5 | Número de agencia |
-| ORDINAL | 26 | 2 | '01' para primer ticket |
-| FECHA_CANCELACION | 70 | 8 | En blanco = válido, con fecha = anulado |
-| AGENCIA_AMIGA | 113 | 8 | Solo para agencia 88880 (venta web) |
-| VALOR_APUESTA | 121 | 10 | Formato EEEEEEEEDD (÷100) |
-| LOTERIAS_JUGADAS | 204 | 8 | Desglose por provincia (Quiniela) |
-
-**Campos específicos por juego** (después de posición 200):
-- **Poceada**: `CANTIDAD_NUMEROS` (207-208), números jugados codificados binariamente
-- **Tombolina**: `CANTIDAD_NUMEROS` (215-216), `SECUENCIA_NUMEROS` (211-224), `LETRAS` (203-206)
-- **Loto/Loto5/Brinco/Quini6**: Números codificados con BINARY_CODE (A-P → 4 bits)
-
-### Segmentación de Recaudación (Triple)
-
-Cada control previo calcula automáticamente:
-- **Venta Web** - Agencia 88880 (Cuenta Corriente)
-- **CABA Propia** - Provincia 51, excluyendo venta web
-- **Provincias (Interior)** - Resto de jurisdicciones
-
-Columnas en BD: `recaudacion_caba`, `recaudacion_provincias`, `recaudacion_web`
-
-### Mapa de Provincias (`src/shared/helpers.js`)
-
-| Código | Provincia | | Código | Provincia |
-|--------|-----------|---|--------|-----------|
-| 51 | CABA | | 65 | Neuquén |
-| 53 | Buenos Aires | | 67 | Río Negro |
-| 55 | Córdoba | | 69 | Salta |
-| 57 | Corrientes | | 71 | Santa Fe |
-| 59 | Entre Ríos | | 73 | Sgo. del Estero |
-| 61 | Formosa | | 75 | Tucumán |
-| 63 | Misiones | | 90 | Uruguay |
-
-### Validación de Agencias Amigas
-- Solo la agencia **88880** (venta web) puede tener agencia amiga
-- Campo `AGENCIA_AMIGA` (posiciones 114-121)
-- Se valida contra tabla `agencias` en BD
-- Errores reportados con: número de fila, ticket, agencia detectada
+`public/js/api.js` detecta entorno y resuelve `API_BASE` automáticamente (archivo/local/apache/producción).
 
 ---
 
-## 🎯 MÓDULO: Control Posterior (Escrutinio)
+## 5) Seguridad y permisos
 
-### Flujo General
-1. Se cargan datos desde Control Previo (registros NTF procesados)
-2. Se cargan los **extractos** (números sorteados) por:
-   - **XML** oficial (detección automática de modalidad y provincia)
-   - **OCR** con IA (Groq / OpenAI) desde imagen/foto
-   - **Manual** (ingreso directo por el usuario)
-3. Se ejecuta el **escrutinio** (comparación apuestas vs extracto)
-4. Se calculan **premios** según distribución configurada
-5. Se generan **reportes** (HTML + PDF + CSV)
-6. Se guardan resultados en BD automáticamente
+### Autenticación
+- JWT Bearer en header `Authorization`
+- Middleware principal: `authenticate`
 
-### Escrutinio por Juego
+### Autorización
+- `authorize(...)` por roles
+- `requirePermission(...)` por permiso granular
+- `isAdmin` para operaciones críticas
 
-#### Quiniela (`quiniela-escrutinio.controller.js` - 1305 líneas)
-- **Multiplicadores por cifras**: 1→×7, 2→×70, 3→×600, 4→×3500
-- **Redoblona**: Algoritmo VB6 replicado con extensión efectiva, corrimiento (shifting) y topes (1a2, 1a3, general)
-- **Letras**: Premio fijo $1000 exclusivo CABA, solo si no gana por números
-- **Exports**: `ejecutarEscrutinio`, `ejecutarControlPosterior`, `generarExcel`, `generarPDFReporte`
+### Roles de uso
+- `admin`
+- `operador`
+- `analista`
+- `auditor`
 
-#### Poceada (`poceada-escrutinio.controller.js` - 617 líneas)
-- **Decodificación binaria**: BINARY_CODE (A-P → 4 bits) para números
-- **Combinaciones**: C(n, 8) para n números jugados (8-15)
-- **Niveles**: 8 aciertos (1er premio, 62%), 7 aciertos (2do, 23.5%), 6 aciertos (3er, 10%)
-- **Pozos de arrastre**: 4 pozos independientes (1er, 2do, 3er, agenciero)
-- **Pozo asegurado**: $60.000.000 (1er premio)
-- **Fondo de reserva**: 4% de recaudación
-
-#### Tombolina (`tombolina-escrutinio.controller.js` - 238 líneas)
-- **Premios variables**: Tabla de multiplicadores según cantidad de números (3-7) y aciertos (hasta 8000×)
-- **Letras**: Premio fijo $1000 por 4 letras exactas (solo si no ganó por números)
-- **Estímulo agenciero**: 1% sobre premios pagados
-
-#### Loto Plus (`loto-escrutinio.controller.js` - 1100+ líneas)
-- **5 modalidades**: Tradicional, Match, Desquite, Sale o Sale, Multiplicador
-- **Todas las apuestas participan** en todas las modalidades
-- **Premios del XML**: Se leen montos del archivo XML oficial
-- **Config**: `config/loto-distribucion.json`
-  - Tradicional/Match: 65%/15%/3% por 6/5/4 aciertos
-  - Desquite: 80% solo 6 aciertos
-  - Sale o Sale: 85% cascada 6→1
-  - Multiplicador: 2x premio extra, agenciero $500.000/agencia
-- **Agenciero vacante**: Cuando ganadores son de venta web (5188880), el premio queda vacante
-- **Número PLUS**: Decodificación mejorada (dígito directo, letra A-J, o formato A-P)
-- **Logging detallado**: Debug de ganadores por modalidad y multiplicador
-
-#### Loto 5 (`loto5-escrutinio.controller.js` - 450+ líneas)
-- **3 niveles**: 5 aciertos (1er), 4 aciertos (2do), 3 aciertos (devolución apuesta)
-- **Agenciero**: 1% del total premios (1er + 2do), a agencias que vendieron tickets ganadores de 5 aciertos
-- **Agenciero vacante**: Si ganadores de 5 son todos de venta web, el premio queda vacante con nota explicativa
-- **Rango**: 0-36, 5 números por apuesta
-- **Campo `esVentaWeb`**: Agregado a cada ganador para tracking de venta web
-
-#### BRINCO (`brinco-escrutinio.controller.js` - 755 líneas)
-- **Decodificación binaria** de números (letras A-P = 4 bits)
-- **Tradicional**: 6/5/4/3 aciertos → 33%/11%/13%/25% del pozo
-- **Junior Siempre Sale**: 5+ aciertos → 10% del pozo
-- **Ticket display**: Muestra premio ganado (no importe/apuesta). Cada ganador tiene `premio` y `premioUnitario` asignados
-- **Persistencia automática**: `guardarEscrutinioBrinco()` → `escrutinio_brinco` + `escrutinio_brinco_ganadores`
-
-#### QUINI 6 (`quini6-escrutinio.controller.js` - 969 líneas)
-- **Tradicional Primera/Segunda**: 6/5/4 aciertos → 45%/19% del pozo
-- **Revancha**: Solo 6 aciertos → 13% del pozo
-- **Siempre Sale**: Sorteos iterativos hasta encontrar ganador (6→3 aciertos) → 14%
-- **Premio Extra**: Pool de números separado, jackpot acumulado, 6 aciertos exactos
-  - Pool ingresable manualmente en frontend (campo `cpst-quini6-pe-pool`)
-  - Debugging detallado con logs de tickets evaluados y acumulados
-- **Ticket display**: Muestra premio ganado (no importe/apuesta)
-- **Resumen**: Tabla con columna "Premio Total" por modalidad
-- **Persistencia automática**: `guardarEscrutinioQuini6DB()` → `escrutinio_quini6` + `escrutinio_quini6_ganadores`
+### Auditoría
+- Registro de acciones en tabla `auditoria` vía `registrarAuditoria(...)`
 
 ---
 
-## 🤖 MÓDULO: OCR de Extractos
+## 6) Flujo operativo recomendado
 
-### Sistema Multi-Proveedor con Fallback
-
-**Archivo**: `public/js/ocr-extractos.js` (793 líneas)
-
-**Proveedores configurados** en `public/js/config.js`:
-
-| Proveedor | Modelo | Estado | Prioridad |
-|-----------|--------|--------|-----------|
-| **GROQ** | meta-llama/llama-4-scout-17b-16e-instruct | ✅ Activo | 1 (primario) |
-| **MISTRAL** | mistral-small-2506 | ❌ Deshabilitado (rate limits) | - |
-| **OPENAI** | gpt-4o | ✅ Activo | 2 (fallback) |
-
-**Nota:** El modelo Groq se actualizó de `llama-3.2-90b-vision-preview` a `llama-4-scout-17b-16e-instruct` en febrero 2026.
-
-**API keys**: Almacenadas en `public/js/config.local.js` (gitignored). Se mezclan en `CONFIG` al cargar.
-
-**Funciones OCR por juego:**
-
-| Función | Juego | Extrae |
-|---------|-------|--------|
-| `procesarImagenQuiniela()` | Quiniela | 20 números + letras por provincia |
-| `procesarImagenPoceada()` | Poceada | 20 números + 4 letras |
-| `procesarImagenTombolina()` | Tombolina | Números + letras (formato Quiniela) |
-| `procesarImagenBrinco()` | BRINCO | 6 números Tradicional + 6 Revancha |
-| `procesarImagenQuini6()` | QUINI 6 | Números de 4 sorteos + Premio Extra |
-| `procesarExtractoAuto()` | Automático | Detecta tipo de juego y aplica función correcta |
-
-**Flujo**: Imagen → Llamada API IA (Groq) → Si falla → Fallback (OpenAI) → Parse JSON → Llenar inputs del frontend
+1. **Programación**: cargar programación de sorteos (`/api/programacion/cargar/generico`)
+2. **Control Previo**: subir ZIP por juego y guardar resultados
+3. **Extractos**: cargar resultados (manual/XML/OCR)
+4. **Control Posterior**: ejecutar escrutinio contra CP + extractos
+5. **Actas / Reportes**: generar documentación operativa
+6. **Historial**: validar consolidación, recaudación y ganadores
 
 ---
 
-## 📝 MÓDULO: Actas y Reportes PDF
+## 7) Reglas críticas de negocio
 
-**Controller**: `src/modules/actas/actas.controller.js` (3044 líneas)
+### 7.1 NTF de longitud fija
+- Las posiciones documentales suelen venir 1-based.
+- En código se parsea 0-based (`substr(start, length)`).
+- Referencia de helpers/controllers: módulo `control-previo`.
 
-Genera PDFs con **PDFKit** para:
+### 7.2 Segmentación de recaudación
+- Venta Web (agencia `5188880`)
+- CABA
+- Provincias
 
-### Acta de Control Previo
-- Resumen de procesamiento del ZIP
-- Estadísticas: registros, apuestas, recaudación (total/válida/anulada)
-- Tabla de segmentación (Web/CABA/Interior)
-- Validación de archivos de seguridad (HASH)
-- Adaptado por juego (Quiniela, Poceada, Tombolina, Loto, Brinco, Quini6)
+### 7.3 Provincias
+- Mapeo central en `src/shared/helpers.js` (`PROVINCIAS`)
+- Validar provincia/código antes de persistir extractos y resultados
 
-### Acta Notarial
-- Documento legal para escribanos
-- Datos del sorteo y configuración
+### 7.4 Fechas y zona horaria
+- Estandarización con `dayjs` + TZ `America/Argentina/Buenos_Aires`
 
-### Acta de Control Posterior
-- Resumen de escrutinio
-- Comparación Control Previo vs Escrutinio (tickets, apuestas, montos)
-- Ganadores por provincia/categoría con detalle
-- Premios pagados
-- Extractos sorteados (números + letras)
-- Estándar visual unificado para todos los juegos
+### 7.5 Persistencia por clave lógica
+- Se consolidó deduplicación por juego/sorteo/modalidad según corresponda
+- En historial y escrutinio se prioriza consistencia de `numero_sorteo`
 
----
-
-## 📈 MÓDULO: Reportes / Dashboard
-
-**Controller**: `src/modules/historial/historial.controller.js` (2350 líneas)
-
-### Vistas del Dashboard
-
-| Vista | Descripción |
-|-------|-------------|
-| **Detallado** | Una fila por cada sorteo/juego con todos los campos |
-| **Totalizado** | Agrupado por juego sumando montos |
-| **Agencias con Venta** | Una fila por agencia con métricas |
-| **Comparativo** | Comparación entre períodos |
-| **Totalizado por Agencia** | Agrupa TODOS los juegos por agencia, badges de colores por juego |
-
-### Columnas Condicionales por Tipo de Juego
-
-| Columna | Hipicas | Otros juegos |
-|---------|---------|-------------|
-| Recaudación | ✅ monto | ✅ monto |
-| Cancelaciones | ✅ monto | `-` |
-| Devoluciones | ✅ monto | `-` |
-| Tickets | `-` | ✅ cantidad |
-| Apuestas | `-` | ✅ cantidad |
-| Anulados | `-` | ✅ cantidad |
-| Ganadores | `-` | ✅ cantidad |
-| Premios | ✅ monto | ✅ monto |
-
-### Funciones Principales
-
-| Función | Descripción |
-|---------|-------------|
-| `obtenerDatosDashboard()` | Datos consolidados para las 5 vistas (7 juegos + hipicas) |
-| `obtenerStatsDashboard()` | Tarjetas resumen (recaudación, premios, cancelaciones, devoluciones) |
-| `obtenerFiltrosDashboard()` | Opciones de filtros dinámicos |
-| `listarControlPrevioGeneral()` | Historial de todos los control previo |
-| `listarEscrutiniosGeneral()` | Historial de todos los escrutinios |
-| `obtenerDetalleEscrutinio()` | Detalle completo de un escrutinio |
-| `buscarSorteo()` | Búsqueda por número de sorteo (7 juegos) |
-| `obtenerGanadores()` | Lista de ganadores por escrutinio |
-| `obtenerPremiosAgencias()` | Premios agrupados por agencia |
+### 7.6 Formato de cuenta corriente (`cta_cte`)
+- Formato operativo esperado: `51XXXXX` (7 dígitos, sin guiones).
+- Se normaliza quitando separadores para mantener consistencia entre reportes y cruces.
+- Referencia de migración puntual: `database/migration_normalizar_ctacte.js`.
 
 ---
 
-## 📅 MÓDULO: Programación
+## 8) OCR de extractos (estado actual)
 
-**Controller**: `src/modules/programacion/programacion.controller.js` (1236 líneas)
+### Proveedores configurados
+Orden de fallback definido en frontend:
+1. GROQ
+2. OPENAI
+3. (Mistral deshabilitado por límites)
 
-### Funcionalidades
-- Carga de programación desde **Excel** (ExcelJS)
-- Mapeo de códigos de juegos: `0080`=Quiniela, `0069`=Quini6, `0013`=Brinco, etc.
-- Filtro por mes usando **rango de fechas** (`fecha_sorteo >= ? AND fecha_sorteo < ?`)
-- Horas correctas con UTC (no timezone local)
-- Cada registro calcula su propio `mes_carga` según su `fecha_sorteo`
-- Verificación de sorteo programado antes de guardar extracto
+### Operación
+- OCR en cliente para UX + proxy servidor `/api/ocr/procesar-imagen`
+- Se reforzó lectura de PDFs con fallback, normalización y filtros de ruido
+- Mejoras recientes en detección de provincia y tratamiento de lotes
 
-### Endpoints
-
-| Método | Ruta | Descripción |
-|--------|------|-------------|
-| POST | `/api/programacion/cargar-excel` | Cargar Excel de programación |
-| GET | `/api/programacion/listar` | Listar programación con filtros |
-| GET | `/api/programacion/fecha` | Sorteos por fecha |
-| GET | `/api/programacion/sorteo/:numero` | Detalle de sorteo |
-| GET | `/api/programacion/verificar` | Verificar existencia de sorteo |
-| GET | `/api/programacion/sorteos-del-dia` | Sorteos programados para hoy |
-| DELETE | `/api/programacion/borrar` | Eliminar programación |
+### Recomendación
+- Mantener claves en `public/js/config.local.js` (no versionar)
+- Validar salida contra programación/sorteo antes de guardar
 
 ---
 
-## 🏢 MÓDULO: Agencias
+## 9) Base de datos y scripts
 
-**Controller**: `src/modules/agencias/agencias.controller.js` (263 líneas)
-
-- Carga masiva desde **Excel** con `cargarExcelAgencias()`
-- UPSERT: Si la agencia existe (por número) se actualiza, si no se inserta
-- Búsqueda por número de agencia
-- Función `agenciasAPI.cargarExcel()` en frontend
-- Frontend con tabla paginada
-
----
-
-## 🐴 MÓDULO: Juegos Offline - Hipicas (Turfito)
-
-**Controller**: `src/modules/juegos-offline/hipicas.controller.js` (675 líneas)
-
-### Hipódromos Soportados
-
-| Código | Nombre | Abreviatura |
-|--------|--------|-------------|
-| 0099 | Palermo | HP |
-| 0021 | La Plata | LP |
-| 0020 | San Isidro | SI |
-
-### Parser TXT Posicional (port de Python TurfitoLoader)
-| Campo | Posición | Longitud |
-|-------|----------|----------|
-| codigo_juego | 0 | 4 |
-| provincia_agencia | 4 | 7 |
-| reunion | 19 | 3 |
-| fecha | 22 | 8 |
-| ventas | 30 | 12 |
-| cancelaciones | 42 | 12 |
-| devoluciones | 53 | 13 |
-| premios | 64 | 14 |
-
-### Endpoints
-
-| Método | Ruta | Descripción |
-|--------|------|-------------|
-| POST | `/api/juegos-offline/hipicas/procesar-txt` | Subir archivo TXT (multer, 10MB, solo TXT) |
-| GET | `/api/juegos-offline/hipicas/facturacion` | Consultar facturación con filtros |
-| DELETE | `/api/juegos-offline/hipicas/facturacion/:id` | Eliminar registro |
-
-### Integración con Reportes
-- Checkbox "HIPICAS" en selector de juegos del dashboard
-- Columnas de Cancelaciones y Devoluciones específicas
-- Datos incluidos en vistas detallado, totalizado, agencias_venta, comparativo
-- Modalidad "H" = Hipicas en `getModalidadNombre()`
-- Frontend: `initJuegosOffline()`, `procesarArchivoHipicas()`, `cargarHistorialHipicas()`, `exportarHipicasExcel()`
-
----
-
-## ⚙️ Sistema de Configuración Dinámica
-
-### Distribución de Premios
-
-**Archivo**: `src/config/distribucion-juegos.json` (297 líneas)
-
-```json
-{
-  "version": "2026-01",
-  "vigencia": { "desde": "2026-01-01", "hasta": "2026-01-31" },
-  "fuente": "IF-2025-55768962-GCABA-LOTBA",
-  "juegos": {
-    "poceada": {
-      "porcentajePozoTotal": 45,
-      "distribucionPremios": {
-        "primerPremio": { "porcentaje": 62, "aciertos": 8 },
-        "segundoPremio": { "porcentaje": 23.5, "aciertos": 7 },
-        "tercerPremio": { "porcentaje": 10, "aciertos": 6 },
-        "agenteVendedor": { "porcentaje": 0.5 },
-        "fondoReserva": { "porcentaje": 4 }
-      },
-      "pozoAsegurado": { "primerPremio": 60000000 },
-      "valorApuesta": { "simple": 1100 }
-    },
-    "quiniela": {
-      "multiplicadores": { "1cifra": 7, "2cifras": 70, "3cifras": 600, "4cifras": 3500 },
-      "topeBanca": 5
-    }
-  }
-}
-```
-
-**Archivo**: `config/loto-distribucion.json` (52 líneas)
-- Tradicional/Match: 65%/15%/3% por 6/5/4 aciertos + 2% agenciero + 15% fondo reserva
-- Desquite: 80% solo 6 aciertos + 2% agenciero + 18% fondo reserva
-- Sale o Sale: 85% cascada 6→1 + agenciero solo con 6 aciertos
-- Multiplicador: 2x premio extra + agenciero fijo $500.000
-
-**Configuración BRINCO y QUINI 6** en `distribucion-juegos.json`:
-```json
-"brinco": {
-  "codigoNTF": "13", "numerosPorApuesta": 6,
-  "rangoNumeros": { "min": 1, "max": 41 },
-  "instancias": { "1": "Tradicional", "2": "Trad+Revancha" }
-}
-"quini6": {
-  "codigoNTF": "69", "numerosPorApuesta": 6,
-  "rangoNumeros": { "min": 1, "max": 45 },
-  "instancias": { "1": "Tradicional", "2": "Trad+Revancha", "3": "Completo" },
-  "modalidades": {
-    "tradicionalPrimera": { "aciertos": [6, 5, 4], "porcentajePozo": 45 },
-    "tradicionalSegunda": { "aciertos": [6, 5, 4], "porcentajePozo": 19 },
-    "revancha": { "aciertos": [6], "porcentajePozo": 13 },
-    "siempreSale": { "aciertos": [6, 5, 4, 3], "porcentajePozo": 14 },
-    "premioExtra": { "aciertos": [6], "tipo": "jackpot" }
-  }
-}
-```
-
-### Endpoints de Configuración
-
-| Método | Ruta | Descripción |
-|--------|------|-------------|
-| GET | `/api/control-previo/config/distribucion` | Obtener configuración actual |
-| POST | `/api/control-previo/config/recargar` | Recargar desde archivo (sin reiniciar) |
-
-### Actualización Mensual
-1. Actualizar `distribucion-juegos.json` con valores de la resolución LOTBA del mes
-2. Llamar `POST /api/control-previo/config/recargar`
-3. El sistema aplica cambios inmediatamente
-
----
-
-## 🗄️ Base de Datos
-
-### Tablas por Juego
-
-| Juego | Tablas |
-|-------|--------|
-| **Quiniela** | `control_previo_quiniela`, `escrutinio_quiniela`, `escrutinio_ganadores`, `escrutinio_premios_agencia` |
-| **Poceada** | `control_previo_poceada`, `escrutinio_poceada`, `poceada_sorteos` |
-| **Tombolina** | `control_previo_tombolina` |
-| **Loto** | `control_previo_loto`, `control_previo_loto_tickets`, `escrutinio_loto`, `escrutinio_loto_ganadores` |
-| **Loto 5** | `control_previo_loto5`, `control_previo_loto5_tickets`, `escrutinio_loto5`, `escrutinio_loto5_ganadores` |
-| **BRINCO** | `control_previo_brinco`, `control_previo_brinco_tickets`, `escrutinio_brinco`, `escrutinio_brinco_ganadores` |
-| **QUINI 6** | `control_previo_quini6`, `control_previo_quini6_tickets`, `escrutinio_quini6`, `escrutinio_quini6_ganadores` |
-
-### Tablas Auxiliares
-
-| Tabla | Descripción |
-|-------|-------------|
-| `usuarios` | Login, roles, contraseñas bcrypt |
-| `agencias` | Base de agencias (número, nombre, provincia, localidad) |
-| `juegos` | Catálogo de juegos soportados |
-| `sorteos` | Catálogo de modalidades (Previa, Primera, etc.) |
-| `extractos` | Números sorteados guardados |
-| `programacion_sorteos` | Programación cargada desde Excel |
-| `programacion_cargas` | Historial de cargas de Excel |
-| `control_previo_agencias` | Detalle por agencia del control previo |
-| `facturacion_turfito` | Facturación de hipicas (UNIQUE: sorteo + agency) |
-| `archivos` | Registro de archivos procesados |
-
-### Migraciones (13 archivos en `database/`)
-
-| Archivo | Propósito |
-|---------|-----------|
-| `init.js` | Schema completo inicial |
-| `migration_brinco.js` | 4 tablas BRINCO |
-| `migration_quini6.js` | 4 tablas QUINI 6 |
-| `migration_loto.js` | 4 tablas Loto Plus |
-| `migration_loto5.js` | 4 tablas Loto 5 |
-| `migration_poceada.js` | Tablas Poceada + sorteos |
-| `migration_pozos_arrastre.js` | Columnas arrastre en `poceada_sorteos` |
-| `migration_agencias.js` | Tabla agencias base |
-| `migration_agencias_localidad.js` | Columna localidad |
-| `migration_agencias_split_columns.js` | Separar columnas |
-| `migration_control_previo_agencias.js` | Detalle por agencia |
-| `migration_control_resguardo.js` | Tablas de resguardo |
-| `migration_programacion.js` | Programación sorteos |
-| `migration_programacion_juegos.js` | Config juegos en programación |
-
----
-
-## 🌐 API Endpoints Completa
-
-### Autenticación (`/api/auth`)
-| Método | Ruta | Descripción |
-|--------|------|-------------|
-| POST | `/login` | Login → JWT |
-| GET | `/profile` | Perfil del usuario |
-| POST | `/change-password` | Cambiar contraseña |
-| GET | `/verify` | Verificar token |
-
-### Usuarios (`/api/users`)
-| Método | Ruta | Descripción |
-|--------|------|-------------|
-| GET | `/` | Listar usuarios |
-| POST | `/` | Crear usuario |
-| PUT | `/:id` | Editar usuario |
-| POST | `/:id/reset-password` | Reset contraseña |
-| GET | `/roles` | Listar roles |
-
-### Control Previo (`/api/control-previo`)
-| Método | Ruta | Descripción |
-|--------|------|-------------|
-| POST | `/procesar-universal` | Procesar ZIP (detección automática) |
-| POST | `/quiniela/procesar-zip` | Procesar ZIP Quiniela |
-| POST | `/poceada/procesar-zip` | Procesar ZIP Poceada |
-| POST | `/tombolina/procesar` | Procesar ZIP Tombolina |
-| POST | `/loto/procesar-zip` | Procesar ZIP Loto |
-| POST | `/loto5/procesar-zip` | Procesar ZIP Loto 5 |
-| POST | `/brinco/procesar-zip` | Procesar ZIP BRINCO |
-| POST | `/quini6/procesar-zip` | Procesar ZIP QUINI 6 |
-| POST | `/poceada/guardar-arrastres` | Guardar pozos arrastre |
-| GET | `/config/distribucion` | Config premios |
-| POST | `/config/recargar` | Recargar config |
-
-### Control Posterior (`/api/control-posterior`)
-| Método | Ruta | Descripción |
-|--------|------|-------------|
-| POST | `/quiniela/escrutinio` | Escrutinio Quiniela |
-| POST | `/poceada/escrutinio` | Escrutinio Poceada |
-| POST | `/tombolina/escrutinio` | Escrutinio Tombolina |
-| POST | `/loto/escrutinio` | Escrutinio Loto |
-| POST | `/loto5/escrutinio` | Escrutinio Loto 5 |
-| POST | `/brinco/escrutinio` | Escrutinio BRINCO |
-| POST | `/quini6/escrutinio` | Escrutinio QUINI 6 |
-
-### Actas (`/api/actas`)
-| Método | Ruta | Descripción |
-|--------|------|-------------|
-| POST | `/control-previo` | PDF control previo |
-| POST | `/notarial` | Acta notarial |
-| POST | `/control-posterior` | PDF escrutinio |
-
-### Extractos (`/api/extractos`)
-| Método | Ruta | Descripción |
-|--------|------|-------------|
-| GET | `/` | Listar extractos |
-| POST | `/` | Guardar extracto |
-| POST | `/bulk` | Guardar múltiples |
-| PUT | `/:id` | Actualizar extracto |
-| DELETE | `/:id` | Eliminar extracto |
-
-### Programación (`/api/programacion`)
-| Método | Ruta | Descripción |
-|--------|------|-------------|
-| POST | `/cargar-excel` | Cargar Excel |
-| GET | `/listar` | Listar programación |
-| GET | `/fecha` | Sorteos por fecha |
-| GET | `/sorteo/:numero` | Detalle sorteo |
-| GET | `/verificar` | Verificar sorteo |
-| GET | `/sorteos-del-dia` | Sorteos de hoy |
-| DELETE | `/borrar` | Eliminar programación |
-
-### Historial / Reportes (`/api/historial`)
-| Método | Ruta | Descripción |
-|--------|------|-------------|
-| GET | `/control-previo` | Historial control previo |
-| GET | `/escrutinios` | Historial escrutinios |
-| GET | `/dashboard` | Datos dashboard |
-| GET | `/dashboard/stats` | Tarjetas estadísticas |
-| GET | `/dashboard/filtros` | Filtros disponibles |
-| GET | `/ganadores` | Ganadores por escrutinio |
-| GET | `/premios-agencias` | Premios por agencia |
-| GET | `/buscar-sorteo` | Buscar por número |
-
-### Agencias (`/api/agencias`)
-| Método | Ruta | Descripción |
-|--------|------|-------------|
-| GET | `/` | Listar agencias |
-| POST | `/cargar-excel` | Cargar Excel |
-| GET | `/buscar` | Buscar agencia |
-
-### Juegos Offline (`/api/juegos-offline`)
-| Método | Ruta | Descripción |
-|--------|------|-------------|
-| POST | `/hipicas/procesar-txt` | Procesar TXT Turfito |
-| GET | `/hipicas/facturacion` | Consultar facturación |
-| DELETE | `/hipicas/facturacion/:id` | Eliminar registro |
-
----
-
-## 🖥️ Frontend (SPA)
-
-### Arquitectura
-- **Single Page Application** con navegación por secciones (sin framework)
-- `public/js/app.js` (~12,700 líneas) - Toda la lógica del frontend
-- `public/js/api.js` (346 líneas) - 7 objetos API para comunicación con backend
-- `public/index.html` (~2000+ líneas) - HTML completo con todas las secciones
-
-### Objetos API del Frontend
-
-| Objeto | Responsabilidad |
-|--------|----------------|
-| `authAPI` | Login, perfil, cambio de contraseña |
-| `controlPrevioAPI` | Upload ZIPs, guardar control previo, buscar pozos |
-| `controlPosteriorAPI` | Escrutinios, generación Excel/PDF |
-| `agenciasAPI` | Carga Excel, búsqueda de agencias |
-| `extractosAPI` | CRUD de extractos |
-| `programacionAPI` | Sorteos, programación, verificación |
-| `juegosOfflineAPI` | Hipicas / Turfito |
-
-### Detección Automática de API Base
-```javascript
-// api.js detecta entorno automáticamente:
-// Producción (Hostinger) → ruta relativa
-// Apache/XAMPP (proxy 80) → ruta relativa
-// Node.js directo → http://localhost:3000/api
-```
-
-### Secciones del Frontend
-1. **Dashboard** - Vista inicial con resumen del día
-2. **Control Previo** - Upload de ZIP, drag & drop, procesamiento automático
-3. **Control Posterior** - Escrutinio con barra horizontal selector de juegos
-4. **Reportes** - Dashboard con 5 vistas, filtros, exportación
-5. **Programación** - Carga de Excel y consulta de sorteos
-6. **Extractos** - Gestión de números sorteados (manual/XML/OCR)
-7. **Agencias** - Carga Excel y tabla de agencias
-8. **Juegos Offline** - Hipicas con upload drag & drop
-9. **Usuarios** - CRUD (solo admin)
-
-### Funciones Clave del Frontend por Módulo
-
-**Control Previo:**
-- `mostrarResultadosCP()` - Renderiza resultados con tarjetas de estadísticas
-- `renderTablasPoceada()` - Tabla de desglose por tipo de apuesta
-- `renderTablasTombolina()` - Tabla con barras de progreso
-
-**Control Posterior:**
-- `ejecutarEscrutinio[Juego]()` - Función de escrutinio por cada juego
-- `renderTicketsGanadores()` - Tabla de ganadores con premio (no importe)
-- `llenarInputs[Juego]DesdeOCR()` - Llenar formulario desde datos OCR
-
-**Reportes:**
-- `cargarDatosDashboard()` - Obtener y renderizar datos
-- `renderVista[Tipo]()` - Renderizar cada vista (detallado, totalizado, etc.)
-- `exportarHipicasExcel()` - Exportar datos a Excel
-
----
-
-## 🛠️ Configuración del Servidor
-
-### Desarrollo Local
+### Scripts npm
 ```bash
-npm run dev        # Node.js + Nodemon en puerto 3000
-npm run db:init    # Inicializar schema de BD
-npm run db:seed    # Datos de prueba
+npm start
+npm run dev
+npm run db:init
+npm run db:seed
 ```
 
-### Producción (Hostinger)
-- Deploy automático desde rama `main` (sincronizada con `principal`)
-- Variables de entorno con fallback hardcodeado en `database.js`
-- Archivos `.env` desaparecen al redeploy → se usa fallback
-- Tarda 1+ hora en completar redeploy
-- Cache busters en index.html (`v=20260207a`)
+### Scripts de base (carpeta `database/`)
+- `init.js` → esquema base
+- `seed.js` y seeds auxiliares
+- `migration_*.js` → ajustes incrementales (agencias, juegos, control, historial, etc.)
 
-### MySQL
-- **Puerto**: 3306 (XAMPP default)
-- **Base de datos**: `control_loterias`
-- **Charset**: utf8mb4
+### Recomendación de operación
+- Ejecutar primero `db:init` en entorno nuevo
+- Aplicar migraciones pendientes según el módulo desplegado
+- Ejecutar seeds solo en ambientes de prueba o bootstrap controlado
 
-### Apache (Opcional)
-- `mod_proxy_http` → proxy a `http://localhost:3000`
+---
 
-### Dependencias (package.json v2.3.0)
+## 10) Configuración de entorno
+
+### Archivo base
+- `config.env.txt` (plantilla)
+- En local usar `.env.local` (prioridad en carga)
+- En producción usar variables del entorno del hosting
+
+### Variables mínimas
+- `NODE_ENV`, `PORT`
+- `DB_HOST`, `DB_PORT`, `DB_USER`, `DB_PASSWORD`, `DB_NAME`
+- `JWT_SECRET`, `JWT_EXPIRES_IN`
+
+### Nota de seguridad
+- Si en algún entorno se expusieron API keys o secretos históricos, rotarlos.
+
+---
+
+## 11) Endpoints útiles de diagnóstico
+
+- `GET /health` → estado general + conexión DB
+- `GET /api/health` → estado de API
+- `GET /api/version` → versión visible en frontend
+
+---
+
+## 12) Historial de cambios consolidados (2026)
+
+### Enero 2026
+- Ajustes iniciales de dashboard, layout y despliegue
+- Fortalecimiento de OCR para extractos e integración en flujo operativo
+
+### Febrero 2026
+- Normalización de metadata (`numero_sorteo`, `fecha`, modalidad)
+- Correcciones en control posterior y reportes de recaudación
+- Deduplicación y consistencia en historial/escrutinios
+- Ajustes de OCR PDF, fallback y parsing
+- Correcciones de extractos por provincia/validación de lotes
+
+### Marzo 2026 (inicio)
+- Cache-buster y ajustes de modal/corrección de orden Quiniela
+- Consolidación de unicidad extractos por juego+sorteo+provincia
+- Mejoras incrementales en OCR y sincronización de datos históricos
+
+### Marzo 2026 (03/03)
+- Se agregó indicador visual de tiempo de proceso en frontend (Control Previo y cargas de extractos).
+- Se incorporó acción de “volver a empezar” en Control Previo para reiniciar estado sin recargar.
+- Se reforzó resolución de fecha de sorteo con fallback `programacion_sorteos.tipo_juego` / `programacion_sorteos.juego`.
+- Se documentó normalización de `cta_cte` a 7 dígitos sin guiones en scripts de migración.
+
+---
+
+## 13) Checklist de deploy
+
+1. Confirmar rama y commit desplegado
+2. Verificar variables de entorno de BD y JWT
+3. Probar `GET /health` y `GET /api/version`
+4. Hacer recarga forzada del frontend (cache)
+5. Ejecutar prueba mínima: Programación → CP → Extracto → CPST → Historial
+6. Revisar duplicados por sorteo/modalidad/provincia en historial
+
+### 13.1 Flujo exacto de commit y push (Git)
+
+Usar este flujo en PowerShell para dejar trazabilidad clara y evitar subir cambios incompletos.
+
+```bash
+# 0) Ir a la carpeta del repo
+cd c:/xampp/htdocs/simbaV2
+
+# 1) Verificar rama activa y cambios
+git branch --show-current
+git status
+
+# 2) Actualizar rama local antes de commitear
+git pull --rebase origin main
+
+# 3) Agregar SOLO los archivos que se quieren subir
+git add DOCUMENTACION.md prompt.md
+
+# 4) Confirmar qué quedó staged
+git status
+
+# 5) Crear commit con mensaje claro
+git commit -m "docs: actualizar documentación operativa y bitácora 03-03-2026"
+
+# 6) Subir a remoto
+git push origin main
 ```
-express, mysql2, adm-zip, xml2js, jsonwebtoken, bcryptjs,
-exceljs, pdfkit, tesseract.js, dayjs, helmet, cors, multer,
-iconv-lite, pdf-parse, uuid, dotenv, express-validator
-Dev: nodemon
+
+Si es la primera vez que se publica una rama local:
+
+```bash
+git push -u origin main
 ```
 
----
-
-## 🐛 Troubleshooting
-
-| Error | Causa | Solución |
-|-------|-------|----------|
-| `ERR_CONNECTION_REFUSED` | Node.js no corriendo | `npm run dev` |
-| `404 Not Found` en `/api/*` | Falta proxy Apache | Usar `localhost:3000` |
-| `Column count doesn't match` | Mismatch INSERT SQL | Verificar columnas vs `?` |
-| `Collation mix` (utf8mb4) | Incompatibilidad charset | Usar rango de fechas |
-| OCR no funciona | API key faltante | Verificar `config.local.js` |
-| Escrutinio no guarda en BD | Falta función guardar | Verificar controller tiene `guardarEscrutinio*()` |
-| Ticket muestra importe no premio | Frontend no asigna premioUnitario | Verificar backend asigna `premio` a cada ganador |
+Buenas prácticas mínimas:
+- No usar `git add .` si hay cambios no relacionados.
+- Hacer un commit por tema (ejemplo: solo documentación, o solo backend).
+- Si `git pull --rebase` trae conflictos, resolverlos, luego ejecutar `git add <archivo>` y `git rebase --continue`.
+- Antes de `push`, revisar que el `git status` no tenga archivos inesperados en staged.
 
 ---
 
-## 📋 Convenciones del Proyecto
+## 14) Observaciones para mantenimiento
 
-- **Timezone**: `America/Argentina/Buenos_Aires` via dayjs
-- **Moneda**: Valores en centavos, display con `formatNumber()`
-- **ZIP**: Procesados con `adm-zip`
-- **XML**: Parseados con `xml2js`
-- **Hash**: SHA-512 para archivos NTF
-- **Encoding**: `latin1` para archivos TXT del NTF
-- **Frontend**: Funciones prefijadas por módulo: `renderTablasPoceada()`, `mostrarResultadosCP()`
-- **Backend**: `successResponse(res, data, 'Mensaje')` / `errorResponse(res, 'Error', 400)`
-- **Git**: Rama `main` principal, sincronizada con `principal` para Hostinger
-- **Decodificación binaria**: BINARY_CODE (A=0000, B=0001, ... P=1111) para números en Poceada/Brinco/Quini6/Loto
-- **Agencia venta web**: `5188880` (provincia 51 + agencia 88880)
-- **Formato ctaCte**: `5100011` (provincia 2 dígitos + agencia 5 dígitos, sin guión, sin verificador)
+- `public/js/app.js` es extenso y concentra mucha lógica; priorizar cambios quirúrgicos.
+- Mantener consistencia entre frontend y backend para nombres de juego/modalidad.
+- Evitar mezcla de formatos de cuenta corriente (`51-00011` vs `5100011`); sostener un único formato en BD y reportes.
+- En cambios de reglas de premio, actualizar:
+  - controller del juego,
+  - persistencia de escrutinio,
+  - reportes PDF/CSV,
+  - historial y dashboard.
 
 ---
 
-## 🆕 Historial de Versiones
+## 15) Anexo rápido de comandos operativos
 
-| Versión | Fecha | Cambios Principales |
-|---------|-------|---------------------|
-| 3.6 | 9 Feb 2026 | Dashboard Cuenta Corriente: cruce ventas + premios para TODOS los juegos (Tombolina, Quini6, Loto, Loto5, Brinco), columnas Ganadores/Premios/Anulados disponibles en todos los reportes, fix hipicas codigo_provincia '51' |
-| 3.5 | 8 Feb 2026 | Guardado premios por agencia para TODOS los juegos (LOTO, LOTO5, QUINI6, BRINCO), tablas `escrutinio_loto_ganadores` y `escrutinio_loto5_ganadores`, consulta acumulada "Todos los juegos" por cta_cte, fix bug agenciero LOTO $0 |
-| 3.4 | 8 Feb 2026 | Agenciero vacante/venta web para LOTO y LOTO5, Multiplicador debugging mejorado, modelo OCR actualizado a llama-4-scout |
-| 3.3 | 7 Feb 2026 | ctaCte formato unificado "5100011", Fecha Sorteo vs Fecha Control en historial, Premio Extra exclusión Art. 30°, Migraciones BD completas |
-| 3.2 | 7 Feb 2026 | Ticket display con premio (no importe) en Brinco/Quini6, Premio Extra pool manual, cleanup display |
-| 3.1 | 6 Feb 2026 | OCR Poceada/Tombolina, persistencia BRINCO/QUINI6 en BD, reportes 7 juegos |
-| 3.0 | 5 Feb 2026 | BRINCO y QUINI 6 completos, historial extendido a 7 juegos, 8 tablas BD nuevas |
-| 2.9 | 2 Feb 2026 | Loto Plus escrutinio corregido, todas apuestas en todas modalidades |
-| 2.8 | 2 Feb 2026 | Juegos Offline (Hipicas/Turfito), vista Totalizado por Agencia |
-| 2.7 | 2 Feb 2026 | Fix filtro programación, horas UTC, sincronización ramas git |
-| 2.6 | 1 Feb 2026 | Segmentación triple recaudación, juegos en tabla maestra |
-| 2.5 | 31 Ene 2026 | Fix dashboard SQL, HTML saneado, CSS responsive |
-| 2.4 | 30 Ene 2026 | Tombolina CP completo, escrutinio profesional, OCR Groq Vision |
-| 2.3 | 30 Ene 2026 | Poceada modal 4 pozos, extractos, validación programación |
-| 2.2 | 30 Ene 2026 | Deploy Hostinger, producción MySQL, control posterior unificado |
+```bash
+# Desarrollo
+npm install
+npm run dev
 
----
+# Producción simple
+npm start
 
-**Versión del Documento**: 3.6  
-**Última actualización**: 9 de Febrero, 2026
+# Inicializar BD
+npm run db:init
+npm run db:seed
+```
 
-**Estado actual:**
-- ✅ **Quiniela**: Control Previo + Escrutinio completo + Premios por agencia + Cruce ventas/premios
-- ✅ **Poceada**: Control Previo + Escrutinio + Modal 4 Pozos + OCR + Premios por agencia + Cruce ventas/premios
-- ✅ **Tombolina**: Control Previo + Escrutinio profesional + OCR + Cruce ventas/premios
-- ✅ **Loto (6/45 + PLUS)**: Control Previo + Escrutinio (5 modalidades) + Agenciero vacante/venta web + Multiplicador + Premios por agencia + Cruce ventas/premios
-- ✅ **Loto 5**: Control Previo + Escrutinio (3 niveles) + Agenciero vacante/venta web + Premios por agencia + Cruce ventas/premios
-- ✅ **BRINCO**: Control Previo + Escrutinio (Tradicional + Junior) + Persistencia BD + Premios por agencia + Cruce ventas/premios
-- ✅ **QUINI 6**: Control Previo + Escrutinio (5 modalidades) + Premio Extra + Persistencia BD + Premios por agencia + Cruce ventas/premios
-- ✅ **Hipicas (Turfito)**: Parser TXT + Facturación + Integrado en Reportes + Premios/Cancelaciones/Devoluciones por agencia
-- ✅ **Dashboard Cta Cte**: Todos los juegos con cruce control_previo_agencias + escrutinio_premios_agencia
-- ✅ **OCR**: Multi-proveedor (Groq llama-4-scout → OpenAI GPT-4o) para todos los juegos
-- ✅ **Reportes**: Dashboard con vista "Todos los juegos" acumulado por cta_cte, columnas condicionales, 7 juegos + Hipicas
-- ✅ **Programación**: Carga Excel, filtro por mes, verificación de sorteo
-- ✅ **Agencias**: Carga Excel, búsqueda, validación de amigas
-- ✅ **Actas PDF**: Control previo, notarial, control posterior (todos los juegos)
-- 📋 **Pendiente**: Telekino, Money Las Vegas (placeholders creados)
+Si se opera con Apache/XAMPP, validar que el frontend resuelva correctamente `API_BASE` hacia `/simbaV2/public/api` cuando corresponda.

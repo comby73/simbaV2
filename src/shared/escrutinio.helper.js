@@ -19,6 +19,18 @@ function normalizarFecha(valor) {
   return Number.isNaN(d.getTime()) ? new Date().toISOString().split('T')[0] : d.toISOString().split('T')[0];
 }
 
+function normalizarFechaNullable(valor) {
+  if (!valor) return null;
+  if (valor instanceof Date && !Number.isNaN(valor.getTime())) {
+    return valor.toISOString().split('T')[0];
+  }
+  const texto = String(valor).trim();
+  if (!texto) return null;
+  if (/^\d{4}-\d{2}-\d{2}/.test(texto)) return texto.slice(0, 10);
+  const d = new Date(texto);
+  return Number.isNaN(d.getTime()) ? null : d.toISOString().split('T')[0];
+}
+
 function normalizarNumero(valor) {
   if (valor === null || valor === undefined || valor === '') return 0;
   const n = parseInt(String(valor), 10);
@@ -50,6 +62,70 @@ async function limpiarDuplicadosEscrutinio(tabla, juego, numeroSorteo, idConserv
   }
 }
 
+async function resolverFechaSorteoPorNumero({ juego, numeroSorteo, modalidad = null, fechaSugerida = null, tablaControlPrevio = null }) {
+  const fechaInicial = normalizarFechaNullable(fechaSugerida);
+  if (fechaInicial) return fechaInicial;
+
+  const numero = normalizarNumero(numeroSorteo);
+  if (!numero) return normalizarFecha(null);
+
+  if (tablaControlPrevio) {
+    try {
+      const rowsCp = await query(
+        `SELECT fecha FROM ${tablaControlPrevio} WHERE numero_sorteo = ? ORDER BY fecha DESC, id DESC LIMIT 1`,
+        [numero]
+      );
+      if (rowsCp.length > 0 && rowsCp[0].fecha) {
+        return normalizarFecha(rowsCp[0].fecha);
+      }
+    } catch (errCp) {
+      // continuar con programación
+    }
+  }
+
+  const buscarEnProgramacion = async (columnaJuego) => {
+    let sql = `
+      SELECT fecha_sorteo
+      FROM programacion_sorteos
+      WHERE LOWER(${columnaJuego}) = LOWER(?)
+        AND numero_sorteo = ?
+    `;
+    const params = [String(juego || '').toLowerCase(), String(numero)];
+
+    if (modalidad) {
+      sql += ' AND modalidad_codigo = ?';
+      params.push(String(modalidad).toUpperCase());
+    }
+
+    sql += ' ORDER BY fecha_sorteo DESC LIMIT 1';
+    const rows = await query(sql, params);
+    if (rows.length > 0 && rows[0].fecha_sorteo) {
+      return normalizarFecha(rows[0].fecha_sorteo);
+    }
+    return null;
+  };
+
+  try {
+    try {
+      const f1 = await buscarEnProgramacion('juego');
+      if (f1) return f1;
+    } catch (errJuego) {
+      if (!String(errJuego?.message || '').includes('Unknown column')) throw errJuego;
+    }
+
+    try {
+      const f2 = await buscarEnProgramacion('tipo_juego');
+      if (f2) return f2;
+    } catch (errTipo) {
+      if (!String(errTipo?.message || '').includes('Unknown column')) throw errTipo;
+    }
+  } catch (err) {
+    console.warn(`[ESCRUTINIO] No se pudo resolver fecha por programación (${juego}/${numero}):`, err.message);
+  }
+
+  return normalizarFecha(null);
+}
+
 /**
  * Guarda el resultado del Escrutinio de Quiniela en la base de datos
  * 
@@ -60,13 +136,6 @@ async function limpiarDuplicadosEscrutinio(tabla, juego, numeroSorteo, idConserv
  */
 async function guardarEscrutinioQuiniela(resultado, datosControlPrevio, usuario) {
   try {
-    // Extraer datos básicos
-    const fecha = normalizarFecha(
-      datosControlPrevio?.sorteo?.programacion?.fecha_sorteo ||
-      datosControlPrevio?.fechaSorteo ||
-      datosControlPrevio?.fecha
-    );
-
     let numeroSorteo = normalizarNumero(
       datosControlPrevio?.sorteo?.numero ||
       datosControlPrevio?.numeroSorteo ||
@@ -80,6 +149,17 @@ async function guardarEscrutinioQuiniela(resultado, datosControlPrevio, usuario)
       datosControlPrevio?.modalidadCodigo ||
       datosControlPrevio?.modalidad
     );
+
+    const fecha = await resolverFechaSorteoPorNumero({
+      juego: 'quiniela',
+      numeroSorteo,
+      modalidad,
+      fechaSugerida:
+        datosControlPrevio?.sorteo?.programacion?.fecha_sorteo ||
+        datosControlPrevio?.fechaSorteo ||
+        datosControlPrevio?.fecha,
+      tablaControlPrevio: 'control_previo_quiniela'
+    });
 
     if (numeroSorteo > 0 && !modalidad) {
       const cpRowsByNum = await query(
@@ -208,11 +288,15 @@ async function guardarEscrutinioPoceada(resultado, datosControlPrevio, usuario) 
       return 0;
     };
 
-    const fecha = normalizarFecha(
-      datosControlPrevio?.fechaSorteo ||
-      datosControlPrevio?.fecha
-    );
     let numeroSorteo = resolverNumeroSorteo();
+
+    const fecha = await resolverFechaSorteoPorNumero({
+      juego: 'poceada',
+      numeroSorteo,
+      modalidad: null,
+      fechaSugerida: datosControlPrevio?.fechaSorteo || datosControlPrevio?.fecha,
+      tablaControlPrevio: 'control_previo_poceada'
+    });
 
     if (!numeroSorteo) {
       const cpRowsByFecha = await query(
@@ -619,12 +703,19 @@ async function obtenerPremiosPorAgencia(escrutinioId, juego) {
  */
 async function guardarEscrutinioTombolina(resultado, datosControlPrevio, usuario) {
   try {
-    const fecha = normalizarFecha(datosControlPrevio?.fecha || datosControlPrevio?.fechaSorteo);
     let numeroSorteo = normalizarNumero(
       datosControlPrevio?.sorteo ||
       datosControlPrevio?.numeroSorteo ||
       resultado?.numeroSorteo
     );
+
+    const fecha = await resolverFechaSorteoPorNumero({
+      juego: 'tombolina',
+      numeroSorteo,
+      modalidad: null,
+      fechaSugerida: datosControlPrevio?.fecha || datosControlPrevio?.fechaSorteo,
+      tablaControlPrevio: 'control_previo_tombolina'
+    });
 
     if (!numeroSorteo) {
       const cpRowsByFecha = await query(
