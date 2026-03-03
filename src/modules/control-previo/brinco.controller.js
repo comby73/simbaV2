@@ -611,39 +611,44 @@ async function guardarControlPrevioBrincoDB(logsTxt, datosXml, user, nombreArchi
       throw new Error(`No se pudo determinar fecha de sorteo para BRINCO (${sorteo})`);
     }
 
-    // INSERT/UPDATE en control_previo_brinco
-    const result = await query(`
-      INSERT INTO control_previo_brinco
-      (numero_sorteo, fecha, archivo, registros_validos, registros_anulados,
-       apuestas_total, recaudacion, datos_json, usuario_id)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-      ON DUPLICATE KEY UPDATE
-        archivo = VALUES(archivo),
-        fecha = VALUES(fecha),
-        registros_validos = VALUES(registros_validos),
-        registros_anulados = VALUES(registros_anulados),
-        apuestas_total = VALUES(apuestas_total),
-        recaudacion = VALUES(recaudacion),
-        datos_json = VALUES(datos_json),
-        usuario_id = VALUES(usuario_id),
-        updated_at = CURRENT_TIMESTAMP
-    `, [
-      sorteo, // Ahora es INT
-      fecha,
-      nombreArchivo,
-      resumen.registros || 0,
-      resumen.anulados || 0,
-      resumen.apuestasTotal || 0,
-      resumen.recaudacion || 0,
-      JSON.stringify(logsTxt.resumen),
-      user?.id || null
-    ]);
+    let controlPrevioId = 0;
 
-    // Obtener el ID
-    let controlPrevioId = result.insertId;
-    if (!controlPrevioId) {
-      const [row] = await query('SELECT id FROM control_previo_brinco WHERE numero_sorteo = ?', [sorteo]);
-      controlPrevioId = row?.id || 0;
+    // INSERT/UPDATE en control_previo_brinco (si falla, igual intentamos guardar agencias)
+    try {
+      const result = await query(`
+        INSERT INTO control_previo_brinco
+        (numero_sorteo, fecha, archivo, registros_validos, registros_anulados,
+         apuestas_total, recaudacion, datos_json, usuario_id)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ON DUPLICATE KEY UPDATE
+          archivo = VALUES(archivo),
+          fecha = VALUES(fecha),
+          registros_validos = VALUES(registros_validos),
+          registros_anulados = VALUES(registros_anulados),
+          apuestas_total = VALUES(apuestas_total),
+          recaudacion = VALUES(recaudacion),
+          datos_json = VALUES(datos_json),
+          usuario_id = VALUES(usuario_id),
+          updated_at = CURRENT_TIMESTAMP
+      `, [
+        sorteo, // Ahora es INT
+        fecha,
+        nombreArchivo,
+        resumen.registros || 0,
+        resumen.anulados || 0,
+        resumen.apuestasTotal || 0,
+        resumen.recaudacion || 0,
+        JSON.stringify(logsTxt.resumen),
+        user?.id || null
+      ]);
+
+      controlPrevioId = result.insertId || 0;
+      if (!controlPrevioId) {
+        const [row] = await query('SELECT id FROM control_previo_brinco WHERE numero_sorteo = ? ORDER BY id DESC LIMIT 1', [sorteo]);
+        controlPrevioId = row?.id || 0;
+      }
+    } catch (errResguardo) {
+      console.warn(`⚠️ BRINCO: no se pudo guardar en control_previo_brinco (continuo con agencias): ${errResguardo.message}`);
     }
 
     // Guardar datos por agencia en control_previo_agencias (alimenta Dashboard)
@@ -663,7 +668,7 @@ async function guardarControlPrevioBrincoDB(logsTxt, datosXml, user, nombreArchi
         const codigoAgencia = esVentaWeb ? '5188880' : `51${agenciaNormalizada}`;
         placeholders.push('(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)');
         valores.push(
-          controlPrevioId,
+          controlPrevioId || 0,
           'brinco',
           fecha,
           sorteo,

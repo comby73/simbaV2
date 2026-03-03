@@ -766,7 +766,7 @@ async function guardarControlPrevioLoto(resultado, user, nombreArchivo) {
     console.warn(`⚠️ Loto ${sorteoNum}: fecha no encontrada en programación/XML, se usa ${fecha}`);
   }
 
-  let insertResult;
+  let insertResult = null;
   try {
     insertResult = await query(`
       INSERT INTO control_previo_loto
@@ -795,63 +795,71 @@ async function guardarControlPrevioLoto(resultado, user, nombreArchivo) {
       user?.id || null
     ]);
   } catch (errorInsert) {
-    if (!String(errorInsert?.message || '').includes('Unknown column')) {
-      throw errorInsert;
+    if (String(errorInsert?.message || '').includes('Unknown column')) {
+      try {
+        // Compatibilidad con esquema legacy de control_previo_loto
+        insertResult = await query(`
+          INSERT INTO control_previo_loto
+          (fecha, numero_sorteo, total_registros, total_tickets, total_apuestas, total_anulados,
+           total_recaudacion, provincias, nombre_archivo_zip, hash_archivo, hash_verificado,
+           comparacion_xml, datos_oficiales, datos_adicionales, usuario_id, usuario_nombre)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+          ON DUPLICATE KEY UPDATE
+            total_registros = VALUES(total_registros),
+            total_tickets = VALUES(total_tickets),
+            total_apuestas = VALUES(total_apuestas),
+            total_anulados = VALUES(total_anulados),
+            total_recaudacion = VALUES(total_recaudacion),
+            provincias = VALUES(provincias),
+            nombre_archivo_zip = VALUES(nombre_archivo_zip),
+            hash_archivo = VALUES(hash_archivo),
+            hash_verificado = VALUES(hash_verificado),
+            comparacion_xml = VALUES(comparacion_xml),
+            datos_oficiales = VALUES(datos_oficiales),
+            datos_adicionales = VALUES(datos_adicionales),
+            usuario_id = VALUES(usuario_id),
+            usuario_nombre = VALUES(usuario_nombre),
+            updated_at = CURRENT_TIMESTAMP
+        `, [
+          fecha,
+          sorteoNum,
+          resumen.registros || 0,
+          resumen.registros || 0,
+          resumen.apuestasTotal || 0,
+          resumen.anulados || 0,
+          resumen.recaudacion || 0,
+          JSON.stringify(resultado?.provincias || {}),
+          nombreArchivo,
+          resultado?.seguridad?.hashCalculado || null,
+          !!resultado?.seguridad?.verificado,
+          resultado?.comparacion ? JSON.stringify(resultado.comparacion) : null,
+          resultado?.datosOficiales ? JSON.stringify(resultado.datosOficiales) : null,
+          JSON.stringify({ modalidades: resultado?.modalidades || {}, ventaWeb: resumen?.ventaWeb || 0 }),
+          user?.id || null,
+          user?.nombre || 'Sistema'
+        ]);
+      } catch (errLegacy) {
+        console.warn(`⚠️ Loto: no se pudo guardar en control_previo_loto (continuo con agencias): ${errLegacy.message}`);
+      }
+    } else {
+      console.warn(`⚠️ Loto: no se pudo guardar en control_previo_loto (continuo con agencias): ${errorInsert.message}`);
     }
-
-    // Compatibilidad con esquema legacy de control_previo_loto
-    insertResult = await query(`
-      INSERT INTO control_previo_loto
-      (fecha, numero_sorteo, total_registros, total_tickets, total_apuestas, total_anulados,
-       total_recaudacion, provincias, nombre_archivo_zip, hash_archivo, hash_verificado,
-       comparacion_xml, datos_oficiales, datos_adicionales, usuario_id, usuario_nombre)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-      ON DUPLICATE KEY UPDATE
-        total_registros = VALUES(total_registros),
-        total_tickets = VALUES(total_tickets),
-        total_apuestas = VALUES(total_apuestas),
-        total_anulados = VALUES(total_anulados),
-        total_recaudacion = VALUES(total_recaudacion),
-        provincias = VALUES(provincias),
-        nombre_archivo_zip = VALUES(nombre_archivo_zip),
-        hash_archivo = VALUES(hash_archivo),
-        hash_verificado = VALUES(hash_verificado),
-        comparacion_xml = VALUES(comparacion_xml),
-        datos_oficiales = VALUES(datos_oficiales),
-        datos_adicionales = VALUES(datos_adicionales),
-        usuario_id = VALUES(usuario_id),
-        usuario_nombre = VALUES(usuario_nombre),
-        updated_at = CURRENT_TIMESTAMP
-    `, [
-      fecha,
-      sorteoNum,
-      resumen.registros || 0,
-      resumen.registros || 0,
-      resumen.apuestasTotal || 0,
-      resumen.anulados || 0,
-      resumen.recaudacion || 0,
-      JSON.stringify(resultado?.provincias || {}),
-      nombreArchivo,
-      resultado?.seguridad?.hashCalculado || null,
-      !!resultado?.seguridad?.verificado,
-      resultado?.comparacion ? JSON.stringify(resultado.comparacion) : null,
-      resultado?.datosOficiales ? JSON.stringify(resultado.datosOficiales) : null,
-      JSON.stringify({ modalidades: resultado?.modalidades || {}, ventaWeb: resumen?.ventaWeb || 0 }),
-      user?.id || null,
-      user?.nombre || 'Sistema'
-    ]);
   }
 
   // Obtener el ID para guardar agencias
-  let controlPrevioId = insertResult.insertId;
+  let controlPrevioId = insertResult?.insertId || 0;
   if (!controlPrevioId) {
-    const [row] = await query('SELECT id FROM control_previo_loto WHERE numero_sorteo = ? ORDER BY id DESC LIMIT 1', [sorteoNum]);
-    controlPrevioId = row?.id || 0;
+    try {
+      const [row] = await query('SELECT id FROM control_previo_loto WHERE numero_sorteo = ? ORDER BY id DESC LIMIT 1', [sorteoNum]);
+      controlPrevioId = row?.id || 0;
+    } catch (_) {
+      controlPrevioId = 0;
+    }
   }
 
   // Guardar datos por agencia en control_previo_agencias (alimenta Dashboard)
   const registrosNTF = resultado.registrosNTF;
-  if (registrosNTF && registrosNTF.length > 0 && controlPrevioId) {
+  if (registrosNTF && registrosNTF.length > 0) {
     try {
       const fechaControl = fecha;
 
@@ -882,7 +890,7 @@ async function guardarControlPrevioLoto(resultado, user, nombreArchivo) {
       for (const [codigo, ag] of agenciasMap) {
         placeholders.push('(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)');
         valores.push(
-          controlPrevioId, 'loto', fechaControl, sorteoNum, 'U',
+          controlPrevioId || 0, 'loto', fechaControl, sorteoNum, 'U',
           codigo, ag.codigoProvincia,
           ag.ticketsSet.size, ag.totalApuestas, 0, ag.totalRecaudacion
         );

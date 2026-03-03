@@ -1015,7 +1015,11 @@ async function procesarControlPrevio() {
     console.log(`Control Previo (${juegoConfig.nombre}): ${cpRegistrosNTF.length} registros parseados`);
 
     mostrarResultadosCP(response.data);
-    showToast('Archivo procesado correctamente', 'success');
+    if (response.data?.resguardo && response.data.resguardo.success === false) {
+      showToast(`Archivo procesado, pero NO se guardó para facturación/reportes: ${response.data.resguardo.error || 'error de resguardo'}`, 'warning');
+    } else {
+      showToast('Archivo procesado correctamente', 'success');
+    }
   } catch (error) {
     console.error('Error:', error);
     showToast(error.message || 'Error procesando archivo', 'error');

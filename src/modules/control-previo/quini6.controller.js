@@ -847,42 +847,47 @@ async function guardarControlPrevioQuini6DB(resultadoNTF, resultadoXML, user, no
     
     console.log('📅 Fecha control previo QUINI6:', fecha, '(sorteo:', sorteo, ')');
 
-    // INSERT/UPDATE en control_previo_quini6
-    const result = await query(`
-      INSERT INTO control_previo_quini6
-      (numero_sorteo, fecha, archivo, registros_validos, registros_anulados,
-       apuestas_total, recaudacion, datos_json, usuario_id)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-      ON DUPLICATE KEY UPDATE
-        archivo = VALUES(archivo),
-        fecha = VALUES(fecha),
-        registros_validos = VALUES(registros_validos),
-        registros_anulados = VALUES(registros_anulados),
-        apuestas_total = VALUES(apuestas_total),
-        recaudacion = VALUES(recaudacion),
-        datos_json = VALUES(datos_json),
-        usuario_id = VALUES(usuario_id),
-        updated_at = CURRENT_TIMESTAMP
-    `, [
-      sorteo, // Ahora es INT
-      fecha,
-      nombreArchivo,
-      resultadoNTF.registrosValidos || 0,
-      resultadoNTF.registrosCancelados || 0,
-      resultadoNTF.apuestasSimples || 0,
-      resultadoNTF.recaudacionValida || 0,
-      JSON.stringify({
-        porModalidad: resultadoNTF.porModalidad,
-        porInstancia: resultadoNTF.porInstancia
-      }),
-      user?.id || null
-    ]);
+    let controlPrevioId = 0;
 
-    // Obtener el ID (insertId o buscar por sorteo)
-    let controlPrevioId = result.insertId;
-    if (!controlPrevioId) {
-      const [row] = await query('SELECT id FROM control_previo_quini6 WHERE numero_sorteo = ?', [sorteo]);
-      controlPrevioId = row?.id || 0;
+    // INSERT/UPDATE en control_previo_quini6 (si falla, igual intentamos guardar agencias)
+    try {
+      const result = await query(`
+        INSERT INTO control_previo_quini6
+        (numero_sorteo, fecha, archivo, registros_validos, registros_anulados,
+         apuestas_total, recaudacion, datos_json, usuario_id)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ON DUPLICATE KEY UPDATE
+          archivo = VALUES(archivo),
+          fecha = VALUES(fecha),
+          registros_validos = VALUES(registros_validos),
+          registros_anulados = VALUES(registros_anulados),
+          apuestas_total = VALUES(apuestas_total),
+          recaudacion = VALUES(recaudacion),
+          datos_json = VALUES(datos_json),
+          usuario_id = VALUES(usuario_id),
+          updated_at = CURRENT_TIMESTAMP
+      `, [
+        sorteo, // Ahora es INT
+        fecha,
+        nombreArchivo,
+        resultadoNTF.registrosValidos || 0,
+        resultadoNTF.registrosCancelados || 0,
+        resultadoNTF.apuestasSimples || 0,
+        resultadoNTF.recaudacionValida || 0,
+        JSON.stringify({
+          porModalidad: resultadoNTF.porModalidad,
+          porInstancia: resultadoNTF.porInstancia
+        }),
+        user?.id || null
+      ]);
+
+      controlPrevioId = result.insertId || 0;
+      if (!controlPrevioId) {
+        const [row] = await query('SELECT id FROM control_previo_quini6 WHERE numero_sorteo = ? ORDER BY id DESC LIMIT 1', [sorteo]);
+        controlPrevioId = row?.id || 0;
+      }
+    } catch (errResguardo) {
+      console.warn(`⚠️ QUINI 6: no se pudo guardar en control_previo_quini6 (continuo con agencias): ${errResguardo.message}`);
     }
 
     // Guardar datos por agencia en control_previo_agencias (alimenta Dashboard)
@@ -903,7 +908,7 @@ async function guardarControlPrevioQuini6DB(resultadoNTF, resultadoXML, user, no
         const codigoAgencia = esVentaWeb ? '5188880' : `51${agenciaNormalizada}`;
         placeholders.push('(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)');
         valores.push(
-          controlPrevioId,
+          controlPrevioId || 0,
           'quini6',
           fecha,
           sorteo,
