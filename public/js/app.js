@@ -16,6 +16,7 @@ const PREFIJOS_JUEGOS = {
   'LOT': { nombre: 'Loto', api: 'procesarLoto' },
   'LT5': { nombre: 'Loto 5', api: 'procesarLoto5' },
   'L5': { nombre: 'Loto 5', api: 'procesarLoto5' },
+  'QNY': { nombre: 'Quiniela Ya', api: null },
   'QYA': { nombre: 'Quiniela Ya', api: null }
 };
 
@@ -4699,6 +4700,26 @@ async function cargarZipPosterior(input) {
 
   // Seleccionar el juego automáticamente
   seleccionarJuegoPosterior(juegoConfig.nombre);
+
+  // Quiniela Ya: solo almacenar el ZIP, el escrutinio se ejecuta con el botón
+  if (juegoConfig.nombre === 'Quiniela Ya') {
+    cpstQuinielaYaZipFile = file;
+    cpstDatosControlPrevio = null;
+    cpstRegistrosNTF = [];
+    cpstNumeroSorteo = '';
+
+    document.getElementById('cpst-datos-cargados')?.classList.remove('hidden');
+    document.getElementById('cpst-sorteo').textContent = 'Pendiente';
+    document.getElementById('cpst-registros').textContent = '-';
+    document.getElementById('cpst-recaudacion').textContent = '-';
+    const juegoBadge = document.getElementById('cpst-juego-badge');
+    if (juegoBadge) juegoBadge.textContent = 'Quiniela Ya';
+    const modalidadBadge = document.getElementById('cpst-modalidad-badge');
+    if (modalidadBadge) modalidadBadge.textContent = 'Sin extracto';
+
+    showToast(`ZIP cargado para Quiniela Ya: ${file.name}`, 'success');
+    return;
+  }
 
   showToast(`Procesando archivo ZIP de ${juegoConfig.nombre}...`, 'info');
 
