@@ -15124,40 +15124,62 @@ function renderFacturacionJuegosUTE(data) {
 }
 
 function renderTablaLineasSAPJuegos(lineas) {
-  const tbody = document.getElementById('fjg-sap-body');
-  const tfoot = document.getElementById('fjg-sap-foot');
-  tbody.innerHTML = '';
-  tfoot.innerHTML = '';
+  const tbodyOnline = document.getElementById('fjg-sap-body-online');
+  const tfootOnline = document.getElementById('fjg-sap-foot-online');
+  const tbodyWeb = document.getElementById('fjg-sap-body-web');
+  const tfootWeb = document.getElementById('fjg-sap-foot-web');
 
-  if (!lineas || lineas.length === 0) {
-    tbody.innerHTML = `<tr><td colspan="5" class="text-center text-muted">Sin líneas SAP</td></tr>`;
-    return;
-  }
+  if (!tbodyOnline || !tfootOnline || !tbodyWeb || !tfootWeb) return;
 
-  let totalImporte = 0;
+  tbodyOnline.innerHTML = '';
+  tfootOnline.innerHTML = '';
+  tbodyWeb.innerHTML = '';
+  tfootWeb.innerHTML = '';
 
-  lineas.forEach((l) => {
-    totalImporte += l.redondeado || 0;
+  const allLineas = Array.isArray(lineas) ? lineas : [];
+  const lineasWeb = allLineas.filter((l) => String(l.descripcion || '').toUpperCase().startsWith('INTERNET -'));
+  const lineasOnline = allLineas.filter((l) => !String(l.descripcion || '').toUpperCase().startsWith('INTERNET -'));
 
-    const tr = document.createElement('tr');
-    const refSap = `${l.material || '-'} / ${l.centro || '-'}`;
-    tr.innerHTML = `
-      <td style="max-width:320px;">${l.descripcion}</td>
-      <td class="text-center">${l.cantidad}</td>
-      <td class="text-center">${l.unidad}</td>
-      <td class="text-right"><strong>${formatCurrencyExact(l.redondeado)}</strong></td>
-      <td>${refSap}</td>
+  const renderGrupo = (items, tbody, tfoot, tituloSubtotal) => {
+    if (!items.length) {
+      tbody.innerHTML = `<tr><td colspan="5" class="text-center text-muted">Sin líneas</td></tr>`;
+      tfoot.innerHTML = `
+        <tr class="fjg-total-row">
+          <td colspan="3">${tituloSubtotal}</td>
+          <td class="text-right">${formatCurrencyExact(0)}</td>
+          <td></td>
+        </tr>
+      `;
+      return;
+    }
+
+    let totalImporte = 0;
+    items.forEach((l) => {
+      totalImporte += l.redondeado || 0;
+
+      const tr = document.createElement('tr');
+      const refSap = `${l.material || '-'} / ${l.centro || '-'}`;
+      tr.innerHTML = `
+        <td style="max-width:320px;">${l.descripcion}</td>
+        <td class="text-center">${l.cantidad}</td>
+        <td class="text-center">${l.unidad}</td>
+        <td class="text-right"><strong>${formatCurrencyExact(l.redondeado)}</strong></td>
+        <td>${refSap}</td>
+      `;
+      tbody.appendChild(tr);
+    });
+
+    tfoot.innerHTML = `
+      <tr class="fjg-total-row">
+        <td colspan="3">${tituloSubtotal}</td>
+        <td class="text-right">${formatCurrencyExact(totalImporte)}</td>
+        <td></td>
+      </tr>
     `;
-    tbody.appendChild(tr);
-  });
+  };
 
-  tfoot.innerHTML = `
-    <tr class="fjg-total-row">
-      <td colspan="3">SUBTOTAL HES</td>
-      <td class="text-right">${formatCurrencyExact(totalImporte)}</td>
-      <td></td>
-    </tr>
-  `;
+  renderGrupo(lineasOnline, tbodyOnline, tfootOnline, 'SUBTOTAL HES ONLINE');
+  renderGrupo(lineasWeb, tbodyWeb, tfootWeb, 'SUBTOTAL HES WEB');
 }
 
 function renderOrigenFacturacionJuegos(data) {

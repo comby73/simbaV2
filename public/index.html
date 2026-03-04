@@ -3619,20 +3619,39 @@
             <div class="fjg-hes-note">
               Formato HES simplificado (Hoja1): columnas <strong>B, C, D, F, H</strong>.
             </div>
-            <div class="card-body" style="overflow-x:auto;">
-              <table class="table" id="fjg-tabla-sap" style="font-size:0.85rem;">
-                <thead>
-                  <tr>
-                    <th>B - Descripción</th>
-                    <th class="text-center">C - Cant</th>
-                    <th class="text-center">D - UM</th>
-                    <th class="text-right">F - Importe</th>
-                    <th>H - Ref. SAP</th>
-                  </tr>
-                </thead>
-                <tbody id="fjg-sap-body"></tbody>
-                <tfoot id="fjg-sap-foot"></tfoot>
-              </table>
+            <div class="card-body" style="overflow-x:auto; display:grid; gap:1rem;">
+              <div>
+                <h4 style="margin:0 0 .5rem 0; font-size:.95rem; opacity:.9;">HES Online</h4>
+                <table class="table" id="fjg-tabla-sap-online" style="font-size:0.85rem;">
+                  <thead>
+                    <tr>
+                      <th>B - Descripción</th>
+                      <th class="text-center">C - Cant</th>
+                      <th class="text-center">D - UM</th>
+                      <th class="text-right">F - Importe</th>
+                      <th>H - Ref. SAP</th>
+                    </tr>
+                  </thead>
+                  <tbody id="fjg-sap-body-online"></tbody>
+                  <tfoot id="fjg-sap-foot-online"></tfoot>
+                </table>
+              </div>
+              <div>
+                <h4 style="margin:0 0 .5rem 0; font-size:.95rem; opacity:.9;">HES Web (Internet)</h4>
+                <table class="table" id="fjg-tabla-sap-web" style="font-size:0.85rem;">
+                  <thead>
+                    <tr>
+                      <th>B - Descripción</th>
+                      <th class="text-center">C - Cant</th>
+                      <th class="text-center">D - UM</th>
+                      <th class="text-right">F - Importe</th>
+                      <th>H - Ref. SAP</th>
+                    </tr>
+                  </thead>
+                  <tbody id="fjg-sap-body-web"></tbody>
+                  <tfoot id="fjg-sap-foot-web"></tfoot>
+                </table>
+              </div>
             </div>
           </div>
 
