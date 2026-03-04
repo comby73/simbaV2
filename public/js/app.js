@@ -1252,24 +1252,25 @@ function mostrarResultadosCP(data) {
   }
 
   // Verificación de seguridad...
-  const seg = data.seguridad;
+  const seg = data.seguridad || {};
+  const segArchivos = seg.archivos || {};
   const segContent = document.getElementById('cp-seguridad-content');
   segContent.innerHTML = `
     <div class="security-grid">
       <div class="file-item" title="Archivo TXT">
-        <span><i class="fas ${seg.archivos.txt ? 'fa-check-circle text-success' : 'fa-times-circle text-danger'}"></i> Archivo TXT</span>
+        <span><i class="fas ${segArchivos.txt ? 'fa-check-circle text-success' : 'fa-times-circle text-danger'}"></i> Archivo TXT</span>
       </div>
       <div class="file-item" title="Archivo XML">
-        <span><i class="fas ${seg.archivos.xml ? 'fa-check-circle text-success' : 'fa-times-circle text-danger'}"></i> Archivo XML</span>
+        <span><i class="fas ${segArchivos.xml ? 'fa-check-circle text-success' : 'fa-times-circle text-danger'}"></i> Archivo XML</span>
       </div>
       <div class="file-item" title="Hash TXT">
-        <span><i class="fas ${seg.archivos.hash ? 'fa-check-circle text-success' : 'fa-times-circle text-danger'}"></i> Hash TXT</span>
+        <span><i class="fas ${segArchivos.hash ? 'fa-check-circle text-success' : 'fa-times-circle text-danger'}"></i> Hash TXT</span>
       </div>
       <div class="file-item" title="Hash CP">
-        <span><i class="fas ${seg.archivos.hashCP ? 'fa-check-circle text-success' : 'fa-times-circle text-danger'}"></i> Hash CP</span>
+        <span><i class="fas ${segArchivos.hashCP ? 'fa-check-circle text-success' : 'fa-times-circle text-danger'}"></i> Hash CP</span>
       </div>
       <div class="file-item" title="PDF Seguridad">
-        <span><i class="fas ${seg.archivos.pdf ? 'fa-check-circle text-success' : 'fa-times-circle text-danger'}"></i> PDF Seguridad</span>
+        <span><i class="fas ${segArchivos.pdf ? 'fa-check-circle text-success' : 'fa-times-circle text-danger'}"></i> PDF Seguridad</span>
       </div>
       <div class="file-item" title="Verificación Hash TXT">
         <span><i class="fas ${seg.verificado ? 'fa-check-circle text-success' : (seg.verificado === false ? 'fa-times-circle text-danger' : 'fa-question-circle text-warning')}"></i> 
