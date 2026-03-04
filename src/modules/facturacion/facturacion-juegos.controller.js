@@ -197,6 +197,43 @@ async function resolverColumnaFechaControlPrevioAgencias() {
   return resolverColumnaFecha('control_previo_agencias');
 }
 
+async function resolverColumnaFechaControlPrevioAgenciasConDatos(fecha_inicio, fecha_fin) {
+  const candidatas = [];
+
+  for (const col of ['fecha', 'fecha_sorteo']) {
+    try {
+      await query(`SELECT \`${col}\` FROM \`control_previo_agencias\` LIMIT 0`);
+      candidatas.push(col);
+    } catch {
+      // columna no existe
+    }
+  }
+
+  if (candidatas.length === 0) return null;
+  if (candidatas.length === 1) return candidatas[0];
+
+  let mejorCol = candidatas[0];
+  let mejorTotal = -1;
+
+  for (const col of candidatas) {
+    try {
+      const rows = await query(
+        `SELECT COUNT(*) AS total FROM control_previo_agencias WHERE \`${col}\` >= ? AND \`${col}\` <= ?`,
+        [fecha_inicio, fecha_fin]
+      );
+      const total = Number(rows?.[0]?.total || 0);
+      if (total > mejorTotal) {
+        mejorTotal = total;
+        mejorCol = col;
+      }
+    } catch {
+      // ignorar columna inválida en esta instancia
+    }
+  }
+
+  return mejorCol;
+}
+
 // ============================================================
 // CONFIGURACIÓN SAP POR JUEGO
 // caba:  [material_completo, material_reducido]
@@ -318,7 +355,8 @@ const getFacturacionJuegosUTE = async (req, res) => {
       });
     }
 
-    const colFechaCPA = await resolverColumnaFechaControlPrevioAgencias();
+    const colFechaCPA = await resolverColumnaFechaControlPrevioAgenciasConDatos(fecha_inicio, fecha_fin)
+      || await resolverColumnaFechaControlPrevioAgencias();
     if (!colFechaCPA) {
       return res.status(500).json({
         success: false,
