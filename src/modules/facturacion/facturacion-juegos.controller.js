@@ -510,15 +510,16 @@ const getFacturacionJuegosUTE = async (req, res) => {
     }
 
     // --- Calcular total recaudación para proporcionar tope ---
-    const totalRecaudacion = rowsConsolidadas.reduce((acc, r) => acc + (parseFloat(r.rec_total) || 0), 0);
+    const totalRecaudacionBruta = rowsConsolidadas.reduce((acc, r) => acc + (parseFloat(r.rec_total) || 0), 0);
     const totalRecaudacionFacturable = rowsConsolidadas.reduce((acc, r) => acc + (parseFloat(r.rec_fact_total) || 0), 0);
+    const totalRecaudacion = totalRecaudacionFacturable;
     const topeRatioBase = totalRecaudacionFacturable > 0 ? tope / totalRecaudacionFacturable : 0;
     const topeRatio = Math.max(0, Math.min(1, topeRatioBase));
 
     // --- Flujo tipo "Total Gral." del Excel por canal ---
-    const totalRecCABA = rowsConsolidadas.reduce((acc, r) => acc + (parseFloat(r.rec_caba) || 0), 0);
-    const totalRecInternet = rowsConsolidadas.reduce((acc, r) => acc + (parseFloat(r.rec_internet) || 0), 0);
-    const totalRecProvincias = rowsConsolidadas.reduce((acc, r) => acc + (parseFloat(r.rec_provincias) || 0), 0);
+    const totalRecCABA = rowsConsolidadas.reduce((acc, r) => acc + (parseFloat(r.rec_fact_caba) || 0), 0);
+    const totalRecInternet = rowsConsolidadas.reduce((acc, r) => acc + (parseFloat(r.rec_fact_internet) || 0), 0);
+    const totalRecProvincias = rowsConsolidadas.reduce((acc, r) => acc + (parseFloat(r.rec_fact_provincias) || 0), 0);
     const totalRecCABAFact = rowsConsolidadas.reduce((acc, r) => acc + (parseFloat(r.rec_fact_caba) || 0), 0);
     const totalRecInternetFact = rowsConsolidadas.reduce((acc, r) => acc + (parseFloat(r.rec_fact_internet) || 0), 0);
     const totalRecProvinciasFact = rowsConsolidadas.reduce((acc, r) => acc + (parseFloat(r.rec_fact_provincias) || 0), 0);
@@ -750,10 +751,10 @@ const getFacturacionJuegosUTE = async (req, res) => {
           nombre: nombreComponente,
           cant_sorteos: cantSorteos,
           recaudacion: {
-            caba:       comp.recCABA,
-            provincias: comp.recProv,
-            internet:   comp.recInt,
-            total:      comp.recTotal
+            caba:       comp.recFactCABA,
+            provincias: comp.recFactProv,
+            internet:   comp.recFactInt,
+            total:      comp.recFactCABA + comp.recFactProv + comp.recFactInt
           },
           billing: billingJuego,
           lineasSAP: lineasJuego,
@@ -807,6 +808,7 @@ const getFacturacionJuegosUTE = async (req, res) => {
         tope,
         topeRatio:          parseFloat(topeRatio.toFixed(8)),
         totalRecaudacion,
+        totalRecaudacionBruta,
         excedenteSobreTope: Math.max(totalRecaudacion - tope, 0),
         totalBillingNeto,
         subtotalHES,
