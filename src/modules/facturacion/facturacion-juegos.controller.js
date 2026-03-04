@@ -414,6 +414,7 @@ const getFacturacionJuegosUTE = async (req, res) => {
       const recCabaRaw = parseFloat(row.rec_caba) || 0;
       const recInternetRaw = parseFloat(row.rec_internet) || 0;
       const recProvinciasRaw = parseFloat(row.rec_provincias) || 0;
+      const recTotalRaw = parseFloat(row.rec_total) || 0;
       const recCabaFact = recCabaRaw * factor;
       const recInternetFact = recInternetRaw * factor;
       const recProvinciasFact = recProvinciasRaw * factor;
@@ -423,11 +424,11 @@ const getFacturacionJuegosUTE = async (req, res) => {
         rec_caba: recCabaRaw,
         rec_internet: recInternetRaw,
         rec_provincias: recProvinciasRaw,
-        rec_total: recCabaRaw + recInternetRaw + recProvinciasRaw,
+        rec_total: recTotalRaw,
         rec_fact_caba: recCabaFact,
         rec_fact_internet: recInternetFact,
         rec_fact_provincias: recProvinciasFact,
-        rec_fact_total: recCabaFact + recInternetFact + recProvinciasFact
+        rec_fact_total: recTotalRaw * factor
       };
     });
 
@@ -618,6 +619,7 @@ const getFacturacionJuegosUTE = async (req, res) => {
       const recFactCABA  = parseFloat(row.rec_fact_caba)        || 0;
       const recFactProv  = parseFloat(row.rec_fact_provincias)  || 0;
       const recFactInt   = parseFloat(row.rec_fact_internet)    || 0;
+      const recFactTotal = parseFloat(row.rec_fact_total)       || 0;
       const cantSorteos = parseInt(row.cant_sorteos)   || 0;
 
       const desglose = desglosePorJuego[juegoKey] || obtenerDesgloseJuego(juegoKey);
@@ -639,7 +641,8 @@ const getFacturacionJuegosUTE = async (req, res) => {
               recTotal: recCompCaba + recCompProv + recCompInt,
               recFactCABA: recCompFactCaba,
               recFactProv: recCompFactProv,
-              recFactInt: recCompFactInt
+              recFactInt: recCompFactInt,
+              recFactTotal: recFactTotal * item.porcentaje
             };
           })
         : [{
@@ -653,7 +656,8 @@ const getFacturacionJuegosUTE = async (req, res) => {
             recTotal,
             recFactCABA,
             recFactProv,
-            recFactInt
+            recFactInt,
+            recFactTotal: parseFloat(row.rec_fact_total) || 0
           }];
 
       for (const comp of componentes) {
@@ -754,7 +758,7 @@ const getFacturacionJuegosUTE = async (req, res) => {
             caba:       comp.recFactCABA,
             provincias: comp.recFactProv,
             internet:   comp.recFactInt,
-            total:      comp.recFactCABA + comp.recFactProv + comp.recFactInt
+            total:      comp.recFactTotal
           },
           billing: billingJuego,
           lineasSAP: lineasJuego,
