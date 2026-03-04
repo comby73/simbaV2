@@ -675,24 +675,38 @@ async function guardarControlPrevioLoto5(resultado, user, nombreArchivo) {
       // Eliminar previos y insertar
       await query('DELETE FROM control_previo_agencias WHERE juego = ? AND numero_sorteo = ?', ['loto5', sorteoNum]);
       
-      const valores = [];
-      const placeholders = [];
+      const filasAgencias = [];
       for (const [codigo, ag] of agenciasMap) {
-        placeholders.push('(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)');
-        valores.push(
-          controlPrevioId || 0, 'loto5', fechaControl, sorteoNum, 'U',
-          codigo, ag.codigoProvincia,
-          ag.ticketsSet.size, ag.totalApuestas, 0, ag.totalRecaudacion
-        );
+        filasAgencias.push([
+          controlPrevioId || 0,
+          'loto5',
+          fechaControl,
+          sorteoNum,
+          'U',
+          codigo,
+          ag.codigoProvincia,
+          ag.ticketsSet.size,
+          ag.totalApuestas,
+          0,
+          ag.totalRecaudacion
+        ]);
       }
-      if (placeholders.length > 0) {
+
+      const BATCH_SIZE = 300;
+      for (let i = 0; i < filasAgencias.length; i += BATCH_SIZE) {
+        const batch = filasAgencias.slice(i, i + BATCH_SIZE);
+        const placeholders = batch.map(() => '(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)').join(', ');
+        const valores = batch.flat();
         await query(`
           INSERT INTO control_previo_agencias 
             (control_previo_id, juego, fecha, numero_sorteo, modalidad, codigo_agencia, 
              codigo_provincia, total_tickets, total_apuestas, total_anulados, total_recaudacion)
-          VALUES ${placeholders.join(', ')}
+          VALUES ${placeholders}
         `, valores);
-        console.log(`✅ Guardadas ${agenciasMap.size} agencias para Control Previo LOTO 5 (sorteo: ${sorteoNum})`);
+      }
+
+      if (filasAgencias.length > 0) {
+        console.log(`✅ Guardadas ${filasAgencias.length} agencias para Control Previo LOTO 5 (sorteo: ${sorteoNum})`);
       }
     } catch (errAg) {
       console.error('⚠️ Error guardando agencias Loto 5 (no crítico):', errAg.message);
