@@ -23,6 +23,17 @@ const TASAS = {
 // IVA (se muestra por separado)
 const IVA = 0.21;
 
+const AJUSTE_RECAUDACION_FACTURACION = {
+  loto: 0.75,
+  loto5: 0.75,
+  quini6: 0.90,
+  brinco: 0.90
+};
+
+function obtenerFactorAjusteFacturacion(juegoKey) {
+  return AJUSTE_RECAUDACION_FACTURACION[juegoKey] || 1;
+}
+
 // Desglose proporcional para replicar el modelo de Excel (total gral.)
 // Se usa para separar juegos que en Control Previo vienen agregados.
 const DESGLOSE_PORCENTUAL = {
@@ -327,6 +338,21 @@ const getFacturacionJuegosUTE = async (req, res) => {
 
     const rows = await query(sql, [fecha_inicio, fecha_fin]);
 
+    const rowsAjustadas = rows.map((row) => {
+      const juegoKey = (row.juego || '').toLowerCase().trim();
+      const factor = obtenerFactorAjusteFacturacion(juegoKey);
+      const recCaba = (parseFloat(row.rec_caba) || 0) * factor;
+      const recInternet = (parseFloat(row.rec_internet) || 0) * factor;
+      const recProvincias = (parseFloat(row.rec_provincias) || 0) * factor;
+      return {
+        ...row,
+        rec_caba: recCaba,
+        rec_internet: recInternet,
+        rec_provincias: recProvincias,
+        rec_total: recCaba + recInternet + recProvincias
+      };
+    });
+
     const desgloseDinamicoLoto = await obtenerDesgloseLotoDinamico(fecha_inicio, fecha_fin);
     const desgloseDinamicoQuini6 = await obtenerDesgloseQuini6Dinamico(fecha_inicio, fecha_fin);
     const desglosePorJuego = {
@@ -384,13 +410,13 @@ const getFacturacionJuegosUTE = async (req, res) => {
     }
 
     // --- Calcular total recaudación para proporcionar tope ---
-    const totalRecaudacion = rows.reduce((acc, r) => acc + (parseFloat(r.rec_total) || 0), 0);
+    const totalRecaudacion = rowsAjustadas.reduce((acc, r) => acc + (parseFloat(r.rec_total) || 0), 0);
     const topeRatio = totalRecaudacion > 0 ? tope / totalRecaudacion : 0;
 
     // --- Flujo tipo "Total Gral." del Excel por canal ---
-    const totalRecCABA = rows.reduce((acc, r) => acc + (parseFloat(r.rec_caba) || 0), 0);
-    const totalRecInternet = rows.reduce((acc, r) => acc + (parseFloat(r.rec_internet) || 0), 0);
-    const totalRecProvincias = rows.reduce((acc, r) => acc + (parseFloat(r.rec_provincias) || 0), 0);
+    const totalRecCABA = rowsAjustadas.reduce((acc, r) => acc + (parseFloat(r.rec_caba) || 0), 0);
+    const totalRecInternet = rowsAjustadas.reduce((acc, r) => acc + (parseFloat(r.rec_internet) || 0), 0);
+    const totalRecProvincias = rowsAjustadas.reduce((acc, r) => acc + (parseFloat(r.rec_provincias) || 0), 0);
 
     const flujoTotalGral = {
       onLineCapitalFederal: {
@@ -470,7 +496,7 @@ const getFacturacionJuegosUTE = async (req, res) => {
     const lineasSAP = [];
     let totalBillingNeto = 0;
 
-    for (const row of rows) {
+    for (const row of rowsAjustadas) {
       const juegoKey = (row.juego || '').toLowerCase().trim();
       const cfg = SAP_JUEGOS[juegoKey] || {
         nombre: juegoKey.toUpperCase(),
