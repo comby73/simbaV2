@@ -310,7 +310,8 @@ const SAP_JUEGOS = {
 // FUNCIÓN DE CÁLCULO POR CANAL
 // ============================================================
 function calcularBillingCanal(recaudacion, canal, topeRatio) {
-  const dentroTope = recaudacion * topeRatio;
+  const ratioSeguro = Math.max(0, Math.min(1, Number(topeRatio) || 0));
+  const dentroTope = recaudacion * ratioSeguro;
   const sobreTope  = recaudacion - dentroTope;
 
   let importe_completo, importe_reducido;
@@ -511,7 +512,8 @@ const getFacturacionJuegosUTE = async (req, res) => {
     // --- Calcular total recaudación para proporcionar tope ---
     const totalRecaudacion = rowsConsolidadas.reduce((acc, r) => acc + (parseFloat(r.rec_total) || 0), 0);
     const totalRecaudacionFacturable = rowsConsolidadas.reduce((acc, r) => acc + (parseFloat(r.rec_fact_total) || 0), 0);
-    const topeRatio = totalRecaudacionFacturable > 0 ? tope / totalRecaudacionFacturable : 0;
+    const topeRatioBase = totalRecaudacionFacturable > 0 ? tope / totalRecaudacionFacturable : 0;
+    const topeRatio = Math.max(0, Math.min(1, topeRatioBase));
 
     // --- Flujo tipo "Total Gral." del Excel por canal ---
     const totalRecCABA = rowsConsolidadas.reduce((acc, r) => acc + (parseFloat(r.rec_caba) || 0), 0);
