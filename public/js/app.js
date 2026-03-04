@@ -15279,6 +15279,49 @@ function copiarLineasSAPJuegos() {
   }).catch(() => showToast('Error al copiar', 'error'));
 }
 
+function obtenerLineasSAPOnlineYWeb() {
+  const lineas = Array.isArray(_fjgDatosUTE?.lineasSAP) ? _fjgDatosUTE.lineasSAP : [];
+  const web = lineas.filter(l => String(l.descripcion || '').toUpperCase().startsWith('INTERNET -'));
+  const online = lineas.filter(l => !String(l.descripcion || '').toUpperCase().startsWith('INTERNET -'));
+  return { online, web };
+}
+
+function copiarLineasSAPJuegosOnline() {
+  const { online } = obtenerLineasSAPOnlineYWeb();
+  if (!online.length) {
+    showToast('No hay líneas HES Online para copiar', 'warning');
+    return;
+  }
+
+  const cabecera = 'B_Descripcion\tC_Cantidad\tD_UM\tF_Importe\tH_Ref_SAP';
+  const filas = online.map(l =>
+    `${l.descripcion}\t${l.cantidad}\t${l.unidad}\t${(l.redondeado || 0).toFixed(3)}\t${l.material || '-'} / ${l.centro || '-'}`
+  );
+  const texto = [cabecera, ...filas].join('\n');
+
+  navigator.clipboard.writeText(texto).then(() => {
+    showToast(`${online.length} líneas HES Online copiadas`, 'success');
+  }).catch(() => showToast('Error al copiar', 'error'));
+}
+
+function copiarLineasSAPJuegosWeb() {
+  const { web } = obtenerLineasSAPOnlineYWeb();
+  if (!web.length) {
+    showToast('No hay líneas HES Web para copiar', 'warning');
+    return;
+  }
+
+  const cabecera = 'B_Descripcion\tC_Cantidad\tD_UM\tF_Importe\tH_Ref_SAP';
+  const filas = web.map(l =>
+    `${l.descripcion}\t${l.cantidad}\t${l.unidad}\t${(l.redondeado || 0).toFixed(3)}\t${l.material || '-'} / ${l.centro || '-'}`
+  );
+  const texto = [cabecera, ...filas].join('\n');
+
+  navigator.clipboard.writeText(texto).then(() => {
+    showToast(`${web.length} líneas HES Web copiadas`, 'success');
+  }).catch(() => showToast('Error al copiar', 'error'));
+}
+
 function exportarBillingJuegosCSV() {
   if (!_fjgDatosUTE?.juegos?.length) {
     showToast('No hay datos para exportar', 'warning');
@@ -15324,6 +15367,50 @@ function exportarLineasSAPJuegosCSV() {
   }
   const csv = rows.map(r => r.join(',')).join('\n');
   descargarCSV(csv, `hes_gral_${d.periodo.inicio}_${d.periodo.fin}.csv`);
+}
+
+function exportarLineasSAPJuegosOnlineCSV() {
+  const { online } = obtenerLineasSAPOnlineYWeb();
+  if (!online.length) {
+    showToast('No hay líneas HES Online para exportar', 'warning');
+    return;
+  }
+
+  const d = _fjgDatosUTE;
+  const rows = [['B_Descripcion', 'C_Cantidad', 'D_UM', 'F_Importe', 'H_Ref_SAP']];
+  for (const l of online) {
+    rows.push([
+      `"${l.descripcion}"`,
+      l.cantidad,
+      l.unidad,
+      (l.redondeado || 0).toFixed(3),
+      `"${(l.material || '-') + ' / ' + (l.centro || '-')}"`
+    ]);
+  }
+  const csv = rows.map(r => r.join(',')).join('\n');
+  descargarCSV(csv, `hes_online_${d.periodo.inicio}_${d.periodo.fin}.csv`);
+}
+
+function exportarLineasSAPJuegosWebCSV() {
+  const { web } = obtenerLineasSAPOnlineYWeb();
+  if (!web.length) {
+    showToast('No hay líneas HES Web para exportar', 'warning');
+    return;
+  }
+
+  const d = _fjgDatosUTE;
+  const rows = [['B_Descripcion', 'C_Cantidad', 'D_UM', 'F_Importe', 'H_Ref_SAP']];
+  for (const l of web) {
+    rows.push([
+      `"${l.descripcion}"`,
+      l.cantidad,
+      l.unidad,
+      (l.redondeado || 0).toFixed(3),
+      `"${(l.material || '-') + ' / ' + (l.centro || '-')}"`
+    ]);
+  }
+  const csv = rows.map(r => r.join(',')).join('\n');
+  descargarCSV(csv, `hes_web_${d.periodo.inicio}_${d.periodo.fin}.csv`);
 }
 
 // Helper: formato moneda exacto (3 decimales)
