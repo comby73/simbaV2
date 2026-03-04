@@ -44,7 +44,7 @@ function normalizarJuegoKey(juegoKey) {
   if (compact === 'quinielaya') return 'quinielaya';
   if (compact === 'quiniela') return 'quiniela';
   if (compact.startsWith('loto5')) return 'loto5';
-  if (compact === 'loto' || compact.startsWith('lotoplus')) return 'loto';
+  if (compact.startsWith('loto')) return 'loto';
   if (compact.startsWith('quini6')) return 'quini6';
   if (compact.startsWith('brinco')) return 'brinco';
   if (compact.startsWith('poceada')) return 'poceada';
