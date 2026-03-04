@@ -350,8 +350,19 @@ const getFacturacionJuegosUTE = async (req, res) => {
         END) AS rec_provincias,
         SUM(cpa.total_recaudacion) AS rec_total,
         COUNT(DISTINCT cpa.numero_sorteo) AS cant_sorteos
-      FROM control_previo_agencias cpa
-      WHERE cpa.${colFechaCPA} >= ? AND cpa.${colFechaCPA} <= ?
+      FROM (
+        SELECT
+          juego,
+          ${colFechaCPA} AS fecha_base,
+          numero_sorteo,
+          COALESCE(NULLIF(TRIM(modalidad), ''), 'N') AS modalidad,
+          COALESCE(NULLIF(TRIM(codigo_agencia), ''), '0') AS codigo_agencia,
+          MAX(COALESCE(NULLIF(TRIM(codigo_provincia), ''), '')) AS codigo_provincia,
+          MAX(total_recaudacion) AS total_recaudacion
+        FROM control_previo_agencias
+        WHERE ${colFechaCPA} >= ? AND ${colFechaCPA} <= ?
+        GROUP BY juego, fecha_base, numero_sorteo, modalidad, codigo_agencia
+      ) cpa
       GROUP BY LOWER(TRIM(cpa.juego))
       ORDER BY LOWER(TRIM(cpa.juego))
     `;
@@ -380,6 +391,28 @@ const getFacturacionJuegosUTE = async (req, res) => {
         rec_fact_total: recCabaFact + recInternetFact + recProvinciasFact
       };
     });
+
+    const rowsConsolidadas = Array.from(
+      rowsNormalizadas.reduce((map, row) => {
+        const key = row.juego;
+        const prev = map.get(key);
+        if (!prev) {
+          map.set(key, { ...row });
+          return map;
+        }
+        prev.rec_caba += Number(row.rec_caba || 0);
+        prev.rec_internet += Number(row.rec_internet || 0);
+        prev.rec_provincias += Number(row.rec_provincias || 0);
+        prev.rec_total += Number(row.rec_total || 0);
+        prev.rec_fact_caba += Number(row.rec_fact_caba || 0);
+        prev.rec_fact_internet += Number(row.rec_fact_internet || 0);
+        prev.rec_fact_provincias += Number(row.rec_fact_provincias || 0);
+        prev.rec_fact_total += Number(row.rec_fact_total || 0);
+        prev.cant_sorteos = Number(prev.cant_sorteos || 0) + Number(row.cant_sorteos || 0);
+        map.set(key, prev);
+        return map;
+      }, new Map())
+    );
 
     const desgloseDinamicoLoto = await obtenerDesgloseLotoDinamico(fecha_inicio, fecha_fin);
     const desgloseDinamicoQuini6 = await obtenerDesgloseQuini6Dinamico(fecha_inicio, fecha_fin);
@@ -438,17 +471,17 @@ const getFacturacionJuegosUTE = async (req, res) => {
     }
 
     // --- Calcular total recaudación para proporcionar tope ---
-    const totalRecaudacion = rowsNormalizadas.reduce((acc, r) => acc + (parseFloat(r.rec_total) || 0), 0);
-    const totalRecaudacionFacturable = rowsNormalizadas.reduce((acc, r) => acc + (parseFloat(r.rec_fact_total) || 0), 0);
+    const totalRecaudacion = rowsConsolidadas.reduce((acc, r) => acc + (parseFloat(r.rec_total) || 0), 0);
+    const totalRecaudacionFacturable = rowsConsolidadas.reduce((acc, r) => acc + (parseFloat(r.rec_fact_total) || 0), 0);
     const topeRatio = totalRecaudacionFacturable > 0 ? tope / totalRecaudacionFacturable : 0;
 
     // --- Flujo tipo "Total Gral." del Excel por canal ---
-    const totalRecCABA = rowsNormalizadas.reduce((acc, r) => acc + (parseFloat(r.rec_caba) || 0), 0);
-    const totalRecInternet = rowsNormalizadas.reduce((acc, r) => acc + (parseFloat(r.rec_internet) || 0), 0);
-    const totalRecProvincias = rowsNormalizadas.reduce((acc, r) => acc + (parseFloat(r.rec_provincias) || 0), 0);
-    const totalRecCABAFact = rowsNormalizadas.reduce((acc, r) => acc + (parseFloat(r.rec_fact_caba) || 0), 0);
-    const totalRecInternetFact = rowsNormalizadas.reduce((acc, r) => acc + (parseFloat(r.rec_fact_internet) || 0), 0);
-    const totalRecProvinciasFact = rowsNormalizadas.reduce((acc, r) => acc + (parseFloat(r.rec_fact_provincias) || 0), 0);
+    const totalRecCABA = rowsConsolidadas.reduce((acc, r) => acc + (parseFloat(r.rec_caba) || 0), 0);
+    const totalRecInternet = rowsConsolidadas.reduce((acc, r) => acc + (parseFloat(r.rec_internet) || 0), 0);
+    const totalRecProvincias = rowsConsolidadas.reduce((acc, r) => acc + (parseFloat(r.rec_provincias) || 0), 0);
+    const totalRecCABAFact = rowsConsolidadas.reduce((acc, r) => acc + (parseFloat(r.rec_fact_caba) || 0), 0);
+    const totalRecInternetFact = rowsConsolidadas.reduce((acc, r) => acc + (parseFloat(r.rec_fact_internet) || 0), 0);
+    const totalRecProvinciasFact = rowsConsolidadas.reduce((acc, r) => acc + (parseFloat(r.rec_fact_provincias) || 0), 0);
 
     const flujoTotalGral = {
       onLineCapitalFederal: {
@@ -528,7 +561,7 @@ const getFacturacionJuegosUTE = async (req, res) => {
     const lineasSAP = [];
     let totalBillingNeto = 0;
 
-    for (const row of rowsNormalizadas) {
+    for (const row of rowsConsolidadas) {
       const juegoKey = (row.juego || '').toLowerCase().trim();
       const cfg = SAP_JUEGOS[juegoKey] || {
         nombre: juegoKey.toUpperCase(),
