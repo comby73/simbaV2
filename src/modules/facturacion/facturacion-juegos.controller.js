@@ -371,6 +371,17 @@ const getFacturacionJuegosUTE = async (req, res) => {
         LOWER(TRIM(cpa.juego)) AS juego,
         SUM(CASE
           WHEN cpa.codigo_agencia IN ('88880','5188880')
+           AND LOWER(TRIM(cpa.juego)) IN (
+             'quiniela',
+             'quinielaya',
+             'quiniela_ya',
+             'loto',
+             'loto_desquite',
+             'loto_sos',
+             'loto_tradicional',
+             'loto_match',
+             'loto_numero_plus'
+           )
           THEN cpa.total_recaudacion ELSE 0
         END) AS rec_internet,
         SUM(CASE
@@ -378,7 +389,20 @@ const getFacturacionJuegosUTE = async (req, res) => {
            AND cpa.codigo_agencia NOT IN ('88880','5188880')
           THEN cpa.total_recaudacion
           WHEN cpa.codigo_provincia = '51'
-           AND cpa.codigo_agencia NOT IN ('88880','5188880')
+           AND (
+             cpa.codigo_agencia NOT IN ('88880','5188880')
+             OR LOWER(TRIM(cpa.juego)) NOT IN (
+               'quiniela',
+               'quinielaya',
+               'quiniela_ya',
+               'loto',
+               'loto_desquite',
+               'loto_sos',
+               'loto_tradicional',
+               'loto_match',
+               'loto_numero_plus'
+             )
+           )
           THEN cpa.total_recaudacion ELSE 0
         END) AS rec_caba,
         SUM(CASE
