@@ -34,6 +34,12 @@ function obtenerFactorAjusteFacturacion(juegoKey) {
   return AJUSTE_RECAUDACION_FACTURACION[juegoKey] || 1;
 }
 
+function obtenerFactorAjusteFacturacionCanal(juegoKey, canal) {
+  const factorGeneral = obtenerFactorAjusteFacturacion(juegoKey);
+  if (juegoKey === 'loto' && canal === 'internet') return 1;
+  return factorGeneral;
+}
+
 function normalizarJuegoKey(juegoKey) {
   const raw = String(juegoKey || '').toLowerCase().trim();
   const compact = raw
@@ -435,13 +441,19 @@ const getFacturacionJuegosUTE = async (req, res) => {
     const rowsNormalizadas = rows.map((row) => {
       const juegoKey = normalizarJuegoKey(row.juego);
       const factor = obtenerFactorAjusteFacturacion(juegoKey);
+      const factorCaba = obtenerFactorAjusteFacturacionCanal(juegoKey, 'caba');
+      const factorProv = obtenerFactorAjusteFacturacionCanal(juegoKey, 'provincias');
+      const factorInternet = obtenerFactorAjusteFacturacionCanal(juegoKey, 'internet');
       const recCabaRaw = parseFloat(row.rec_caba) || 0;
       const recInternetRaw = parseFloat(row.rec_internet) || 0;
       const recProvinciasRaw = parseFloat(row.rec_provincias) || 0;
       const recTotalRaw = parseFloat(row.rec_total) || 0;
-      const recCabaFact = recCabaRaw * factor;
-      const recInternetFact = recInternetRaw * factor;
-      const recProvinciasFact = recProvinciasRaw * factor;
+      const recCabaFact = recCabaRaw * factorCaba;
+      const recInternetFact = recInternetRaw * factorInternet;
+      const recProvinciasFact = recProvinciasRaw * factorProv;
+      const recClasificadaRaw = recCabaRaw + recInternetRaw + recProvinciasRaw;
+      const recRestoRaw = Math.max(recTotalRaw - recClasificadaRaw, 0);
+      const recRestoFact = recRestoRaw * factor;
       return {
         ...row,
         juego: juegoKey,
@@ -452,7 +464,7 @@ const getFacturacionJuegosUTE = async (req, res) => {
         rec_fact_caba: recCabaFact,
         rec_fact_internet: recInternetFact,
         rec_fact_provincias: recProvinciasFact,
-        rec_fact_total: recTotalRaw * factor
+        rec_fact_total: recCabaFact + recInternetFact + recProvinciasFact + recRestoFact
       };
     });
 
