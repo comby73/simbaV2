@@ -805,46 +805,30 @@ async function guardarControlPrevioLoto(resultado, user, nombreArchivo) {
   } catch (errorInsert) {
     if (String(errorInsert?.message || '').includes('Unknown column')) {
       try {
-        // Compatibilidad con esquema legacy de control_previo_loto
+        // Compatibilidad con esquema sin columna fecha (hosting)
         insertResult = await query(`
           INSERT INTO control_previo_loto
-          (fecha, numero_sorteo, total_registros, total_tickets, total_apuestas, total_anulados,
-           total_recaudacion, provincias, nombre_archivo_zip, hash_archivo, hash_verificado,
-           comparacion_xml, datos_oficiales, datos_adicionales, usuario_id, usuario_nombre)
-          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+          (numero_sorteo, archivo, registros_validos, registros_anulados,
+           apuestas_total, recaudacion, datos_json, usuario_id)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?)
           ON DUPLICATE KEY UPDATE
-            total_registros = VALUES(total_registros),
-            total_tickets = VALUES(total_tickets),
-            total_apuestas = VALUES(total_apuestas),
-            total_anulados = VALUES(total_anulados),
-            total_recaudacion = VALUES(total_recaudacion),
-            provincias = VALUES(provincias),
-            nombre_archivo_zip = VALUES(nombre_archivo_zip),
-            hash_archivo = VALUES(hash_archivo),
-            hash_verificado = VALUES(hash_verificado),
-            comparacion_xml = VALUES(comparacion_xml),
-            datos_oficiales = VALUES(datos_oficiales),
-            datos_adicionales = VALUES(datos_adicionales),
+            archivo = VALUES(archivo),
+            registros_validos = VALUES(registros_validos),
+            registros_anulados = VALUES(registros_anulados),
+            apuestas_total = VALUES(apuestas_total),
+            recaudacion = VALUES(recaudacion),
+            datos_json = VALUES(datos_json),
             usuario_id = VALUES(usuario_id),
-            usuario_nombre = VALUES(usuario_nombre),
             updated_at = CURRENT_TIMESTAMP
         `, [
-          fecha,
           sorteoNum,
-          resumen.registros || 0,
-          resumen.registros || 0,
-          resumen.apuestasTotal || 0,
-          resumen.anulados || 0,
-          resumen.recaudacion || 0,
-          JSON.stringify(resultado?.provincias || {}),
           nombreArchivo,
-          resultado?.seguridad?.hashCalculado || null,
-          !!resultado?.seguridad?.verificado,
-          resultado?.comparacion ? JSON.stringify(resultado.comparacion) : null,
-          resultado?.datosOficiales ? JSON.stringify(resultado.datosOficiales) : null,
-          JSON.stringify({ modalidades: resultado?.modalidades || {}, ventaWeb: resumen?.ventaWeb || 0 }),
+          resumen.registros || 0,
+          resumen.anulados || 0,
+          resumen.apuestasTotal || 0,
+          resumen.recaudacion || 0,
+          JSON.stringify(resultado),
           user?.id || null,
-          user?.nombre || 'Sistema'
         ]);
       } catch (errLegacy) {
         console.warn(`⚠️ Loto: no se pudo guardar en control_previo_loto (continuo con agencias): ${errLegacy.message}`);
