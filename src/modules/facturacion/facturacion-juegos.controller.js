@@ -7,6 +7,7 @@ const { query } = require('../../config/database');
 // ============================================================
 
 const TOPE_DEFAULT = 105_000_000; // Tope estipulado por contrato
+const LIMITE_REDUCCION_WEB = 0.25; // Modelo Excel Total Gral. (D40)
 
 // Factor de descuento combinado: (1-16%) × (1-5%) = 0.84 × 0.95 = 0.798
 const FACTOR_DESCUENTO = (1 - 0.16) * (1 - 0.05); // = 0.798
@@ -323,16 +324,13 @@ function calcularBillingCanal(recaudacion, canal, topeRatio) {
   let importe_completo, importe_reducido;
 
   if (canal === 'internet') {
-    // Tasa plana 11% sobre toda la recaudación web (sin split por tope)
-    const totalWeb = recaudacion * TASAS.INTERNET_FLAT;
-    return {
-      recaudacion,
-      dentroTope: recaudacion,
-      sobreTope: 0,
-      importe_completo: totalWeb,
-      importe_reducido: 0,
-      total_neto: totalWeb
-    };
+    // Modelo Excel (total gral.):
+    // - Dentro del tope: 11%
+    // - Sobre tope: tasa reducida dependiente del excedente
+    //   equivalente a 14.65% * topeRatio (con topeRatio en [0,1])
+    const tasaReducidaInternet = 0.1465 * (1 - LIMITE_REDUCCION_WEB);
+    importe_completo = dentroTope * TASAS.INTERNET_FLAT;
+    importe_reducido = sobreTope * tasaReducidaInternet;
   } else if (canal === 'caba') {
     importe_completo = dentroTope * TASAS.CABA_COMPLETO * FACTOR_DESCUENTO;
     importe_reducido = sobreTope  * TASAS.CABA_REDUCIDO * FACTOR_DESCUENTO;
@@ -775,8 +773,8 @@ const getFacturacionJuegosUTE = async (req, res) => {
               material: cfg.int[0],
               descripcion: `INTERNET - ${nombreComponente} completo 11%`,
               cantidad: 1, unidad: 'C/U',
-              importe: b.importe_completo,
-              redondeado: Math.round(b.importe_completo * 1000) / 1000,
+              importe: b.total_neto,
+              redondeado: Math.round(b.total_neto * 1000) / 1000,
               centro: centroInt
             }
           );
