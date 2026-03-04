@@ -613,6 +613,23 @@ async function guardarControlPrevioTombolina(resultado, usuario, nombreArchivo) 
  * @returns {Promise<string|null>} - Fecha en formato YYYY-MM-DD o null
  */
 async function buscarFechaProgramacion(tipoJuego, numeroSorteo, modalidad = null) {
+  const normalizarFechaValida = (value) => {
+    if (!value) return null;
+
+    const raw = String(value).trim();
+    if (!raw || raw === '0000-00-00') return null;
+
+    if (/^\d{4}-\d{2}-\d{2}$/.test(raw)) {
+      const d = new Date(raw);
+      if (!Number.isNaN(d.getTime())) return raw;
+      return null;
+    }
+
+    const d = new Date(raw);
+    if (Number.isNaN(d.getTime())) return null;
+    return d.toISOString().split('T')[0];
+  };
+
   const ejecutarBusqueda = async (columnaJuego) => {
     // Normalizar numero_sorteo (sin ceros a la izquierda para comparar)
     const sorteoNormalizado = String(parseInt(numeroSorteo, 10));
@@ -647,9 +664,77 @@ async function buscarFechaProgramacion(tipoJuego, numeroSorteo, modalidad = null
     sql += ' ORDER BY fecha_sorteo DESC LIMIT 1';
 
     const rows = await query(sql, params);
-    if (rows && rows.length > 0 && rows[0].fecha_sorteo) {
-      const fecha = new Date(rows[0].fecha_sorteo);
-      return fecha.toISOString().split('T')[0];
+    if (rows && rows.length > 0) {
+      const fecha = normalizarFechaValida(rows[0].fecha_sorteo);
+      if (fecha) return fecha;
+    }
+
+    return null;
+  };
+
+  const ejecutarBusquedaEspecial = async () => {
+    const sorteoNormalizado = String(parseInt(numeroSorteo, 10));
+    const juego = String(tipoJuego || '').toLowerCase();
+
+    const alias = {
+      quini6: {
+        codigo: '0069',
+        like: ['%quini 6%', '%quini6%']
+      },
+      brinco: {
+        codigo: '0013',
+        like: ['%brinco%']
+      },
+      loto: {
+        codigo: '0009',
+        like: ['%loto plus tradicional%', '%loto%']
+      },
+      loto5: {
+        codigo: '0005',
+        like: ['%loto 5 plus%', '%loto5%']
+      },
+      poceada: {
+        codigo: '0082',
+        like: ['%poceada%']
+      },
+      tombolina: {
+        codigo: '0023',
+        like: ['%tombolina%']
+      }
+    };
+
+    const conf = alias[juego];
+    if (!conf) return null;
+
+    let sql = `
+      SELECT fecha_sorteo
+      FROM programacion_sorteos
+      WHERE (numero_sorteo = ? OR numero_sorteo = ?)
+        AND (
+          codigo_juego = ?
+          OR LOWER(COALESCE(juego, '')) LIKE ?
+          OR LOWER(COALESCE(juego, '')) LIKE ?
+        )
+    `;
+    const params = [
+      sorteoNormalizado,
+      String(numeroSorteo),
+      conf.codigo,
+      conf.like[0],
+      conf.like[1] || conf.like[0]
+    ];
+
+    if (modalidad && juego === 'quiniela') {
+      sql += ' AND modalidad_codigo = ?';
+      params.push(modalidad);
+    }
+
+    sql += ' ORDER BY fecha_sorteo DESC LIMIT 1';
+
+    const rows = await query(sql, params);
+    if (rows && rows.length > 0) {
+      const fecha = normalizarFechaValida(rows[0].fecha_sorteo);
+      if (fecha) return fecha;
     }
 
     return null;
@@ -668,6 +753,13 @@ async function buscarFechaProgramacion(tipoJuego, numeroSorteo, modalidad = null
       if (fechaJuego) return fechaJuego;
     } catch (errJuego) {
       if (!String(errJuego?.message || '').includes('Unknown column')) throw errJuego;
+    }
+
+    try {
+      const fechaEspecial = await ejecutarBusquedaEspecial();
+      if (fechaEspecial) return fechaEspecial;
+    } catch (errEspecial) {
+      if (!String(errEspecial?.message || '').includes('Unknown column')) throw errEspecial;
     }
 
     return null;

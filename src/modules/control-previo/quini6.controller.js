@@ -164,6 +164,43 @@ function parsearValorMonetario(valor) {
   return cents / 100;
 }
 
+function normalizarFechaControlPrevio(value) {
+  if (!value) return null;
+
+  const raw = String(value).trim();
+  if (!raw) return null;
+
+  if (/^\d{8}$/.test(raw)) {
+    const yyyyFirst = `${raw.substring(0, 4)}-${raw.substring(4, 6)}-${raw.substring(6, 8)}`;
+    if (!Number.isNaN(new Date(yyyyFirst).getTime())) return yyyyFirst;
+
+    const ddFirst = `${raw.substring(4, 8)}-${raw.substring(2, 4)}-${raw.substring(0, 2)}`;
+    if (!Number.isNaN(new Date(ddFirst).getTime())) return ddFirst;
+  }
+
+  if (/^\d{4}-\d{2}-\d{2}$/.test(raw)) return raw;
+
+  if (/^\d{2}\/\d{2}\/\d{4}$/.test(raw)) {
+    const [dd, mm, yyyy] = raw.split('/');
+    const iso = `${yyyy}-${mm}-${dd}`;
+    if (!Number.isNaN(new Date(iso).getTime())) return iso;
+  }
+
+  const soloDigitos = raw.replace(/\D/g, '');
+  if (/^\d{8}$/.test(soloDigitos)) {
+    const yyyyFirst = `${soloDigitos.substring(0, 4)}-${soloDigitos.substring(4, 6)}-${soloDigitos.substring(6, 8)}`;
+    if (!Number.isNaN(new Date(yyyyFirst).getTime())) return yyyyFirst;
+
+    const ddFirst = `${soloDigitos.substring(4, 8)}-${soloDigitos.substring(2, 4)}-${soloDigitos.substring(0, 2)}`;
+    if (!Number.isNaN(new Date(ddFirst).getTime())) return ddFirst;
+  }
+
+  const parsed = new Date(raw);
+  if (!Number.isNaN(parsed.getTime())) return parsed.toISOString().split('T')[0];
+
+  return null;
+}
+
 /**
  * Limpia un directorio recursivamente
  */
@@ -824,20 +861,13 @@ async function guardarControlPrevioQuini6DB(resultadoNTF, resultadoXML, user, no
     
     // 1. Intentar del XML
     if (!fecha && resultadoXML?.fecha) {
-      const f = String(resultadoXML.fecha).replace(/[^0-9]/g, '');
-      if (f.length === 8) {
-        fecha = `${f.substring(0, 4)}-${f.substring(4, 6)}-${f.substring(6, 8)}`;
-      } else if (resultadoXML.fecha.includes('-')) {
-        fecha = resultadoXML.fecha;
-      }
+      fecha = normalizarFechaControlPrevio(resultadoXML.fecha);
     }
     
     // 2. Si no hay fecha del XML, buscar en los registros del NTF
     if (!fecha && resultadoNTF.registros && resultadoNTF.registros.length > 0) {
       const fv = resultadoNTF.registros[0].fechaVenta;
-      if (fv && fv.length === 8 && /^\d{8}$/.test(fv)) {
-        fecha = `${fv.substring(0, 4)}-${fv.substring(4, 6)}-${fv.substring(6, 8)}`;
-      }
+      fecha = normalizarFechaControlPrevio(fv);
     }
     
     // 3. Sin fallback a fecha de proceso
