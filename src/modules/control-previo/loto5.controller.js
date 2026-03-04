@@ -710,6 +710,32 @@ async function guardarControlPrevioLoto5(resultado, user, nombreArchivo) {
       }
     } catch (errAg) {
       console.error('⚠️ Error guardando agencias Loto 5 (no crítico):', errAg.message);
+
+      // Fallback operativo: guardar al menos un agregado por sorteo
+      try {
+        await query('DELETE FROM control_previo_agencias WHERE juego = ? AND numero_sorteo = ?', ['loto5', sorteoNum]);
+        await query(`
+          INSERT INTO control_previo_agencias
+            (control_previo_id, juego, fecha, numero_sorteo, modalidad, codigo_agencia,
+             codigo_provincia, total_tickets, total_apuestas, total_anulados, total_recaudacion)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        `, [
+          controlPrevioId || 0,
+          'loto5',
+          fechaControl,
+          sorteoNum,
+          'U',
+          '5100000',
+          '51',
+          resumen.registros || 0,
+          resumen.apuestasTotal || 0,
+          resumen.anulados || 0,
+          resumen.recaudacion || 0
+        ]);
+        console.warn(`⚠️ Loto5 ${sorteoNum}: guardado fallback agregado en control_previo_agencias`);
+      } catch (errFallback) {
+        console.error('❌ Error en fallback agencias Loto5:', errFallback.message);
+      }
     }
   }
 }
