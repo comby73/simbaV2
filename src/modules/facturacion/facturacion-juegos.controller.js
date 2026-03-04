@@ -430,8 +430,7 @@ const getFacturacionJuegosUTE = async (req, res) => {
       };
     });
 
-    const rowsConsolidadas = Array.from(
-      rowsNormalizadas.reduce((map, row) => {
+    const rowsConsolidadasMap = rowsNormalizadas.reduce((map, row) => {
         const key = row.juego;
         const prev = map.get(key);
         if (!prev) {
@@ -449,8 +448,9 @@ const getFacturacionJuegosUTE = async (req, res) => {
         prev.cant_sorteos = Number(prev.cant_sorteos || 0) + Number(row.cant_sorteos || 0);
         map.set(key, prev);
         return map;
-      }, new Map())
-    );
+      }, new Map());
+
+    const rowsConsolidadas = Array.from(rowsConsolidadasMap.values());
 
     const desgloseDinamicoLoto = await obtenerDesgloseLotoDinamico(fecha_inicio, fecha_fin);
     const desgloseDinamicoQuini6 = await obtenerDesgloseQuini6Dinamico(fecha_inicio, fecha_fin);
