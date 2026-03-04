@@ -673,6 +673,40 @@ const listarControlPrevioGeneral = async (req, res) => {
           lotoData = await query(sqlLLegacy, paramsLegacy);
         }
 
+        if (!Array.isArray(lotoData) || lotoData.length === 0) {
+          let sqlLFromAg = `
+            SELECT
+              MAX(cpa.control_previo_id) as id,
+              cpa.numero_sorteo,
+              cpa.fecha as fecha,
+              NULL as archivo,
+              SUM(cpa.total_tickets) as total_registros,
+              SUM(cpa.total_apuestas) as total_apuestas,
+              SUM(cpa.total_anulados) as total_anulados,
+              SUM(cpa.total_recaudacion) as total_recaudacion,
+              'U' as modalidad,
+              NULL as usuario_id,
+              MAX(cpa.created_at) as created_at,
+              MAX(cpa.created_at) as updated_at,
+              '-' as usuario_nombre,
+              'loto' as juego
+            FROM control_previo_agencias cpa
+            WHERE cpa.juego = 'loto'
+          `;
+          const paramsLFromAg = [];
+
+          if (fechaDesde) { sqlLFromAg += ' AND cpa.fecha >= ?'; paramsLFromAg.push(fechaDesde); }
+          if (fechaHasta) { sqlLFromAg += ' AND cpa.fecha <= ?'; paramsLFromAg.push(fechaHasta); }
+
+          sqlLFromAg += `
+            GROUP BY cpa.numero_sorteo, cpa.fecha
+            ORDER BY cpa.fecha DESC, MAX(cpa.created_at) DESC
+            LIMIT ${maxLimit}
+          `;
+
+          lotoData = await query(sqlLFromAg, paramsLFromAg);
+        }
+
         resultados = resultados.concat(lotoData);
       } catch (e) {
         // Tabla puede no existir todavía
@@ -706,7 +740,42 @@ const listarControlPrevioGeneral = async (req, res) => {
 
         sqlL5 += ` ORDER BY ${exprFechaL5} DESC, cp.created_at DESC LIMIT ${maxLimit}`;
 
-        const loto5Data = await query(sqlL5, paramsL5);
+        let loto5Data = await query(sqlL5, paramsL5);
+
+        if (!Array.isArray(loto5Data) || loto5Data.length === 0) {
+          let sqlL5FromAg = `
+            SELECT
+              MAX(cpa.control_previo_id) as id,
+              cpa.numero_sorteo,
+              cpa.fecha as fecha,
+              NULL as archivo,
+              SUM(cpa.total_tickets) as total_registros,
+              SUM(cpa.total_apuestas) as total_apuestas,
+              SUM(cpa.total_anulados) as total_anulados,
+              SUM(cpa.total_recaudacion) as total_recaudacion,
+              'U' as modalidad,
+              NULL as usuario_id,
+              MAX(cpa.created_at) as created_at,
+              MAX(cpa.created_at) as updated_at,
+              '-' as usuario_nombre,
+              'loto5' as juego
+            FROM control_previo_agencias cpa
+            WHERE cpa.juego = 'loto5'
+          `;
+          const paramsL5FromAg = [];
+
+          if (fechaDesde) { sqlL5FromAg += ' AND cpa.fecha >= ?'; paramsL5FromAg.push(fechaDesde); }
+          if (fechaHasta) { sqlL5FromAg += ' AND cpa.fecha <= ?'; paramsL5FromAg.push(fechaHasta); }
+
+          sqlL5FromAg += `
+            GROUP BY cpa.numero_sorteo, cpa.fecha
+            ORDER BY cpa.fecha DESC, MAX(cpa.created_at) DESC
+            LIMIT ${maxLimit}
+          `;
+
+          loto5Data = await query(sqlL5FromAg, paramsL5FromAg);
+        }
+
         resultados = resultados.concat(loto5Data);
       } catch (e) {
         console.log('Tabla control_previo_loto5 no disponible');
