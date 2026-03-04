@@ -874,6 +874,7 @@ function formatFileSize(bytes) {
 // =============================================
 
 let cpArchivoSeleccionado = null;
+let cpArchivosSeleccionados = [];
 let cpResultadosActuales = null;
 let cpRegistrosNTF = []; // NUEVO: Registros parseados del TXT para Control Posterior
 let processClockTimer = null;
@@ -924,6 +925,7 @@ function resetearControlPrevioParaNuevaCarga({ preservarArchivoSeleccionado = fa
 
   if (!preservarArchivoSeleccionado) {
     cpArchivoSeleccionado = null;
+    cpArchivosSeleccionados = [];
     const inputArchivo = document.getElementById('cp-archivo-input');
     if (inputArchivo) inputArchivo.value = '';
     document.getElementById('cp-archivo-seleccionado')?.classList.add('hidden');
@@ -965,64 +967,110 @@ function initControlPrevio() {
 
     const files = e.dataTransfer.files;
     if (files.length > 0) {
-      seleccionarArchivoCP(files[0]);
+      seleccionarArchivosCP(files);
     }
   });
 
   // Input file change
   fileInput.addEventListener('change', () => {
     if (fileInput.files.length > 0) {
-      seleccionarArchivoCP(fileInput.files[0]);
+      seleccionarArchivosCP(fileInput.files);
     }
   });
 }
 
-function seleccionarArchivoCP(file) {
-  if (!file.name.toLowerCase().endsWith('.zip')) {
+function seleccionarArchivosCP(files) {
+  const lista = Array.from(files || []);
+  const zips = lista.filter(f => String(f?.name || '').toLowerCase().endsWith('.zip'));
+
+  if (zips.length === 0) {
     showToast('Solo se permiten archivos ZIP', 'warning');
     return;
   }
 
-  cpArchivoSeleccionado = file;
-  document.getElementById('cp-archivo-nombre').textContent = `${file.name} (${formatFileSize(file.size)})`;
+  cpArchivosSeleccionados = zips;
+  cpArchivoSeleccionado = zips[0] || null;
+
+  const totalBytes = zips.reduce((acc, f) => acc + (Number(f?.size) || 0), 0);
+  const nombreEl = document.getElementById('cp-archivo-nombre');
+  if (nombreEl) {
+    if (zips.length === 1) {
+      const file = zips[0];
+      nombreEl.textContent = `${file.name} (${formatFileSize(file.size)})`;
+    } else {
+      nombreEl.textContent = `${zips.length} archivos ZIP (${formatFileSize(totalBytes)})`;
+    }
+  }
+
   document.getElementById('cp-archivo-seleccionado').classList.remove('hidden');
+
+  if (zips.length > 1) {
+    showToast(`${zips.length} ZIP listos para procesar en secuencia`, 'info');
+  }
 }
 
 async function procesarControlPrevio() {
-  if (!cpArchivoSeleccionado) {
-    showToast('Seleccione un archivo ZIP', 'warning');
-    return;
-  }
+  const archivos = (Array.isArray(cpArchivosSeleccionados) && cpArchivosSeleccionados.length > 0)
+    ? cpArchivosSeleccionados
+    : (cpArchivoSeleccionado ? [cpArchivoSeleccionado] : []);
 
-  const juegoConfig = detectarTipoJuego(cpArchivoSeleccionado.name);
-  if (!juegoConfig) {
-    showToast('No se pudo detectar el tipo de juego (Prefijos: QNL, PCD, TMB)', 'error');
+  if (archivos.length === 0) {
+    showToast('Seleccione uno o más archivos ZIP', 'warning');
     return;
   }
 
   // Arrancar siempre limpio para evitar mezclar datos de una corrida anterior
   resetearControlPrevioParaNuevaCarga({ preservarArchivoSeleccionado: true });
 
-  showToast(`Procesando ${juegoConfig.nombre}...`, 'info');
-  startProcessClock(`Control Previo · ${juegoConfig.nombre}`);
+  const total = archivos.length;
+  let ok = 0;
+  let okConAdvertencia = 0;
+  let errores = 0;
+
+  startProcessClock(total > 1 ? `Control Previo · Lote (${total} ZIP)` : 'Control Previo');
 
   try {
-    const response = await controlPrevioAPI[juegoConfig.api](cpArchivoSeleccionado);
-    cpResultadosActuales = response.data;
-    cpResultadosActuales.tipoJuego = juegoConfig.nombre; // Guardar tipo detectado
+    for (let i = 0; i < total; i++) {
+      const archivo = archivos[i];
+      const juegoConfig = detectarTipoJuego(archivo.name);
 
-    cpRegistrosNTF = response.data.registros || response.data.registrosNTF || [];
-    console.log(`Control Previo (${juegoConfig.nombre}): ${cpRegistrosNTF.length} registros parseados`);
+      if (!juegoConfig || !controlPrevioAPI[juegoConfig.api]) {
+        errores++;
+        showToast(`[${i + 1}/${total}] ${archivo.name}: juego no detectado`, 'error');
+        continue;
+      }
 
-    mostrarResultadosCP(response.data);
-    if (response.data?.resguardo && response.data.resguardo.success === false) {
-      showToast(`Archivo procesado, pero NO se guardó para facturación/reportes: ${response.data.resguardo.error || 'error de resguardo'}`, 'warning');
-    } else {
-      showToast('Archivo procesado correctamente', 'success');
+      showToast(`[${i + 1}/${total}] Procesando ${archivo.name} (${juegoConfig.nombre})...`, 'info');
+
+      try {
+        const response = await controlPrevioAPI[juegoConfig.api](archivo);
+        cpResultadosActuales = response.data;
+        cpResultadosActuales.tipoJuego = juegoConfig.nombre;
+
+        cpRegistrosNTF = response.data.registros || response.data.registrosNTF || [];
+        console.log(`Control Previo (${juegoConfig.nombre}): ${cpRegistrosNTF.length} registros parseados`);
+
+        mostrarResultadosCP(response.data);
+
+        if (response.data?.resguardo && response.data.resguardo.success === false) {
+          okConAdvertencia++;
+          showToast(`[${i + 1}/${total}] ${archivo.name}: procesado con advertencia de resguardo`, 'warning');
+        } else {
+          ok++;
+          if (total === 1) {
+            showToast('Archivo procesado correctamente', 'success');
+          }
+        }
+      } catch (errorArchivo) {
+        errores++;
+        console.error(`Error procesando ${archivo.name}:`, errorArchivo);
+        showToast(`[${i + 1}/${total}] ${archivo.name}: ${errorArchivo.message || 'error al procesar'}`, 'error');
+      }
     }
-  } catch (error) {
-    console.error('Error:', error);
-    showToast(error.message || 'Error procesando archivo', 'error');
+
+    if (total > 1) {
+      showToast(`Lote finalizado: ${ok} OK, ${okConAdvertencia} con advertencia, ${errores} con error`, errores > 0 ? 'warning' : 'success');
+    }
   } finally {
     stopProcessClock();
   }
