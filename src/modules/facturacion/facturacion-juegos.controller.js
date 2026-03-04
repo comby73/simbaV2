@@ -34,6 +34,26 @@ function obtenerFactorAjusteFacturacion(juegoKey) {
   return AJUSTE_RECAUDACION_FACTURACION[juegoKey] || 1;
 }
 
+function normalizarJuegoKey(juegoKey) {
+  const raw = String(juegoKey || '').toLowerCase().trim();
+  const compact = raw
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^a-z0-9]/g, '');
+
+  if (compact === 'quinielaya') return 'quinielaya';
+  if (compact === 'quiniela') return 'quiniela';
+  if (compact.startsWith('loto5')) return 'loto5';
+  if (compact === 'loto' || compact.startsWith('lotoplus')) return 'loto';
+  if (compact.startsWith('quini6')) return 'quini6';
+  if (compact.startsWith('brinco')) return 'brinco';
+  if (compact.startsWith('poceada')) return 'poceada';
+  if (compact.startsWith('tombolina')) return 'tombolina';
+  if (compact === 'lagrande' || compact.startsWith('lagrandedelanacional')) return 'la_grande';
+
+  return raw;
+}
+
 // Desglose proporcional para replicar el modelo de Excel (total gral.)
 // Se usa para separar juegos que en Control Previo vienen agregados.
 const DESGLOSE_PORCENTUAL = {
@@ -339,13 +359,14 @@ const getFacturacionJuegosUTE = async (req, res) => {
     const rows = await query(sql, [fecha_inicio, fecha_fin]);
 
     const rowsAjustadas = rows.map((row) => {
-      const juegoKey = (row.juego || '').toLowerCase().trim();
+      const juegoKey = normalizarJuegoKey(row.juego);
       const factor = obtenerFactorAjusteFacturacion(juegoKey);
       const recCaba = (parseFloat(row.rec_caba) || 0) * factor;
       const recInternet = (parseFloat(row.rec_internet) || 0) * factor;
       const recProvincias = (parseFloat(row.rec_provincias) || 0) * factor;
       return {
         ...row,
+        juego: juegoKey,
         rec_caba: recCaba,
         rec_internet: recInternet,
         rec_provincias: recProvincias,
