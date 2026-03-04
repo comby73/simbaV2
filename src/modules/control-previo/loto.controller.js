@@ -720,18 +720,26 @@ function normalizarFechaControlPrevio(value) {
 
   const raw = String(value).trim();
   if (!raw) return null;
+  if (raw === '0000-00-00') return null;
 
   if (/^\d{8}$/.test(raw)) {
-    return `${raw.substring(0, 4)}-${raw.substring(4, 6)}-${raw.substring(6, 8)}`;
+    const iso = `${raw.substring(0, 4)}-${raw.substring(4, 6)}-${raw.substring(6, 8)}`;
+    if (iso === '0000-00-00') return null;
+    const d = new Date(iso);
+    return Number.isNaN(d.getTime()) ? null : iso;
   }
 
   if (/^\d{4}-\d{2}-\d{2}$/.test(raw)) {
-    return raw;
+    const d = new Date(raw);
+    return Number.isNaN(d.getTime()) ? null : raw;
   }
 
   if (/^\d{2}\/\d{2}\/\d{4}$/.test(raw)) {
     const [dd, mm, yyyy] = raw.split('/');
-    return `${yyyy}-${mm}-${dd}`;
+    const iso = `${yyyy}-${mm}-${dd}`;
+    if (iso === '0000-00-00') return null;
+    const d = new Date(iso);
+    return Number.isNaN(d.getTime()) ? null : iso;
   }
 
   const parsed = new Date(raw);
