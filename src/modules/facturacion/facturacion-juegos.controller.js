@@ -323,9 +323,16 @@ function calcularBillingCanal(recaudacion, canal, topeRatio) {
   let importe_completo, importe_reducido;
 
   if (canal === 'internet') {
-    // Tasa plana 11%, sin diferencial de tope (ambas líneas SAP al mismo rate)
-    importe_completo = dentroTope * TASAS.INTERNET_FLAT;
-    importe_reducido = sobreTope  * TASAS.INTERNET_FLAT;
+    // Tasa plana 11% sobre toda la recaudación web (sin split por tope)
+    const totalWeb = recaudacion * TASAS.INTERNET_FLAT;
+    return {
+      recaudacion,
+      dentroTope: recaudacion,
+      sobreTope: 0,
+      importe_completo: totalWeb,
+      importe_reducido: 0,
+      total_neto: totalWeb
+    };
   } else if (canal === 'caba') {
     importe_completo = dentroTope * TASAS.CABA_COMPLETO * FACTOR_DESCUENTO;
     importe_reducido = sobreTope  * TASAS.CABA_REDUCIDO * FACTOR_DESCUENTO;
@@ -758,7 +765,7 @@ const getFacturacionJuegosUTE = async (req, res) => {
         }
 
         // -- Internet (LCBAJOL) --
-        if (comp.recFactInt > 0 && cfg.int?.length >= 2) {
+        if (comp.recFactInt > 0 && cfg.int?.length >= 1) {
           const b = calcularBillingCanal(comp.recFactInt, 'internet', topeRatio);
           billingJuego.internet = b;
           billingJuego.total_neto += b.total_neto;
@@ -766,18 +773,10 @@ const getFacturacionJuegosUTE = async (req, res) => {
           lineasJuego.push(
             {
               material: cfg.int[0],
-              descripcion: `INTERNET - ${nombreComponente} completo 14,65%`,
+              descripcion: `INTERNET - ${nombreComponente} completo 11%`,
               cantidad: 1, unidad: 'C/U',
               importe: b.importe_completo,
               redondeado: Math.round(b.importe_completo * 1000) / 1000,
-              centro: centroInt
-            },
-            {
-              material: cfg.int[1],
-              descripcion: `INTERNET - ${nombreComponente} reducido 11%`,
-              cantidad: 1, unidad: 'C/U',
-              importe: b.importe_reducido,
-              redondeado: Math.round(b.importe_reducido * 1000) / 1000,
               centro: centroInt
             }
           );
