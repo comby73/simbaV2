@@ -601,11 +601,6 @@ const getFacturacionJuegosUTE = async (req, res) => {
 
         totalBillingNeto += billingJuego.total_neto;
 
-        const notaBase = cfg.nota ? [cfg.nota] : [];
-        if (comp.porcentaje < 1) {
-          notaBase.push(`Distribución modelo Excel: ${(comp.porcentaje * 100).toFixed(2)}%`);
-        }
-
         juegos.push({
           juego: comp.key,
           juego_padre: juegoKey,
@@ -620,7 +615,7 @@ const getFacturacionJuegosUTE = async (req, res) => {
           billing: billingJuego,
           lineasSAP: lineasJuego,
           porcentaje_modelo: comp.porcentaje,
-          nota: notaBase.length ? notaBase.join(' | ') : null
+          nota: null
         });
 
         lineasSAP.push(...lineasJuego);
