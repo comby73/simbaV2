@@ -5,6 +5,7 @@ logs/
 *.log
 *.tmp
 .DS_Store
+temp/
 
 # Configuración local con API keys (no subir a git)
 public/js/config.local.js
