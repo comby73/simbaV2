@@ -15168,6 +15168,8 @@ async function calcularFacturacionJuegosUTE() {
   const tope        = document.getElementById('fjg-tope')?.value || '105000000';
   const laGrandePrecioBillete = document.getElementById('fjg-la-grande-precio-billete')?.value || '0';
   const laGrandeSorteosManual = document.getElementById('fjg-la-grande-sorteos')?.value || '';
+  const laGrandePctOfertado = document.getElementById('fjg-la-grande-pct-ofertado')?.value || '';
+  const laGrandePctReducido = document.getElementById('fjg-la-grande-pct-reducido')?.value || '';
 
   if (!fechaInicio || !fechaFin) {
     showToast('Seleccioná fecha inicio y fecha fin', 'warning');
@@ -15191,6 +15193,12 @@ async function calcularFacturacionJuegosUTE() {
 
     if (laGrandeSorteosManual !== '') {
       params.la_grande_sorteos_manual = laGrandeSorteosManual;
+    }
+    if (laGrandePctOfertado !== '') {
+      params.la_grande_pct_ofertado = laGrandePctOfertado;
+    }
+    if (laGrandePctReducido !== '') {
+      params.la_grande_pct_reducido = laGrandePctReducido;
     }
 
     const clienteUTE = juegosOfflineAPI?.facturacionJuegos?.getUTE;

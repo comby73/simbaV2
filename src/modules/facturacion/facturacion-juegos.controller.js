@@ -28,8 +28,7 @@ const AJUSTE_RECAUDACION_FACTURACION = {
   loto: 0.75,
   loto5: 0.75,
   quini6: 0.90,
-  brinco: 0.90,
-  la_grande: 0.90
+  brinco: 0.90
 };
 
 function obtenerFactorAjusteFacturacion(juegoKey) {
@@ -351,6 +350,30 @@ function calcularBillingCanal(recaudacion, canal, topeRatio) {
   };
 }
 
+function calcularBillingBilletes(baseFacturacion, topeRatio, porcentajeOfertado, porcentajeReducido) {
+  const ratioSeguro = Math.max(0, Math.min(1, Number(topeRatio) || 0));
+  const base = Math.max(0, Number(baseFacturacion) || 0);
+  const dentroTope = base * ratioSeguro;
+  const sobreTope = base - dentroTope;
+  const pctOfertado = Math.max(0, Number(porcentajeOfertado) || 0);
+  const pctReducido = Math.max(0, Number(porcentajeReducido) || 0);
+
+  const importe_completo = dentroTope * pctOfertado;
+  const importe_reducido = sobreTope * pctReducido;
+  const total_neto = importe_completo + importe_reducido;
+
+  return {
+    recaudacion: base,
+    dentroTope,
+    sobreTope,
+    importe_completo,
+    importe_reducido,
+    total_neto,
+    porcentajeOfertado: pctOfertado,
+    porcentajeReducido: pctReducido
+  };
+}
+
 function distribuirPorCanal(baseTotal, recCABA, recProv, recInt) {
   const totalRef = (Number(recCABA) || 0) + (Number(recProv) || 0) + (Number(recInt) || 0);
   if (totalRef <= 0) {
@@ -384,6 +407,11 @@ const getFacturacionJuegosUTE = async (req, res) => {
     const tope = parseFloat(req.query.tope) || TOPE_DEFAULT;
     const laGrandePrecioBilleteManual = Math.max(0, parseFloat(req.query.la_grande_precio_billete) || 0);
     const laGrandeSorteosManual = Math.max(0, parseInt(req.query.la_grande_sorteos_manual, 10) || 0);
+    const laGrandePctOfertado = Math.max(0, parseFloat(req.query.la_grande_pct_ofertado) || 0.0242);
+    const laGrandePctReducido = Math.max(
+      0,
+      parseFloat(req.query.la_grande_pct_reducido) || (laGrandePctOfertado * (1 - LIMITE_REDUCCION_WEB))
+    );
 
     if (!fecha_inicio || !fecha_fin) {
       return res.status(400).json({
@@ -576,20 +604,33 @@ const getFacturacionJuegosUTE = async (req, res) => {
       });
     }
 
+    // --- Separar FACTURACIÓN BILLETES (La Grande) del flujo por canales ---
+    const filaLaGrande = rowsConsolidadas.find((r) => String(r?.juego || '').toLowerCase() === 'la_grande') || null;
+    const filasSinBilletes = rowsConsolidadas.filter((r) => String(r?.juego || '').toLowerCase() !== 'la_grande');
+    const recBilletes = parseFloat(filaLaGrande?.rec_total) || 0;
+    const sorteosBilletes = laGrandeSorteosManual > 0
+      ? laGrandeSorteosManual
+      : (parseInt(filaLaGrande?.cant_sorteos, 10) || 0);
+    const baseFacturacionBilletes = laGrandePrecioBilleteManual > 0
+      ? (laGrandePrecioBilleteManual * sorteosBilletes)
+      : recBilletes;
+
     // --- Calcular total recaudación para proporcionar tope ---
     const totalRecaudacionBruta = rowsConsolidadas.reduce((acc, r) => acc + (parseFloat(r.rec_total) || 0), 0);
     const totalRecaudacionFacturable = rowsConsolidadas.reduce((acc, r) => acc + (parseFloat(r.rec_fact_total) || 0), 0);
-    const totalRecaudacion = totalRecaudacionFacturable;
-    const topeRatioBase = totalRecaudacionFacturable > 0 ? tope / totalRecaudacionFacturable : 0;
+
+    const totalRecCABA = filasSinBilletes.reduce((acc, r) => acc + (parseFloat(r.rec_fact_caba) || 0), 0);
+    const totalRecInternet = filasSinBilletes.reduce((acc, r) => acc + (parseFloat(r.rec_fact_internet) || 0), 0);
+    const totalRecProvincias = filasSinBilletes.reduce((acc, r) => acc + (parseFloat(r.rec_fact_provincias) || 0), 0);
+
+    const totalRecaudacion = totalRecCABA + totalRecInternet + totalRecProvincias + recBilletes;
+    const topeRatioBase = totalRecaudacion > 0 ? tope / totalRecaudacion : 0;
     const topeRatio = Math.max(0, Math.min(1, topeRatioBase));
 
     // --- Flujo tipo "Total Gral." del Excel por canal ---
-    const totalRecCABA = rowsConsolidadas.reduce((acc, r) => acc + (parseFloat(r.rec_fact_caba) || 0), 0);
-    const totalRecInternet = rowsConsolidadas.reduce((acc, r) => acc + (parseFloat(r.rec_fact_internet) || 0), 0);
-    const totalRecProvincias = rowsConsolidadas.reduce((acc, r) => acc + (parseFloat(r.rec_fact_provincias) || 0), 0);
-    const totalRecCABAFact = rowsConsolidadas.reduce((acc, r) => acc + (parseFloat(r.rec_fact_caba) || 0), 0);
-    const totalRecInternetFact = rowsConsolidadas.reduce((acc, r) => acc + (parseFloat(r.rec_fact_internet) || 0), 0);
-    const totalRecProvinciasFact = rowsConsolidadas.reduce((acc, r) => acc + (parseFloat(r.rec_fact_provincias) || 0), 0);
+    const totalRecCABAFact = totalRecCABA;
+    const totalRecInternetFact = totalRecInternet;
+    const totalRecProvinciasFact = totalRecProvincias;
 
     const flujoTotalGral = {
       onLineCapitalFederal: {
@@ -603,6 +644,12 @@ const getFacturacionJuegosUTE = async (req, res) => {
       consolidacionProvincias: {
         recaudacion: totalRecProvincias,
         participacion: totalRecaudacion > 0 ? totalRecProvincias / totalRecaudacion : 0
+      },
+      facturacionBilletes: {
+        recaudacion: recBilletes,
+        participacion: totalRecaudacion > 0 ? recBilletes / totalRecaudacion : 0,
+        baseFacturacion: baseFacturacionBilletes,
+        sorteos: sorteosBilletes
       }
     };
 
@@ -611,6 +658,12 @@ const getFacturacionJuegosUTE = async (req, res) => {
       internet: calcularBillingCanal(totalRecInternetFact, 'internet', topeRatio),
       provincias: calcularBillingCanal(totalRecProvinciasFact, 'provincias', topeRatio)
     };
+    const billingBilletes = calcularBillingBilletes(
+      baseFacturacionBilletes,
+      topeRatio,
+      laGrandePctOfertado,
+      laGrandePctReducido
+    );
 
     const cuadroTotalGralFilas = [
       {
@@ -642,6 +695,23 @@ const getFacturacionJuegosUTE = async (req, res) => {
         importeDentroTope: billingCanales.provincias.importe_completo,
         importeSobreTope: billingCanales.provincias.importe_reducido,
         totalNeto: billingCanales.provincias.total_neto
+      },
+      {
+        canal: 'FACTURACIÓN BILLETES',
+        recaudacion: recBilletes,
+        participacion: flujoTotalGral.facturacionBilletes.participacion,
+        dentroTope: billingBilletes.dentroTope,
+        sobreTope: billingBilletes.sobreTope,
+        importeDentroTope: billingBilletes.importe_completo,
+        importeSobreTope: billingBilletes.importe_reducido,
+        totalNeto: billingBilletes.total_neto,
+        metadata: {
+          baseFacturacion: baseFacturacionBilletes,
+          sorteos: sorteosBilletes,
+          precioBilleteManual: laGrandePrecioBilleteManual,
+          porcentajeOfertado: laGrandePctOfertado,
+          porcentajeReducido: laGrandePctReducido
+        }
       }
     ];
 
@@ -886,7 +956,10 @@ const getFacturacionJuegosUTE = async (req, res) => {
           },
           parametrosCalculo: {
             la_grande_precio_billete: laGrandePrecioBilleteManual,
-            la_grande_sorteos_manual: laGrandeSorteosManual
+            la_grande_sorteos_manual: laGrandeSorteosManual,
+            la_grande_base_billetes: baseFacturacionBilletes,
+            la_grande_pct_ofertado: laGrandePctOfertado,
+            la_grande_pct_reducido: laGrandePctReducido
           }
         },
         flujoTotalGral,
