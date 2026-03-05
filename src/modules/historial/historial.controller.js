@@ -7,7 +7,7 @@
  * - Ver detalle de ganadores
  * - Ver premios por agencia/provincia
  * 
- * Juegos soportados: quiniela, quinielaya, poceada, tombolina, loto, loto5, brinco, quini6
+ * Juegos soportados: quiniela, quinielaya, poceada, tombolina, loto, loto5, brinco, quini6, la_grande
  */
 
 const { query } = require('../../config/database');
@@ -79,7 +79,7 @@ const listarEscrutinios = async (req, res) => {
     const { juego } = req.params;
     const { fecha, desde, hasta, numeroSorteo, limit } = req.query;
 
-    const juegosValidos = ['quiniela', 'poceada', 'tombolina', 'loto', 'loto5', 'brinco', 'quini6', 'quinielaya'];
+    const juegosValidos = ['quiniela', 'poceada', 'tombolina', 'loto', 'loto5', 'brinco', 'quini6', 'la_grande', 'quinielaya'];
     if (!juegosValidos.includes(juego)) {
       return errorResponse(res, `Juego inválido. Use uno de: ${juegosValidos.join(', ')}`, 400);
     }
@@ -116,7 +116,7 @@ const obtenerGanadores = async (req, res) => {
     const { juego, id } = req.params;
     const { limit, offset } = req.query;
 
-    const juegosValidos = ['quiniela', 'poceada', 'tombolina', 'loto', 'loto5', 'brinco', 'quini6', 'quinielaya'];
+    const juegosValidos = ['quiniela', 'poceada', 'tombolina', 'loto', 'loto5', 'brinco', 'quini6', 'la_grande', 'quinielaya'];
     if (!juegosValidos.includes(juego)) {
       return errorResponse(res, 'Juego inválido', 400);
     }
@@ -201,7 +201,7 @@ const obtenerPremiosAgencias = async (req, res) => {
   try {
     const { juego, id } = req.params;
 
-    const juegosValidos = ['quiniela', 'poceada', 'tombolina', 'loto', 'loto5', 'brinco', 'quini6', 'quinielaya'];
+    const juegosValidos = ['quiniela', 'poceada', 'tombolina', 'loto', 'loto5', 'brinco', 'quini6', 'la_grande', 'quinielaya'];
     if (!juegosValidos.includes(juego)) {
       return errorResponse(res, 'Juego inválido', 400);
     }
@@ -384,8 +384,8 @@ const buscarSorteo = async (req, res) => {
     }
 
     const resultado = {
-      controlPrevio: { quiniela: null, poceada: null, tombolina: null, loto: null, loto5: null, brinco: null, quini6: null },
-      escrutinio: { quiniela: null, poceada: null, tombolina: null, loto: null, loto5: null, brinco: null, quini6: null }
+      controlPrevio: { quiniela: null, poceada: null, tombolina: null, loto: null, loto5: null, brinco: null, quini6: null, la_grande: null },
+      escrutinio: { quiniela: null, poceada: null, tombolina: null, loto: null, loto5: null, brinco: null, quini6: null, la_grande: null }
     };
 
     // Buscar en Control Previo Quiniela
@@ -516,6 +516,25 @@ const buscarSorteo = async (req, res) => {
         if (fecha) { sqlEQ6 += ' AND fecha = ?'; paramsEQ6.push(fecha); }
         sqlEQ6 += ' ORDER BY created_at DESC LIMIT 10';
         resultado.escrutinio.quini6 = await query(sqlEQ6, paramsEQ6);
+      } catch (e) { /* tabla no disponible */ }
+    }
+
+    // Buscar en Control Previo LA GRANDE
+    if (!juego || juego === 'la_grande') {
+      try {
+        let sqlLG = 'SELECT * FROM control_previo_la_grande WHERE 1=1';
+        const paramsLG = [];
+        if (numeroSorteo) { sqlLG += ' AND numero_sorteo = ?'; paramsLG.push(numeroSorteo); }
+        if (fecha) { sqlLG += ' AND fecha = ?'; paramsLG.push(fecha); }
+        sqlLG += ' ORDER BY created_at DESC LIMIT 10';
+        resultado.controlPrevio.la_grande = await query(sqlLG, paramsLG);
+
+        let sqlELG = 'SELECT * FROM escrutinio_la_grande WHERE 1=1';
+        const paramsELG = [];
+        if (numeroSorteo) { sqlELG += ' AND numero_sorteo = ?'; paramsELG.push(numeroSorteo); }
+        if (fecha) { sqlELG += ' AND fecha = ?'; paramsELG.push(fecha); }
+        sqlELG += ' ORDER BY created_at DESC LIMIT 10';
+        resultado.escrutinio.la_grande = await query(sqlELG, paramsELG);
       } catch (e) { /* tabla no disponible */ }
     }
 
@@ -924,6 +943,38 @@ const listarControlPrevioGeneral = async (req, res) => {
       }
     }
 
+    // Obtener LA GRANDE si no se especifica juego o es la_grande
+    if (!juego || juego === 'la_grande') {
+      try {
+        const colFechaLG = await resolverColumnaFechaTabla('control_previo_la_grande');
+        const exprFechaLG = colFechaLG ? `cp.${colFechaLG}` : 'DATE(cp.created_at)';
+
+        let sqlLG = `
+          SELECT cp.id, cp.numero_sorteo, ${exprFechaLG} as fecha, cp.archivo,
+                 cp.registros_validos as total_registros,
+                 cp.apuestas_total as total_apuestas,
+                 cp.registros_anulados as total_anulados,
+                 cp.recaudacion as total_recaudacion,
+                 'U' as modalidad,
+                 cp.usuario_id, cp.created_at, cp.updated_at,
+                 u.nombre as usuario_nombre, 'la_grande' as juego
+          FROM control_previo_la_grande cp
+          LEFT JOIN usuarios u ON cp.usuario_id = u.id
+          WHERE 1=1
+        `;
+        const paramsLG = [];
+
+        if (fechaDesde) { sqlLG += ` AND ${exprFechaLG} >= ?`; paramsLG.push(fechaDesde); }
+        if (fechaHasta) { sqlLG += ` AND ${exprFechaLG} <= ?`; paramsLG.push(fechaHasta); }
+
+        sqlLG += ` ORDER BY ${exprFechaLG} DESC, cp.created_at DESC LIMIT ${maxLimit}`;
+        const laGrandeData = await query(sqlLG, paramsLG);
+        resultados = resultados.concat(laGrandeData);
+      } catch (e) {
+        console.log('Tabla control_previo_la_grande no disponible');
+      }
+    }
+
     // Deduplicar por juego + número de sorteo (evita inconsistencias históricas)
     const porSorteo = new Map();
 
@@ -983,7 +1034,7 @@ const obtenerDetalleControlPrevio = async (req, res) => {
     const { id } = req.params;
     const { juego } = req.query;
 
-    const juegosValidos = ['quiniela', 'poceada', 'tombolina', 'loto', 'loto5', 'brinco', 'quini6'];
+    const juegosValidos = ['quiniela', 'poceada', 'tombolina', 'loto', 'loto5', 'brinco', 'quini6', 'la_grande'];
     if (!juego || !juegosValidos.includes(juego)) {
       return errorResponse(res, `Debe especificar juego válido: ${juegosValidos.join(', ')}`, 400);
     }
@@ -1084,6 +1135,26 @@ const obtenerDetalleControlPrevio = async (req, res) => {
           cp.updated_at,
           u.nombre as usuario_nombre
         FROM control_previo_quini6 cp
+        LEFT JOIN usuarios u ON cp.usuario_id = u.id
+        WHERE cp.id = ?
+      `,
+      la_grande: `
+        SELECT
+          cp.id,
+          cp.numero_sorteo,
+          cp.fecha,
+          cp.archivo as nombre_archivo_zip,
+          cp.registros_validos as total_registros,
+          cp.apuestas_total as total_apuestas,
+          cp.registros_anulados as total_anulados,
+          cp.recaudacion as total_recaudacion,
+          cp.datos_json as datos_adicionales,
+          'U' as modalidad,
+          cp.usuario_id,
+          cp.created_at,
+          cp.updated_at,
+          u.nombre as usuario_nombre
+        FROM control_previo_la_grande cp
         LEFT JOIN usuarios u ON cp.usuario_id = u.id
         WHERE cp.id = ?
       `
@@ -1267,6 +1338,29 @@ const listarEscrutiniosGeneral = async (req, res) => {
       }
     }
 
+    // Obtener LA GRANDE
+    if (!juego || juego === 'la_grande') {
+      try {
+        let sqlLG = `
+          SELECT e.*, u.nombre as usuario_nombre, 'la_grande' as juego
+          FROM escrutinio_la_grande e
+          LEFT JOIN usuarios u ON e.usuario_id = u.id
+          WHERE 1=1
+        `;
+        const paramsLG = [];
+
+        if (fechaDesde) { sqlLG += ' AND e.fecha >= ?'; paramsLG.push(fechaDesde); }
+        if (fechaHasta) { sqlLG += ' AND e.fecha <= ?'; paramsLG.push(fechaHasta); }
+
+        sqlLG += ` ORDER BY e.fecha DESC, e.created_at DESC LIMIT ${maxLimit}`;
+
+        const laGrandeData = await query(sqlLG, paramsLG);
+        resultados = resultados.concat(laGrandeData);
+      } catch (e) {
+        console.log('Tabla escrutinio_la_grande no disponible');
+      }
+    }
+
     // Obtener QUINIELA YA
     if (!juego || juego === 'quinielaya') {
       try {
@@ -1311,7 +1405,7 @@ const listarEscrutiniosGeneral = async (req, res) => {
       }
     }
 
-    const juegosConRecaudacionEnControlPrevio = new Set(['quiniela', 'poceada', 'tombolina', 'loto', 'loto5', 'brinco', 'quini6', 'quinielaya']);
+    const juegosConRecaudacionEnControlPrevio = new Set(['quiniela', 'poceada', 'tombolina', 'loto', 'loto5', 'brinco', 'quini6', 'la_grande', 'quinielaya']);
     const fallbackControlPrevio = {
       quiniela: { tabla: 'control_previo_quiniela', campo: 'total_recaudacion', usaModalidad: true },
       poceada: { tabla: 'control_previo_poceada', campo: 'total_recaudacion', usaModalidad: false },
@@ -1319,7 +1413,8 @@ const listarEscrutiniosGeneral = async (req, res) => {
       loto: { tabla: 'control_previo_loto', campo: 'recaudacion', usaModalidad: false },
       loto5: { tabla: 'control_previo_loto5', campo: 'recaudacion', usaModalidad: false },
       brinco: { tabla: 'control_previo_brinco', campo: 'recaudacion', usaModalidad: false },
-      quini6: { tabla: 'control_previo_quini6', campo: 'recaudacion', usaModalidad: false }
+      quini6: { tabla: 'control_previo_quini6', campo: 'recaudacion', usaModalidad: false },
+      la_grande: { tabla: 'control_previo_la_grande', campo: 'recaudacion', usaModalidad: false }
     };
 
     const normalizarModalidadCodigo = (valor) => {
@@ -1604,7 +1699,7 @@ const obtenerDetalleEscrutinio = async (req, res) => {
     const { id } = req.params;
     const { juego } = req.query;
 
-    const juegosValidos = ['quiniela', 'poceada', 'tombolina', 'loto', 'loto5', 'brinco', 'quini6', 'quinielaya'];
+    const juegosValidos = ['quiniela', 'poceada', 'tombolina', 'loto', 'loto5', 'brinco', 'quini6', 'la_grande', 'quinielaya'];
     if (!juego || !juegosValidos.includes(juego)) {
       return errorResponse(res, `Debe especificar juego válido: ${juegosValidos.join(', ')}`, 400);
     }
@@ -1649,7 +1744,7 @@ const obtenerAgenciasEscrutinio = async (req, res) => {
     const { id } = req.params;
     const { juego } = req.query;
 
-    const juegosValidos = ['quiniela', 'poceada', 'tombolina', 'loto', 'loto5', 'brinco', 'quini6', 'quinielaya'];
+    const juegosValidos = ['quiniela', 'poceada', 'tombolina', 'loto', 'loto5', 'brinco', 'quini6', 'la_grande', 'quinielaya'];
     if (!juego || !juegosValidos.includes(juego)) {
       return errorResponse(res, `Debe especificar juego válido: ${juegosValidos.join(', ')}`, 400);
     }
@@ -2008,6 +2103,38 @@ const obtenerDatosDashboard = async (req, res) => {
         `;
         const quini6Data = await query(sqlQ6, paramsQ6);
         resultados = resultados.concat(quini6Data);
+      }
+
+      // LA GRANDE
+      if (!juego || juego === 'la_grande') {
+        const paramsLG = [];
+        let whereLG = '';
+        if (fechaDesde) { whereLG += ' AND cp.fecha >= ?'; paramsLG.push(fechaDesde); }
+        if (fechaHasta) { whereLG += ' AND cp.fecha <= ?'; paramsLG.push(fechaHasta); }
+        if (sorteoDesde) { whereLG += ' AND cp.numero_sorteo >= ?'; paramsLG.push(sorteoDesde); }
+        if (sorteoHasta) { whereLG += ' AND cp.numero_sorteo <= ?'; paramsLG.push(sorteoHasta); }
+
+        const sqlLG = `
+          SELECT
+            cp.id, cp.fecha, cp.numero_sorteo as sorteo, 'U' as modalidad,
+            cp.registros_validos as total_registros,
+            (cp.registros_validos + cp.registros_anulados) as total_tickets,
+            cp.apuestas_total as total_apuestas,
+            cp.registros_anulados as total_anulados,
+            cp.recaudacion as recaudacion_total,
+            COALESCE(elg.total_premios, 0) as total_premios,
+            COALESCE(elg.total_ganadores, 0) as total_ganadores,
+            NULL as usuario_nombre,
+            cp.created_at,
+            'la_grande' as juego
+          FROM control_previo_la_grande cp
+          LEFT JOIN escrutinio_la_grande elg ON cp.numero_sorteo = elg.numero_sorteo
+          WHERE 1=1 ${whereLG}
+          ORDER BY cp.fecha DESC, cp.numero_sorteo DESC
+          LIMIT ${maxLimit} OFFSET ${offsetNum}
+        `;
+        const laGrandeData = await query(sqlLG, paramsLG);
+        resultados = resultados.concat(laGrandeData);
       }
 
       // QUINIELA YA (sin control previo ni extracto)
@@ -2502,6 +2629,77 @@ const obtenerDatosDashboard = async (req, res) => {
           }
         });
         resultados = resultados.concat(quini6Data);
+      }
+
+      // LA GRANDE: Cruce de premios + ventas
+      if (!juego || juego === 'la_grande') {
+        let sqlPremiosLG = buildTotalizadoQuery('escrutinio_la_grande', 'la_grande');
+        const paramsPremiosLG = [];
+        if (fechaDesde) { sqlPremiosLG += ' AND e.fecha >= ?'; paramsPremiosLG.push(fechaDesde); }
+        if (fechaHasta) { sqlPremiosLG += ' AND e.fecha <= ?'; paramsPremiosLG.push(fechaHasta); }
+        if (sorteoDesde) { sqlPremiosLG += ' AND e.numero_sorteo >= ?'; paramsPremiosLG.push(sorteoDesde); }
+        if (sorteoHasta) { sqlPremiosLG += ' AND e.numero_sorteo <= ?'; paramsPremiosLG.push(sorteoHasta); }
+        if (agencia) { sqlPremiosLG += ' AND epa.codigo_agencia LIKE ?'; paramsPremiosLG.push(`%${agencia}%`); }
+        sqlPremiosLG += ` GROUP BY agencia, codigo, epa.codigo_provincia ORDER BY total_premios DESC`;
+        const premiosLaGrande = await query(sqlPremiosLG, paramsPremiosLG).catch(() => []);
+
+        let sqlVentasLG = buildVentaQuery('la_grande');
+        const paramsVentasLG = [];
+        if (fechaDesde) { sqlVentasLG += ' AND cpa.fecha >= ?'; paramsVentasLG.push(fechaDesde); }
+        if (fechaHasta) { sqlVentasLG += ' AND cpa.fecha <= ?'; paramsVentasLG.push(fechaHasta); }
+        if (sorteoDesde) { sqlVentasLG += ' AND cpa.numero_sorteo >= ?'; paramsVentasLG.push(sorteoDesde); }
+        if (sorteoHasta) { sqlVentasLG += ' AND cpa.numero_sorteo <= ?'; paramsVentasLG.push(sorteoHasta); }
+        if (agencia) { sqlVentasLG += ' AND cpa.codigo_agencia LIKE ?'; paramsVentasLG.push(`%${agencia}%`); }
+        sqlVentasLG += ` GROUP BY CASE WHEN cpa.codigo_provincia = '51' THEN cpa.codigo_agencia ELSE CONCAT('PROV-', cpa.codigo_provincia) END ORDER BY total_recaudacion DESC`;
+        const ventasLaGrande = await query(sqlVentasLG, paramsVentasLG).catch(() => []);
+
+        const laGrandeData = [];
+        const procesadasLG = new Set();
+        for (const premio of premiosLaGrande) {
+          const venta = ventasLaGrande.find(v => v.agencia_key === premio.agencia);
+          procesadasLG.add(premio.agencia);
+          laGrandeData.push({
+            agencia: premio.agencia,
+            codigo: premio.codigo,
+            codigo_provincia: premio.codigo_provincia,
+            nombre: premio.nombre,
+            total_ganadores: parseInt(premio.total_ganadores) || 0,
+            total_premios: parseFloat(premio.total_premios) || 0,
+            total_tickets: venta ? parseInt(venta.total_tickets) : 0,
+            total_apuestas: venta ? parseInt(venta.total_apuestas) : 0,
+            total_anulados: venta ? parseInt(venta.total_anulados) : 0,
+            total_recaudacion: venta ? parseFloat(venta.total_recaudacion) : 0,
+            juego: 'la_grande'
+          });
+        }
+
+        for (const venta of ventasLaGrande) {
+          const agKey = venta.agencia_key;
+          if (!agKey || procesadasLG.has(agKey)) continue;
+          let codProv = '51';
+          if (agKey.startsWith('PROV-')) codProv = agKey.replace('PROV-', '');
+          laGrandeData.push({
+            agencia: agKey,
+            codigo: agKey.startsWith('PROV-') ? agKey.replace('PROV-', '') : agKey,
+            codigo_provincia: codProv,
+            nombre: codProv !== '51' ? (PROVINCIAS_NOMBRES[codProv] || `Provincia ${codProv}`) : agKey,
+            total_ganadores: 0,
+            total_premios: 0,
+            total_tickets: parseInt(venta.total_tickets) || 0,
+            total_apuestas: parseInt(venta.total_apuestas) || 0,
+            total_anulados: parseInt(venta.total_anulados) || 0,
+            total_recaudacion: parseFloat(venta.total_recaudacion) || 0,
+            juego: 'la_grande'
+          });
+        }
+
+        laGrandeData.forEach(row => {
+          if (row.codigo_provincia !== '51') {
+            row.nombre = PROVINCIAS_NOMBRES[row.codigo_provincia] || `Provincia ${row.codigo_provincia}`;
+            row.agencia = row.nombre;
+          }
+        });
+        resultados = resultados.concat(laGrandeData);
       }
 
       // QUINIELA YA: cruce de premios + ventas

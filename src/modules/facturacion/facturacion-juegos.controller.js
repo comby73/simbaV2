@@ -28,7 +28,8 @@ const AJUSTE_RECAUDACION_FACTURACION = {
   loto: 0.75,
   loto5: 0.75,
   quini6: 0.90,
-  brinco: 0.90
+  brinco: 0.90,
+  la_grande: 0.90
 };
 
 function obtenerFactorAjusteFacturacion(juegoKey) {
@@ -308,8 +309,7 @@ const SAP_JUEGOS = {
     nombre: 'LA GRANDE DE LA NACIONAL',
     caba:  ['3000000410', '3000000409'], centro: 'LCBAJPA010',
     tiene_provincias: false, tiene_internet: false,
-    es_externa: true,
-    nota: 'Fuente externa - datos deben ingresarse manualmente'
+    nota: 'Fuente Control Previo / Programación'
   }
 };
 
@@ -351,6 +351,29 @@ function calcularBillingCanal(recaudacion, canal, topeRatio) {
   };
 }
 
+function distribuirPorCanal(baseTotal, recCABA, recProv, recInt) {
+  const totalRef = (Number(recCABA) || 0) + (Number(recProv) || 0) + (Number(recInt) || 0);
+  if (totalRef <= 0) {
+    return {
+      caba: Number(baseTotal) || 0,
+      provincias: 0,
+      internet: 0,
+      participacion: { caba: 1, provincias: 0, internet: 0 }
+    };
+  }
+
+  const pCABA = (Number(recCABA) || 0) / totalRef;
+  const pProv = (Number(recProv) || 0) / totalRef;
+  const pInt = (Number(recInt) || 0) / totalRef;
+
+  return {
+    caba: (Number(baseTotal) || 0) * pCABA,
+    provincias: (Number(baseTotal) || 0) * pProv,
+    internet: (Number(baseTotal) || 0) * pInt,
+    participacion: { caba: pCABA, provincias: pProv, internet: pInt }
+  };
+}
+
 // ============================================================
 // ENDPOINT: GET /api/facturacion/juegos-ute
 // Query params: fecha_inicio, fecha_fin (YYYY-MM-DD), tope (opcional)
@@ -359,6 +382,8 @@ const getFacturacionJuegosUTE = async (req, res) => {
   try {
     const { fecha_inicio, fecha_fin } = req.query;
     const tope = parseFloat(req.query.tope) || TOPE_DEFAULT;
+    const laGrandePrecioBilleteManual = Math.max(0, parseFloat(req.query.la_grande_precio_billete) || 0);
+    const laGrandeSorteosManual = Math.max(0, parseInt(req.query.la_grande_sorteos_manual, 10) || 0);
 
     if (!fecha_inicio || !fecha_fin) {
       return res.status(400).json({
@@ -396,7 +421,7 @@ const getFacturacionJuegosUTE = async (req, res) => {
           THEN cpa.total_recaudacion ELSE 0
         END) AS rec_internet,
         SUM(CASE
-          WHEN LOWER(TRIM(cpa.juego)) IN ('quini6','brinco')
+          WHEN LOWER(TRIM(cpa.juego)) IN ('quini6','brinco','la_grande')
            AND cpa.codigo_agencia NOT IN ('88880','5188880')
           THEN cpa.total_recaudacion
           WHEN cpa.codigo_provincia = '51'
@@ -417,7 +442,7 @@ const getFacturacionJuegosUTE = async (req, res) => {
           THEN cpa.total_recaudacion ELSE 0
         END) AS rec_caba,
         SUM(CASE
-          WHEN LOWER(TRIM(cpa.juego)) IN ('quini6','brinco')
+          WHEN LOWER(TRIM(cpa.juego)) IN ('quini6','brinco','la_grande')
           THEN 0
           WHEN cpa.codigo_provincia != '51'
           THEN cpa.total_recaudacion ELSE 0
@@ -651,8 +676,6 @@ const getFacturacionJuegosUTE = async (req, res) => {
         caba: [], tiene_provincias: false, tiene_internet: false
       };
 
-      if (cfg.es_externa) continue; // La Grande es externa, se omite
-
       const recCABA  = parseFloat(row.rec_caba)       || 0;
       const recProv  = parseFloat(row.rec_provincias)  || 0;
       const recInt   = parseFloat(row.rec_internet)    || 0;
@@ -712,9 +735,28 @@ const getFacturacionJuegosUTE = async (req, res) => {
 
         const nombreComponente = comp.nombre || cfg.nombre;
 
+        let baseFacturacionCABA = comp.recFactCABA;
+        let baseFacturacionProv = comp.recFactProv;
+        let baseFacturacionInt = comp.recFactInt;
+        let baseFacturacionTotal = comp.recFactTotal;
+        let notaComponente = null;
+
+        if (juegoKey === 'la_grande' && laGrandePrecioBilleteManual > 0) {
+          const sorteosParaCalculo = laGrandeSorteosManual > 0 ? laGrandeSorteosManual : cantSorteos;
+          const baseManualTotal = laGrandePrecioBilleteManual * (sorteosParaCalculo || 0);
+          const distribuido = distribuirPorCanal(baseManualTotal, comp.recFactCABA, comp.recFactProv, comp.recFactInt);
+
+          baseFacturacionCABA = distribuido.caba;
+          baseFacturacionProv = distribuido.provincias;
+          baseFacturacionInt = distribuido.internet;
+          baseFacturacionTotal = baseManualTotal;
+
+          notaComponente = `Base manual La Grande: ${laGrandePrecioBilleteManual.toLocaleString('es-AR')} x ${sorteosParaCalculo} sorteo(s) = ${Math.round(baseManualTotal * 100) / 100}`;
+        }
+
         // -- CABA 3.1.1 --
-        if (comp.recFactCABA > 0 && cfg.caba?.length >= 2) {
-          const b = calcularBillingCanal(comp.recFactCABA, 'caba', topeRatio);
+        if (baseFacturacionCABA > 0 && cfg.caba?.length >= 2) {
+          const b = calcularBillingCanal(baseFacturacionCABA, 'caba', topeRatio);
           billingJuego.caba = b;
           billingJuego.total_neto += b.total_neto;
           lineasJuego.push(
@@ -738,8 +780,8 @@ const getFacturacionJuegosUTE = async (req, res) => {
         }
 
         // -- Provincias 3.1.2 --
-        if (comp.recFactProv > 0 && cfg.prov?.length >= 2) {
-          const b = calcularBillingCanal(comp.recFactProv, 'provincias', topeRatio);
+        if (baseFacturacionProv > 0 && cfg.prov?.length >= 2) {
+          const b = calcularBillingCanal(baseFacturacionProv, 'provincias', topeRatio);
           billingJuego.provincias = b;
           billingJuego.total_neto += b.total_neto;
           lineasJuego.push(
@@ -763,8 +805,8 @@ const getFacturacionJuegosUTE = async (req, res) => {
         }
 
         // -- Internet (LCBAJOL) --
-        if (comp.recFactInt > 0 && cfg.int?.length >= 1) {
-          const b = calcularBillingCanal(comp.recFactInt, 'internet', topeRatio);
+        if (baseFacturacionInt > 0 && cfg.int?.length >= 1) {
+          const b = calcularBillingCanal(baseFacturacionInt, 'internet', topeRatio);
           billingJuego.internet = b;
           billingJuego.total_neto += b.total_neto;
           const centroInt = cfg.centroInt || cfg.centro;
@@ -793,10 +835,16 @@ const getFacturacionJuegosUTE = async (req, res) => {
             internet:   comp.recFactInt,
             total:      comp.recFactTotal
           },
+          base_facturacion: {
+            caba: baseFacturacionCABA,
+            provincias: baseFacturacionProv,
+            internet: baseFacturacionInt,
+            total: baseFacturacionTotal
+          },
           billing: billingJuego,
           lineasSAP: lineasJuego,
           porcentaje_modelo: comp.porcentaje,
-          nota: null
+          nota: notaComponente
         });
 
         lineasSAP.push(...lineasJuego);
@@ -835,6 +883,10 @@ const getFacturacionJuegosUTE = async (req, res) => {
           fuenteDesglose: {
             loto: desgloseDinamicoLoto ? 'control_previo_loto.datos_json' : 'fallback fijo',
             quini6: desgloseDinamicoQuini6 ? 'control_previo_quini6.datos_json' : 'fallback fijo'
+          },
+          parametrosCalculo: {
+            la_grande_precio_billete: laGrandePrecioBilleteManual,
+            la_grande_sorteos_manual: laGrandeSorteosManual
           }
         },
         flujoTotalGral,

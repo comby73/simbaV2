@@ -8,6 +8,8 @@ const lotoController = require('./loto.controller');
 const loto5Controller = require('./loto5.controller');
 const brincoController = require('./brinco.controller');
 const quini6Controller = require('./quini6.controller');
+const laGrandeController = require('./la-grande.controller');
+const mainController = require('./main.controller');
 const { authenticate, requirePermission } = require('../../shared/middleware');
 
 // Configurar multer para subida de archivos
@@ -36,6 +38,13 @@ const upload = multer({
 
 // Todas las rutas requieren autenticación
 router.use(authenticate);
+
+// Detección universal por contenido del ZIP (fallback cuando el nombre de archivo no ayuda)
+router.post('/procesar',
+  requirePermission('control_previo.ejecutar'),
+  upload.single('archivo'),
+  mainController.procesarArchivoUniversal
+);
 
 // Quiniela
 router.post('/quiniela/procesar', 
@@ -142,6 +151,18 @@ router.post('/quini6/procesar-zip',
 router.post('/quini6/guardar-resultado',
   requirePermission('control_previo.ejecutar'),
   quini6Controller.guardarResultado
+);
+
+// LA GRANDE
+router.post('/la-grande/procesar',
+  requirePermission('control_previo.ejecutar'),
+  upload.single('archivo'),
+  laGrandeController.procesarZip
+);
+
+router.post('/la-grande/procesar-zip',
+  upload.single('archivo'),
+  laGrandeController.procesarZip
 );
 
 router.get('/quini6/estadisticas/:sorteo',

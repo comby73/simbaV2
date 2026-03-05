@@ -84,6 +84,10 @@ async function apiRequest(endpoint, options = {}) {
   } catch (error) {
     clearTimeout(id);
     if (error.name === 'AbortError') throw new Error('Tiempo de espera agotado.');
+    const msg = String(error?.message || '').toLowerCase();
+    if (error?.name === 'TypeError' || msg.includes('failed to fetch') || msg.includes('networkerror') || msg.includes('load failed')) {
+      throw new Error('No hay conexión con la API local. Verificá que el backend esté levantado en localhost:3000 (npm start o npm run dev).');
+    }
     console.error('[SIMBA] Error en apiRequest:', error);
     throw error;
   }
@@ -119,6 +123,26 @@ const authAPI = {
 
 // Control Previo API
 const controlPrevioAPI = {
+  procesarUniversal: async (file) => {
+    const formData = new FormData();
+    formData.append('archivo', file);
+    const token = getToken();
+    const response = await fetch(`${API_BASE}/control-previo/procesar`, {
+      method: 'POST',
+      headers: { 'Authorization': `Bearer ${token}` },
+      body: formData
+    });
+    const data = await parseResponseSafe(response);
+    if (!response.ok) {
+      if (response.status === 401) {
+        console.warn('[SIMBA] Sesión expirada o no autorizada (401)');
+        handleLogout();
+      }
+      throw new Error(data.message || `Error procesando ZIP (HTTP ${response.status})`);
+    }
+    return data;
+  },
+
   procesarQuiniela: async (file) => {
     const formData = new FormData();
     formData.append('archivo', file);
@@ -233,6 +257,26 @@ const controlPrevioAPI = {
     return data;
   },
 
+  procesarLaGrande: async (file) => {
+    const formData = new FormData();
+    formData.append('archivo', file);
+    const token = getToken();
+    const response = await fetch(`${API_BASE}/control-previo/la-grande/procesar-zip`, {
+      method: 'POST',
+      headers: { 'Authorization': `Bearer ${token}` },
+      body: formData
+    });
+    const data = await parseResponseSafe(response);
+    if (!response.ok) {
+      if (response.status === 401) {
+        console.warn('[SIMBA] Sesión expirada o no autorizada (401)');
+        handleLogout();
+      }
+      throw new Error(data.message || `Error procesando La Grande (HTTP ${response.status})`);
+    }
+    return data;
+  },
+
   buscarPozoPoceada: (sorteo) => apiRequest(`/control-previo/poceada/buscar-pozo/${sorteo}`),
 
   getHistorial: (params = {}) => {
@@ -274,6 +318,11 @@ const controlPosteriorAPI = {
   }),
 
   escrutinioQuini6: (datos) => apiRequest('/control-posterior/quini6/escrutinio', {
+    method: 'POST',
+    body: JSON.stringify(datos)
+  }),
+
+  escrutinioLaGrande: (datos) => apiRequest('/control-posterior/la-grande/escrutinio', {
     method: 'POST',
     body: JSON.stringify(datos)
   }),

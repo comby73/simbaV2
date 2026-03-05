@@ -23,6 +23,9 @@ const generarActaControlPrevio = async (req, res) => {
     if (tipoJuego === 'Quini 6' || tipoJuego === 'QUINI 6' || tipoJuego === 'Quini6') {
       return generarActaControlPrevioQuini6(req, res, datos);
     }
+    if (tipoJuego === 'La Grande') {
+      return generarActaControlPrevioLaGrande(req, res, datos);
+    }
     if (tipoJuego === 'Brinco' || tipoJuego === 'BRINCO') {
       return generarActaControlPrevioBrinco(req, res, datos);
     }
@@ -3146,6 +3149,133 @@ async function generarActaControlPrevioQuini6(req, res, datos) {
 
   } catch (error) {
     console.error('Error generando acta QUINI 6:', error);
+    res.status(500).json({ success: false, message: 'Error generando PDF: ' + error.message });
+  }
+}
+
+// ══════════════════════════════════════════════════════════════════════
+// ACTA CONTROL PREVIO - LA GRANDE
+// ══════════════════════════════════════════════════════════════════════
+async function generarActaControlPrevioLaGrande(req, res, datos) {
+  try {
+    const resumen = datos.resumen || {};
+    const comparacion = datos.comparacion || {};
+    const oficial = datos.datosOficiales || {};
+    const seguridad = datos.seguridad || {};
+    const premios = Array.isArray(oficial.premios) ? oficial.premios : [];
+
+    const doc = new PDFDocument({
+      size: 'A4',
+      margins: { top: 45, bottom: 45, left: 45, right: 45 }
+    });
+
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `inline; filename=Acta_ControlPrevio_LaGrande_${datos.sorteo || 'sorteo'}.pdf`);
+    doc.pipe(res);
+
+    const fechaHoy = new Date().toLocaleDateString('es-AR');
+    const horaHoy = new Date().toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit' });
+
+    const formatNum = (n) => (Number(n || 0)).toLocaleString('es-AR');
+    const formatMoney = (n) => '$' + (Number(n || 0)).toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
+    doc.fontSize(10).fillColor('#666')
+      .text('LOTERÍA DE LA CIUDAD DE BUENOS AIRES S.E.', 45, 24)
+      .text('CONTROL PREVIO', 430, 24, { align: 'right', width: 120 });
+    doc.moveTo(45, 45).lineTo(550, 45).stroke('#d1d5db');
+
+    doc.fontSize(20).fillColor('#1e293b').text('ACTA DE CONTROL PREVIO', 45, 62, { align: 'center', width: 505 });
+    doc.fontSize(14).fillColor('#7c3aed').text('LA GRANDE', 45, 88, { align: 'center', width: 505 });
+    doc.fontSize(10).fillColor('#475569')
+      .text(`Sorteo N° ${datos.sorteo || '-'} • Fecha sorteo: ${datos.fechaSorteo || '-'}`, 45, 108, { align: 'center', width: 505 })
+      .text(`Archivo: ${datos.archivo || '-'} • Generado: ${fechaHoy} ${horaHoy}`, 45, 123, { align: 'center', width: 505 });
+
+    let y = 150;
+
+    doc.fontSize(12).fillColor('#1e293b').font('Helvetica-Bold').text('Resumen de Ventas y Premios', 45, y);
+    y += 18;
+    doc.fontSize(10).font('Helvetica').fillColor('#334155');
+    doc.text(`Billetes: ${formatNum(resumen.apuestasTotal)}`, 45, y);
+    doc.text(`Venta Bruta: ${formatMoney(resumen.recaudacion)}`, 220, y);
+    doc.text(`Total Premios: ${formatMoney(oficial.importeTotalPremios || resumen.totalPremios)}`, 390, y, { width: 160 });
+    y += 24;
+
+    if (comparacion.registros) {
+      doc.fontSize(12).fillColor('#1e293b').font('Helvetica-Bold').text('Comparación TXT vs XML', 45, y);
+      y += 16;
+
+      const filas = [
+        ['Tickets Total', (comparacion.registros?.calculado || 0) + (comparacion.anulados?.calculado || 0), (comparacion.registros?.oficial || 0) + (comparacion.anulados?.oficial || 0), false],
+        ['Tickets Válidos', comparacion.registros?.calculado || 0, comparacion.registros?.oficial || 0, false],
+        ['Anulados', comparacion.anulados?.calculado || 0, comparacion.anulados?.oficial || 0, false],
+        ['Apuestas en Sorteo', comparacion.apuestas?.calculado || 0, comparacion.apuestas?.oficial || 0, false],
+        ['Recaudación Bruta', comparacion.recaudacion?.calculado || 0, comparacion.recaudacion?.oficial || 0, true],
+        ['Total Premios', comparacion.premios?.calculado || oficial.importeTotalPremios || 0, comparacion.premios?.oficial || oficial.importeTotalPremios || 0, true]
+      ];
+
+      doc.rect(45, y, 505, 16).fill('#f1f5f9');
+      doc.fillColor('#334155').fontSize(8).font('Helvetica-Bold')
+        .text('Concepto', 50, y + 4)
+        .text('Calculado', 250, y + 4)
+        .text('Oficial', 355, y + 4)
+        .text('Estado', 470, y + 4);
+      y += 18;
+
+      doc.font('Helvetica').fontSize(9);
+      for (const fila of filas) {
+        const [label, calc, ofi, esMonto] = fila;
+        const dif = Number(calc || 0) - Number(ofi || 0);
+        doc.fillColor('#334155').text(label, 50, y);
+        doc.text(esMonto ? formatMoney(calc) : formatNum(calc), 250, y);
+        doc.text(esMonto ? formatMoney(ofi) : formatNum(ofi), 355, y);
+        doc.fillColor(dif === 0 ? '#10b981' : '#ef4444').text(dif === 0 ? '✓ OK' : '✗ DIF', 470, y);
+        y += 14;
+      }
+      y += 10;
+    }
+
+    doc.fontSize(12).fillColor('#1e293b').font('Helvetica-Bold').text('Detalle de Premios', 45, y);
+    y += 16;
+    doc.rect(45, y, 505, 16).fill('#f1f5f9');
+    doc.fillColor('#334155').fontSize(8).font('Helvetica-Bold')
+      .text('Premio', 50, y + 4)
+      .text('Orden', 300, y + 4)
+      .text('Monto', 380, y + 4);
+    y += 18;
+
+    doc.font('Helvetica').fontSize(9).fillColor('#334155');
+    for (const p of premios) {
+      if (y > 740) {
+        doc.addPage();
+        y = 60;
+      }
+      doc.text(p.nombre || p.clave || '-', 50, y, { width: 235 });
+      doc.text(formatNum(p.orden || 0), 300, y);
+      doc.text(formatMoney(p.monto || 0), 380, y);
+      y += 13;
+    }
+
+    y += 10;
+    const archivos = seguridad.archivos || {};
+    const hashTxt = seguridad.verificado;
+    const hashXml = seguridad.verificadoXml;
+    doc.fontSize(10).font('Helvetica-Bold').fillColor('#1e293b').text('Verificación de Seguridad', 45, y);
+    y += 14;
+    doc.fontSize(9).font('Helvetica');
+    doc.fillColor(archivos.txt ? '#10b981' : '#ef4444').text(`${archivos.txt ? '✓' : '✗'} TXT`, 45, y);
+    doc.fillColor(archivos.xml ? '#10b981' : '#ef4444').text(`${archivos.xml ? '✓' : '✗'} XML`, 110, y);
+    doc.fillColor(archivos.hash ? '#10b981' : '#ef4444').text(`${archivos.hash ? '✓' : '✗'} Hash TXT`, 180, y);
+    doc.fillColor(archivos.hashCP ? '#10b981' : '#ef4444').text(`${archivos.hashCP ? '✓' : '✗'} Hash XML`, 280, y);
+    doc.fillColor(hashTxt === true ? '#10b981' : hashTxt === false ? '#ef4444' : '#f59e0b')
+      .text(`TXT: ${hashTxt === true ? 'Verificado' : hashTxt === false ? 'No coincide' : 'No verificable'}`, 380, y);
+    y += 13;
+    doc.fillColor(hashXml === true ? '#10b981' : hashXml === false ? '#ef4444' : '#f59e0b')
+      .text(`XML: ${hashXml === true ? 'Verificado' : hashXml === false ? 'No coincide' : 'No verificable'}`, 380, y);
+
+    doc.fontSize(8).fillColor('#94a3b8').text(`Sistema SIMBA v2 • ${fechaHoy} ${horaHoy}`, 45, 790, { width: 505, align: 'center' });
+    doc.end();
+  } catch (error) {
+    console.error('Error generando acta LA GRANDE:', error);
     res.status(500).json({ success: false, message: 'Error generando PDF: ' + error.message });
   }
 }

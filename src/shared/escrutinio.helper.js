@@ -641,6 +641,7 @@ async function obtenerHistorialEscrutinio(juego, filtros = {}) {
       loto5: 'escrutinio_loto5',
       brinco: 'escrutinio_brinco',
       quini6: 'escrutinio_quini6',
+      la_grande: 'escrutinio_la_grande',
       quinielaya: 'escrutinio_quiniela_ya'
     };
     const tabla = tablaMap[juego] || 'escrutinio_poceada';

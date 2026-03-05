@@ -1054,6 +1054,17 @@
               <div class="form-group" style="flex: 0 0 auto; min-width: 180px;">
                 <label class="radio-card"
                   style="display: flex; align-items: center; gap: 0.75rem; padding: 0.75rem; border: 2px solid var(--border-color); border-radius: 8px; cursor: pointer; transition: all 0.2s;"
+                  onclick="seleccionarJuegoPosterior('La Grande')">
+                  <input type="radio" name="cpst-juego" value="La Grande" style="width: 18px; height: 18px;">
+                  <div>
+                    <strong style="font-size: 0.95rem;">🌟 La Grande</strong>
+                    <p class="text-muted" style="margin: 0; font-size: 0.7rem;">6 números</p>
+                  </div>
+                </label>
+              </div>
+              <div class="form-group" style="flex: 0 0 auto; min-width: 180px;">
+                <label class="radio-card"
+                  style="display: flex; align-items: center; gap: 0.75rem; padding: 0.75rem; border: 2px solid var(--border-color); border-radius: 8px; cursor: pointer; transition: all 0.2s;"
                   onclick="seleccionarJuegoPosterior('Brinco')">
                   <input type="radio" name="cpst-juego" value="Brinco" style="width: 18px; height: 18px;">
                   <div>
@@ -2761,6 +2772,10 @@
                     <span class="checkmark game-loto5">🖐️ LOTO 5</span>
                   </label>
                   <label class="game-checkbox">
+                    <input type="checkbox" id="dash-game-la_grande" onchange="toggleDashboardGame('la_grande')">
+                    <span class="checkmark game-la_grande">🌟 LA GRANDE</span>
+                  </label>
+                  <label class="game-checkbox">
                     <input type="checkbox" id="dash-game-hipicas" onchange="toggleDashboardGame('hipicas')">
                     <span class="checkmark game-hipicas">🐴 HIPICAS</span>
                   </label>
@@ -2910,6 +2925,7 @@
                     <option value="loto">Loto</option>
                     <option value="loto5">Loto 5</option>
                     <option value="quini6">Quini 6</option>
+                    <option value="la_grande">La Grande</option>
                     <option value="brinco">Brinco</option>
                   </select>
                 </div>
@@ -2985,6 +3001,7 @@
                     <option value="loto">Loto</option>
                     <option value="loto5">Loto 5</option>
                     <option value="quini6">Quini 6</option>
+                    <option value="la_grande">La Grande</option>
                     <option value="brinco">Brinco</option>
                   </select>
                 </div>
@@ -3448,6 +3465,14 @@
                 <label>Tope Estipulado ($)</label>
                 <input type="number" id="fjg-tope" class="form-control" value="105000000" step="1000000">
               </div>
+              <div class="form-group" style="flex:1; min-width:220px;">
+                <label>La Grande - Precio billete manual ($)</label>
+                <input type="number" id="fjg-la-grande-precio-billete" class="form-control" value="0" step="1" min="0">
+              </div>
+              <div class="form-group" style="flex:1; min-width:190px;">
+                <label>La Grande - Sorteos manuales (opcional)</label>
+                <input type="number" id="fjg-la-grande-sorteos" class="form-control" value="" step="1" min="0" placeholder="Auto por período">
+              </div>
               <div class="fjg-actions" style="flex:0 0 auto; padding-bottom:0.1rem;">
                 <button class="btn btn-primary" onclick="calcularFacturacionJuegosUTE()">
                   <i class="fas fa-calculator"></i> Calcular
@@ -3757,9 +3782,9 @@
   <!-- Config local (API keys) - debe cargarse primero, no se sube a git -->
   <script src="js/config.local.js" onerror="console.warn('config.local.js no encontrado - usando config por defecto')"></script>
   <script src="js/config.js?v=20260206g"></script>
-  <script src="js/api.js?v=20260304c"></script>
+  <script src="js/api.js?v=20260305c"></script>
   <script src="js/ocr-extractos.js?v=20260304b"></script>
-  <script src="js/app.js?v=20260304c"></script>
+  <script src="js/app.js?v=20260305c"></script>
 </body>
 
 </html>

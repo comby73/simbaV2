@@ -29,6 +29,7 @@ const JUEGOS_CONFIG = {
   '0080': { nombre: 'Quiniela', nombreCorto: 'QNL', tipo: 'quiniela' },
   'QYA': { nombre: 'Quiniela Ya', nombreCorto: 'QYA', tipo: 'quinielaya' },
   '0069': { nombre: 'Quini 6', nombreCorto: 'Q6', tipo: 'loto' },
+  '0070': { nombre: 'La Grande', nombreCorto: 'LGR', tipo: 'la_grande' },
   '0013': { nombre: 'Brinco', nombreCorto: 'BRC', tipo: 'loto' },
   '0005': { nombre: 'Loto 5 Plus', nombreCorto: 'L5P', tipo: 'loto' },
   '0009': { nombre: 'Loto Plus Tradicional', nombreCorto: 'LPT', tipo: 'loto' },
@@ -44,6 +45,7 @@ function normalizarJuegoDashboard(juego) {
   if (value.includes('poceada')) return 'poceada';
   if (value.includes('tombolina')) return 'tombolina';
   if (value.includes('quini 6') || value.includes('quini6')) return 'quini6';
+  if (value.includes('la grande')) return 'la_grande';
   if (value.includes('brinco')) return 'brinco';
   if (value.includes('loto 5')) return 'loto5';
   if (value.includes('loto')) return 'loto';
@@ -78,6 +80,9 @@ function detectarJuego(valorJuego) {
   // Fallback: buscar por nombre
   if (valor.includes('QUINI 6') || valor.includes('QUINI6')) {
     return { ...JUEGOS_CONFIG['0069'], codigo: '0069' };
+  }
+  if (valor.includes('LA GRANDE')) {
+    return { ...JUEGOS_CONFIG['0070'], codigo: '0070' };
   }
   if (valor.includes('BRINCO')) {
     return { ...JUEGOS_CONFIG['0013'], codigo: '0013' };

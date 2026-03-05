@@ -8,6 +8,7 @@ const lotoController = require('./loto-escrutinio.controller');
 const loto5Controller = require('./loto5-escrutinio.controller');
 const brincoController = require('./brinco-escrutinio.controller');
 const quini6Controller = require('./quini6-escrutinio.controller');
+const laGrandeController = require('./la-grande-escrutinio.controller');
 const quinielaYaController = require('./quinielaya-escrutinio.controller');
 const extractoController = require('./extracto.controller');
 const { authenticate } = require('../../shared/middleware');
@@ -29,6 +30,7 @@ router.post('/loto/escrutinio', lotoController.ejecutar);
 router.post('/loto5/escrutinio', loto5Controller.ejecutar);
 router.post('/brinco/escrutinio', brincoController.ejecutar);
 router.post('/quini6/escrutinio', quini6Controller.ejecutar);
+router.post('/la-grande/escrutinio', laGrandeController.ejecutar);
 router.post('/quinielaya/escrutinio', upload.single('archivo'), quinielaYaController.ejecutar);
 
 // BRINCO - Información adicional

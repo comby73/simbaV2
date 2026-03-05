@@ -643,7 +643,8 @@ async function buscarFechaProgramacion(tipoJuego, numeroSorteo, modalidad = null
       'loto': 'loto',
       'loto5': 'loto5',
       'brinco': 'brinco',
-      'quini6': 'quini6'
+      'quini6': 'quini6',
+      'la_grande': 'la_grande'
     };
 
     const tipoJuegoDB = mapeoTipos[tipoJuego.toLowerCase()] || tipoJuego;
@@ -680,6 +681,10 @@ async function buscarFechaProgramacion(tipoJuego, numeroSorteo, modalidad = null
       quini6: {
         codigo: '0069',
         like: ['%quini 6%', '%quini6%']
+      },
+      la_grande: {
+        codigo: '0070',
+        like: ['%la grande%', '%grande de la nacional%']
       },
       brinco: {
         codigo: '0013',

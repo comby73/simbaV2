@@ -14,10 +14,12 @@ const PREFIJOS_JUEGOS = {
   'LOTO': { nombre: 'Loto', api: 'procesarLoto' },
   'LTO': { nombre: 'Loto', api: 'procesarLoto' },
   'LOT': { nombre: 'Loto', api: 'procesarLoto' },
+  'LTR': { nombre: 'La Grande', api: 'procesarLaGrande' },
   'LT5': { nombre: 'Loto 5', api: 'procesarLoto5' },
   'L5': { nombre: 'Loto 5', api: 'procesarLoto5' },
   'QNY': { nombre: 'Quiniela Ya', api: null },
-  'QYA': { nombre: 'Quiniela Ya', api: null }
+  'QYA': { nombre: 'Quiniela Ya', api: null },
+  'LGR': { nombre: 'La Grande', api: 'procesarLaGrande' }
 };
 
 
@@ -1034,21 +1036,22 @@ async function procesarControlPrevio() {
       const archivo = archivos[i];
       const juegoConfig = detectarTipoJuego(archivo.name);
 
-      if (!juegoConfig || !controlPrevioAPI[juegoConfig.api]) {
-        errores++;
-        showToast(`[${i + 1}/${total}] ${archivo.name}: juego no detectado`, 'error');
-        continue;
-      }
+      const usaFallbackUniversal = !juegoConfig || !controlPrevioAPI[juegoConfig.api];
+      const nombreDetectado = juegoConfig?.nombre || 'detección automática';
 
-      showToast(`[${i + 1}/${total}] Procesando ${archivo.name} (${juegoConfig.nombre})...`, 'info');
+      showToast(`[${i + 1}/${total}] Procesando ${archivo.name} (${nombreDetectado})...`, 'info');
 
       try {
-        const response = await controlPrevioAPI[juegoConfig.api](archivo);
+        const response = usaFallbackUniversal
+          ? await controlPrevioAPI.procesarUniversal(archivo)
+          : await controlPrevioAPI[juegoConfig.api](archivo);
+
+        const tipoJuegoRespuesta = response?.data?.tipoJuego || juegoConfig?.nombre || 'Juego';
         cpResultadosActuales = response.data;
-        cpResultadosActuales.tipoJuego = juegoConfig.nombre;
+        cpResultadosActuales.tipoJuego = tipoJuegoRespuesta;
 
         cpRegistrosNTF = response.data.registros || response.data.registrosNTF || [];
-        console.log(`Control Previo (${juegoConfig.nombre}): ${cpRegistrosNTF.length} registros parseados`);
+        console.log(`Control Previo (${tipoJuegoRespuesta}): ${cpRegistrosNTF.length} registros parseados`);
 
         mostrarResultadosCP(response.data);
 
@@ -1087,8 +1090,9 @@ function mostrarResultadosCP(data) {
   const isLoto = data.tipoJuego === 'Loto';
   const isBrinco = data.tipoJuego === 'Brinco';
   const isQuini6 = data.tipoJuego === 'QUINI 6' || data.tipoJuego === 'Quini 6';
+  const isLaGrande = data.tipoJuego === 'La Grande';
   const isLoto5 = data.tipoJuego === 'Loto 5' || data.tipoJuego === 'Loto5';
-  const usaResumen = isPoceada || isLoto || isBrinco || isQuini6 || isLoto5;
+  const usaResumen = isPoceada || isLoto || isBrinco || isQuini6 || isLaGrande || isLoto5;
   const calc = usaResumen ? data.resumen : data.datosCalculados;
   const oficial = data.datosOficiales;
 
@@ -1166,6 +1170,8 @@ function mostrarResultadosCP(data) {
   } else if (isQuini6) {
     // QUINI 6 tiene renderizado específico por modalidad
     renderTablasQuini6(data);
+  } else if (isLaGrande) {
+    renderTablasLaGrande(data);
   } else if (isBrinco) {
     // BRINCO usa renderizado genérico
     renderTablasGenerico(data);
@@ -1200,6 +1206,16 @@ function mostrarResultadosCP(data) {
         { concepto: 'Apuestas en Sorteo', calc: comp.apuestas?.calculado || 0, oficial: comp.apuestas?.oficial || 0, diff: comp.apuestas?.diferencia || 0 },
         { concepto: 'Recaudación Bruta', calc: comp.recaudacion?.calculado || 0, oficial: comp.recaudacion?.oficial || 0, diff: comp.recaudacion?.diferencia || 0, esMonto: true }
       ];
+
+      if (isLaGrande && comp.premios) {
+        comparaciones.push({
+          concepto: 'Total Premios',
+          calc: comp.premios?.calculado || 0,
+          oficial: comp.premios?.oficial || 0,
+          diff: comp.premios?.diferencia || 0,
+          esMonto: true
+        });
+      }
 
       // Agregar venta web si hay datos (solo para Poceada)
       if (calc.ventaWeb !== undefined) {
@@ -1256,6 +1272,15 @@ function mostrarResultadosCP(data) {
         { concepto: 'Apuestas en Sorteo', calc: calc.apuestasTotal || 0, oficial: oficial.apuestasEnSorteo || 0 },
         { concepto: 'Recaudación Bruta', calc: calc.recaudacion || 0, oficial: oficial.recaudacionBruta || 0, esMonto: true }
       ];
+
+      if (isLaGrande) {
+        comparaciones.push({
+          concepto: 'Total Premios',
+          calc: calc.totalPremios || oficial.importeTotalPremios || 0,
+          oficial: oficial.importeTotalPremios || 0,
+          esMonto: true
+        });
+      }
 
       for (const item of comparaciones) {
         const diff = item.calc - item.oficial;
@@ -2531,6 +2556,115 @@ function renderTablasQuini6(data) {
   }
 }
 
+function renderTablasLaGrande(data) {
+  console.log('📊 Renderizando tablas La Grande:', data);
+
+  ocultarCardTombolina();
+
+  const quini6Container = document.getElementById('cp-quini6-modalidades-card');
+  if (quini6Container) {
+    quini6Container.innerHTML = '';
+    quini6Container.classList.add('hidden');
+    quini6Container.style.display = 'none';
+  }
+
+  renderTablasGenerico(data);
+
+  const oficial = data.datosOficiales || {};
+  const resumen = data.resumen || {};
+  const premios = Array.isArray(oficial.premios) ? [...oficial.premios] : [];
+
+  let card = document.getElementById('cp-la-grande-resumen-card');
+  if (!card) {
+    card = document.createElement('div');
+    card.id = 'cp-la-grande-resumen-card';
+    card.className = 'card mt-4';
+
+    const comparacionCard = document.querySelector('#cp-tabla-comparacion')?.closest('.card');
+    if (comparacionCard && comparacionCard.parentNode) {
+      comparacionCard.parentNode.insertBefore(card, comparacionCard.nextSibling);
+    } else {
+      document.getElementById('cp-resultados')?.appendChild(card);
+    }
+  }
+
+  const term = Array.isArray(oficial.terminaciones) ? oficial.terminaciones : [];
+  const termHtml = term.length > 0
+    ? `<div class="table-responsive" style="margin-top: 1rem;">
+        <table class="table table-bordered table-striped" style="margin-bottom: 0; font-size: 0.9rem;">
+          <thead>
+            <tr><th colspan="10" style="text-align:center;">Terminaciones</th></tr>
+            <tr>${term.map((t) => `<th style="text-align:center;">${t.terminacion}</th>`).join('')}</tr>
+          </thead>
+          <tbody>
+            <tr>${term.map((t) => `<td style="text-align:right; padding: 6px 10px;">${formatNumber(t.cantidad || 0)}</td>`).join('')}</tr>
+          </tbody>
+        </table>
+      </div>`
+    : '';
+
+  card.innerHTML = `
+    <div class="card-header" style="background: linear-gradient(135deg, #6d28d9 0%, #9333ea 100%); color: white;">
+      <h3><i class="fas fa-trophy"></i> La Grande - Totales y Premios</h3>
+    </div>
+    <div class="card-body">
+      <div class="table-responsive">
+        <table class="table table-bordered table-striped" style="margin-bottom: 1rem; font-size: 0.92rem;">
+          <thead>
+            <tr>
+              <th style="padding: 8px 10px;">Destino</th>
+              <th style="text-align:right; padding: 8px 10px;">Billetes</th>
+              <th style="text-align:right; padding: 8px 10px;">Venta Bruta</th>
+              <th style="text-align:right; padding: 8px 10px;">Premios</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td style="padding: 8px 10px;"><strong>Agencias</strong></td>
+              <td style="text-align:right; padding: 8px 10px;">${formatNumber(resumen.apuestasTotal || 0)}</td>
+              <td style="text-align:right; padding: 8px 10px;">$${formatNumber(Math.round(resumen.recaudacion || 0))}</td>
+              <td style="text-align:right; padding: 8px 10px;">$${formatNumber(Math.round(oficial.importeTotalPremios || resumen.totalPremios || 0))}</td>
+            </tr>
+            <tr>
+              <td style="padding: 8px 10px;"><strong>Total</strong></td>
+              <td style="text-align:right; padding: 8px 10px;"><strong>${formatNumber(resumen.apuestasTotal || 0)}</strong></td>
+              <td style="text-align:right; padding: 8px 10px;"><strong>$${formatNumber(Math.round(resumen.recaudacion || 0))}</strong></td>
+              <td style="text-align:right; padding: 8px 10px;"><strong>$${formatNumber(Math.round(oficial.importeTotalPremios || resumen.totalPremios || 0))}</strong></td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="table-responsive">
+        <table class="table table-bordered table-striped" style="margin-bottom: 0; font-size: 0.92rem;">
+          <thead>
+            <tr>
+              <th style="padding: 8px 10px;">Premio</th>
+              <th style="text-align:right; padding: 8px 10px;">Orden</th>
+              <th style="text-align:right; padding: 8px 10px;">Monto</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${premios.length > 0
+              ? premios.map((p) => `
+                <tr>
+                  <td style="padding: 7px 10px;">${p.nombre || p.clave || '-'}</td>
+                  <td style="text-align:right; padding: 7px 10px;">${formatNumber(p.orden || 0)}</td>
+                  <td style="text-align:right; padding: 7px 10px;">$${formatNumber(Math.round(p.monto || 0))}</td>
+                </tr>
+              `).join('')
+              : '<tr><td colspan="3" class="text-center text-muted">Sin detalle de premios en XML</td></tr>'}
+          </tbody>
+        </table>
+      </div>
+      ${termHtml}
+    </div>
+  `;
+
+  card.classList.remove('hidden');
+  card.style.display = 'block';
+}
+
 // Ocultar card de Tombolina cuando se procesa otro juego
 function ocultarCardTombolina() {
   const card = document.getElementById('cp-tombolina-desglose-card');
@@ -3358,6 +3492,7 @@ function seleccionarJuegoPosterior(juego) {
   if (juego === 'quiniela ya') juego = 'Quiniela Ya';
   if (juego === 'tombolina') juego = 'Tombolina';
   if (juego === 'loto' || juego === 'LOTO') juego = 'Loto';
+  if (juego === 'la_grande' || juego === 'la grande') juego = 'La Grande';
 
   cpstJuegoSeleccionado = juego;
 
@@ -3377,7 +3512,7 @@ function seleccionarJuegoPosterior(juego) {
       subtitulo.textContent = 'Escrutinio Loto 5: 5 números (0-36), niveles 5/4/3 aciertos';
     } else if (juego === 'Quiniela Ya') {
       subtitulo.textContent = 'Carga y consolidación por agencia/provincia sin extractos';
-    } else if (['Quini 6', 'Brinco'].includes(juego)) {
+    } else if (['Quini 6', 'Brinco', 'La Grande'].includes(juego)) {
       subtitulo.textContent = `Escrutinio de ganadores para ${juego}`;
     } else {
       subtitulo.textContent = 'Análisis de ganadores post-sorteo';
@@ -3445,7 +3580,7 @@ function seleccionarJuegoPosterior(juego) {
   } else if (juego === 'Loto 5') {
     extractoLoto5?.classList.remove('hidden');
     detalleLoto5?.classList.remove('hidden');
-  } else if (juego === 'Quini 6') {
+  } else if (juego === 'Quini 6' || juego === 'La Grande') {
     extractoQuini6?.classList.remove('hidden');
   } else if (juego === 'Brinco') {
     extractoBrinco?.classList.remove('hidden');
@@ -4319,6 +4454,7 @@ function cargarDatosControlPrevio() {
     if (tipoJuegoDetectado === 'Poceada') cpstModalidadSorteo = 'PCD';
     else if (tipoJuegoDetectado === 'Tombolina') cpstModalidadSorteo = 'TMB';
     else if (tipoJuegoDetectado === 'Quini 6') cpstModalidadSorteo = 'Q6';
+    else if (tipoJuegoDetectado === 'La Grande') cpstModalidadSorteo = 'LGR';
     else if (tipoJuegoDetectado === 'Brinco') cpstModalidadSorteo = 'BRC';
     else if (tipoJuegoDetectado === 'Loto') cpstModalidadSorteo = 'LOTO';
     else if (tipoJuegoDetectado === 'Loto 5') cpstModalidadSorteo = 'L5';
@@ -4800,6 +4936,7 @@ async function cargarZipPosterior(input) {
     if (juegoConfig.nombre === 'Loto 5') endpoint = `${API_BASE}/control-previo/loto5/procesar-zip`;
     if (juegoConfig.nombre === 'Brinco') endpoint = `${API_BASE}/control-previo/brinco/procesar`;
     if (juegoConfig.nombre === 'Quini 6') endpoint = `${API_BASE}/control-previo/quini6/procesar`;
+    if (juegoConfig.nombre === 'La Grande') endpoint = `${API_BASE}/control-previo/la-grande/procesar`;
 
     const response = await fetch(endpoint, {
       method: 'POST',
@@ -7281,10 +7418,10 @@ async function ejecutarEscrutinio() {
       showToast('Cargue el extracto de BRINCO (6 números para Tradicional)', 'warning');
       return;
     }
-  } else if (cpstJuegoSeleccionado === 'Quini 6') {
+  } else if (cpstJuegoSeleccionado === 'Quini 6' || cpstJuegoSeleccionado === 'La Grande') {
     // Para QUINI 6 necesitamos al menos Tradicional Primera
     if (!cpstExtractoQuini6 || !cpstExtractoQuini6.tradicional || !cpstExtractoQuini6.tradicional.primera || cpstExtractoQuini6.tradicional.primera.length < 6) {
-      showToast('Cargue el extracto de QUINI 6 (6 números para Tradicional Primera)', 'warning');
+      showToast(`Cargue el extracto de ${cpstJuegoSeleccionado.toUpperCase()} (6 números para Tradicional Primera)`, 'warning');
       return;
     }
   }
@@ -7446,6 +7583,18 @@ async function ejecutarEscrutinio() {
       sincronizarMetaSorteoPosterior(cpstResultados, cpstExtractoQuini6);
       mostrarResultadosEscrutinioQuini6(cpstResultados);
       showToast('Escrutinio QUINI 6 completado', 'success');
+
+    } else if (cpstJuegoSeleccionado === 'La Grande') {
+      const response = await controlPosteriorAPI.escrutinioLaGrande({
+        registros: cpstRegistrosNTF,
+        extracto: cpstExtractoQuini6,
+        datosControlPrevio: cpstDatosControlPrevio
+      });
+
+      cpstResultados = response.data;
+      sincronizarMetaSorteoPosterior(cpstResultados, cpstExtractoQuini6);
+      mostrarResultadosEscrutinioQuini6(cpstResultados);
+      showToast('Escrutinio La Grande completado', 'success');
 
     } else {
       // Ejecutar escrutinio de Quiniela (código existente)
@@ -11898,6 +12047,7 @@ function getBadgeClassForJuego(juego) {
   const lower = juego.toLowerCase();
   if (lower.includes('quiniela') && !lower.includes('poceada')) return 'badge-primary';
   if (lower.includes('quini 6')) return 'badge-success';
+  if (lower.includes('la grande')) return 'badge-success';
   if (lower.includes('brinco')) return 'badge-warning';
   if (lower.includes('loto 5')) return 'badge-info';
   if (lower.includes('loto plus')) return 'badge-purple';
@@ -12207,6 +12357,22 @@ let dashboardFiltrosInfo = null;
 let controlPrevioData = [];
 let escrutiniosData = [];
 
+function esErrorConexionAPI(error) {
+  const msg = String(error?.message || '').toLowerCase();
+  return (
+    error?.name === 'TypeError' ||
+    msg.includes('failed to fetch') ||
+    msg.includes('networkerror') ||
+    msg.includes('load failed') ||
+    msg.includes('connection refused') ||
+    msg.includes('api local')
+  );
+}
+
+function mensajeConexionAPI() {
+  return 'API local no disponible. Iniciá el backend en localhost:3000 con npm start o npm run dev.';
+}
+
 // Inicializar vista de reportes
 function initReportes() {
   // Configurar fechas por defecto (últimos 30 días)
@@ -12314,6 +12480,7 @@ function updateDashboardGameIndicator() {
       'poceada': 'bg-warning',
       'tombolina': 'bg-success',
       'quini6': 'bg-info',
+      'la_grande': 'bg-info',
       'brinco': 'bg-secondary',
       'loto': 'bg-danger',
       'loto5': 'bg-dark'
@@ -12359,6 +12526,9 @@ async function cargarFiltrosDashboard() {
     }
   } catch (error) {
     console.error('Error cargando filtros:', error);
+    if (esErrorConexionAPI(error)) {
+      showToast(mensajeConexionAPI(), 'error');
+    }
   }
 }
 
@@ -12473,7 +12643,7 @@ async function buscarDashboard() {
     console.error('Error buscando dashboard:', error);
     document.getElementById('dash-loading').classList.add('hidden');
     document.getElementById('dash-no-data').classList.remove('hidden');
-    showToast('Error de conexión', 'error');
+    showToast(esErrorConexionAPI(error) ? mensajeConexionAPI() : 'Error de conexión', 'error');
   }
 }
 
@@ -13796,7 +13966,9 @@ async function buscarControlPrevio() {
 
   } catch (error) {
     console.error('Error cargando control previo:', error);
-    tbody.innerHTML = '<tr><td colspan="10" class="text-center text-danger">Error cargando datos</td></tr>';
+    const mensaje = esErrorConexionAPI(error) ? 'API local no disponible (localhost:3000)' : 'Error cargando datos';
+    tbody.innerHTML = `<tr><td colspan="10" class="text-center text-danger">${mensaje}</td></tr>`;
+    if (esErrorConexionAPI(error)) showToast(mensajeConexionAPI(), 'error');
   }
 }
 
@@ -14085,7 +14257,9 @@ async function buscarEscrutinios() {
 
   } catch (error) {
     console.error('Error cargando escrutinios:', error);
-    tbody.innerHTML = '<tr><td colspan="9" class="text-center text-danger">Error cargando datos</td></tr>';
+    const mensaje = esErrorConexionAPI(error) ? 'API local no disponible (localhost:3000)' : 'Error cargando datos';
+    tbody.innerHTML = `<tr><td colspan="9" class="text-center text-danger">${mensaje}</td></tr>`;
+    if (esErrorConexionAPI(error)) showToast(mensajeConexionAPI(), 'error');
   }
 }
 
@@ -14992,6 +15166,8 @@ async function calcularFacturacionJuegosUTE() {
   const fechaInicio = document.getElementById('fjg-fecha-inicio')?.value;
   const fechaFin    = document.getElementById('fjg-fecha-fin')?.value;
   const tope        = document.getElementById('fjg-tope')?.value || '105000000';
+  const laGrandePrecioBillete = document.getElementById('fjg-la-grande-precio-billete')?.value || '0';
+  const laGrandeSorteosManual = document.getElementById('fjg-la-grande-sorteos')?.value || '';
 
   if (!fechaInicio || !fechaFin) {
     showToast('Seleccioná fecha inicio y fecha fin', 'warning');
@@ -15009,8 +15185,13 @@ async function calcularFacturacionJuegosUTE() {
     const params = {
       fecha_inicio: fechaInicio,
       fecha_fin: fechaFin,
-      tope
+      tope,
+      la_grande_precio_billete: laGrandePrecioBillete
     };
+
+    if (laGrandeSorteosManual !== '') {
+      params.la_grande_sorteos_manual = laGrandeSorteosManual;
+    }
 
     const clienteUTE = juegosOfflineAPI?.facturacionJuegos?.getUTE;
     let resp;
@@ -15028,7 +15209,10 @@ async function calcularFacturacionJuegosUTE() {
     renderFacturacionJuegosUTE(resp.data);
 
   } catch (err) {
-    showToast('Error: ' + err.message, 'error');
+    const mensaje = esErrorConexionAPI(err)
+      ? mensajeConexionAPI()
+      : ('Error: ' + err.message);
+    showToast(mensaje, 'error');
     console.error('[FJG]', err);
   } finally {
     document.getElementById('fjg-loading')?.classList.add('hidden');

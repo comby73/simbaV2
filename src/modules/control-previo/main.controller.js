@@ -5,12 +5,15 @@ const { errorResponse, successResponse } = require('../../shared/helpers');
 const quinielaController = require('./quiniela.controller');
 const quini6Controller = require('./quini6.controller');
 const brincoController = require('./brinco.controller');
+const laGrandeController = require('./la-grande.controller');
 
 // Mapeo de códigos de juego (NTF Pos 3-4) - Códigos internos LOTBA
 const JUEGOS_MAP = {
   '05': { id: 'LOTO5', nombre: 'Loto 5', controller: null },
   '09': { id: 'LOTO', nombre: 'Loto Plus', controller: null },
+  '41': { id: 'LA_GRANDE', nombre: 'La Grande', controller: laGrandeController },
   '13': { id: 'BRINCO', nombre: 'Brinco', controller: brincoController },
+  '70': { id: 'LA_GRANDE', nombre: 'La Grande', controller: laGrandeController },
   '69': { id: 'QUINI6', nombre: 'Quini 6', controller: quini6Controller },
   '74': { id: 'TOMBOLINA', nombre: 'Tombolina', controller: null },
   '79': { id: 'QUINIELA_YA', nombre: 'Quiniela YA', controller: null },
