@@ -1019,6 +1019,11 @@ const getFacturacionJuegosUTE = async (req, res) => {
         let baseFacturacionProv = comp.recFactProv;
         let baseFacturacionInt = comp.recFactInt;
         let baseFacturacionTotal = comp.recFactTotal;
+        let recaudacionDetalleCABA = comp.recFactCABA;
+        let recaudacionDetalleProv = comp.recFactProv;
+        let recaudacionDetalleInt = comp.recFactInt;
+        let recaudacionDetalleTotal = comp.recFactTotal;
+        let cantSorteosDetalle = cantSorteos;
         let notaComponente = null;
 
         if (juegoKey === 'la_grande') {
@@ -1029,7 +1034,27 @@ const getFacturacionJuegosUTE = async (req, res) => {
           baseFacturacionInt = 0;
           baseFacturacionTotal = baseFacturacionBilletes;
 
-          notaComponente = `La Grande: recaudación real para prorrateo = ${Math.round(recBilletes * 100) / 100}; base facturable billetes = ${Math.round(baseFacturacionBilletes * 100) / 100}`;
+          // El detalle por juego debe reflejar el mismo universo temporal de billetes
+          // usado en el cuadro total (incluyendo mes anterior cuando corresponde).
+          recaudacionDetalleCABA = recBilletes;
+          recaudacionDetalleProv = 0;
+          recaudacionDetalleInt = 0;
+          recaudacionDetalleTotal = recBilletes;
+
+          if (laGrandeIncluirMesAnterior) {
+            const sorteosUnicos = new Set(
+              [...(vendidosPorSorteo || []), ...(vendidosMesAnterior || [])]
+                .map((x) => Number(x?.numero_sorteo) || 0)
+                .filter((n) => n > 0)
+            );
+            cantSorteosDetalle = sorteosUnicos.size || sorteosBilletes;
+          }
+
+          const resumenVendidos = [...(vendidosPorSorteo || []), ...(laGrandeIncluirMesAnterior ? (vendidosMesAnterior || []) : [])]
+            .map((x) => `${x.numero_sorteo}:${Number(x.vendidos || 0).toLocaleString('es-AR')}`)
+            .join(' | ');
+
+          notaComponente = `La Grande: recaudación real para prorrateo = ${Math.round(recBilletes * 100) / 100}; base facturable billetes = ${Math.round(baseFacturacionBilletes * 100) / 100}; vendidos por emisión = ${resumenVendidos || 'sin detalle'}`;
         }
 
         // -- CABA 3.1.1 --
@@ -1159,12 +1184,12 @@ const getFacturacionJuegosUTE = async (req, res) => {
           juego: comp.key,
           juego_padre: juegoKey,
           nombre: nombreComponente,
-          cant_sorteos: cantSorteos,
+          cant_sorteos: cantSorteosDetalle,
           recaudacion: {
-            caba:       comp.recFactCABA,
-            provincias: comp.recFactProv,
-            internet:   comp.recFactInt,
-            total:      comp.recFactTotal
+            caba:       recaudacionDetalleCABA,
+            provincias: recaudacionDetalleProv,
+            internet:   recaudacionDetalleInt,
+            total:      recaudacionDetalleTotal
           },
           base_facturacion: {
             caba: baseFacturacionCABA,
