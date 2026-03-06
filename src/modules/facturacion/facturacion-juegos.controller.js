@@ -92,6 +92,11 @@ function parseJSONSafe(value) {
   }
 }
 
+// Normaliza el nombre de juego en SQL para contemplar variantes
+// como "la_grande", "la grande de la nacional", etc.
+const SQL_JUEGO_COMPACT = "LOWER(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(TRIM(juego), '_', ''), ' ', ''), '-', ''), '.', ''), '\\t', ''))";
+const SQL_LA_GRANDE_FILTRO = `${SQL_JUEGO_COMPACT} LIKE 'lagrande%'`;
+
 function normalizarDesglose(rows, itemsBase) {
   const total = rows.reduce((s, i) => s + (i.recaudacion || 0), 0);
   if (!total) return null;
@@ -524,22 +529,59 @@ const getFacturacionJuegosUTE = async (req, res) => {
         COUNT(DISTINCT cpa.numero_sorteo) AS cant_sorteos
       FROM (
         SELECT
-          juego,
-          ${colFechaCPA} AS fecha_base,
-          numero_sorteo,
-          COALESCE(NULLIF(TRIM(modalidad), ''), 'N') AS modalidad,
-          COALESCE(NULLIF(TRIM(codigo_agencia), ''), '0') AS codigo_agencia,
-          MAX(COALESCE(NULLIF(TRIM(codigo_provincia), ''), '')) AS codigo_provincia,
-          MAX(total_recaudacion) AS total_recaudacion
-        FROM control_previo_agencias
-        WHERE ${colFechaCPA} >= ? AND ${colFechaCPA} <= ?
-        GROUP BY juego, fecha_base, numero_sorteo, modalidad, codigo_agencia
+          b.juego,
+          b.fecha_base,
+          b.numero_sorteo,
+          b.modalidad,
+          b.codigo_agencia,
+          b.codigo_provincia,
+          b.total_recaudacion
+        FROM (
+          SELECT
+            juego,
+            ${colFechaCPA} AS fecha_base,
+            numero_sorteo,
+            COALESCE(NULLIF(TRIM(modalidad), ''), 'N') AS modalidad,
+            COALESCE(NULLIF(TRIM(codigo_agencia), ''), '0') AS codigo_agencia,
+            MAX(COALESCE(NULLIF(TRIM(codigo_provincia), ''), '')) AS codigo_provincia,
+            MAX(total_recaudacion) AS total_recaudacion
+          FROM control_previo_agencias
+          WHERE ${colFechaCPA} >= ? AND ${colFechaCPA} <= ?
+          GROUP BY juego, fecha_base, numero_sorteo, modalidad, codigo_agencia
+        ) b
+        WHERE LOWER(TRIM(b.juego)) <> 'poceada'
+
+        UNION ALL
+
+        SELECT
+          b.juego,
+          MIN(b.fecha_base) AS fecha_base,
+          b.numero_sorteo,
+          b.modalidad,
+          b.codigo_agencia,
+          MAX(b.codigo_provincia) AS codigo_provincia,
+          MAX(b.total_recaudacion) AS total_recaudacion
+        FROM (
+          SELECT
+            juego,
+            ${colFechaCPA} AS fecha_base,
+            numero_sorteo,
+            COALESCE(NULLIF(TRIM(modalidad), ''), 'N') AS modalidad,
+            COALESCE(NULLIF(TRIM(codigo_agencia), ''), '0') AS codigo_agencia,
+            MAX(COALESCE(NULLIF(TRIM(codigo_provincia), ''), '')) AS codigo_provincia,
+            MAX(total_recaudacion) AS total_recaudacion
+          FROM control_previo_agencias
+          WHERE ${colFechaCPA} >= ? AND ${colFechaCPA} <= ?
+          GROUP BY juego, fecha_base, numero_sorteo, modalidad, codigo_agencia
+        ) b
+        WHERE LOWER(TRIM(b.juego)) = 'poceada'
+        GROUP BY b.juego, b.numero_sorteo, b.modalidad, b.codigo_agencia
       ) cpa
       GROUP BY LOWER(TRIM(cpa.juego))
       ORDER BY LOWER(TRIM(cpa.juego))
     `;
 
-    const rows = await query(sql, [fecha_inicio, fecha_fin]);
+    const rows = await query(sql, [fecha_inicio, fecha_fin, fecha_inicio, fecha_fin]);
 
     const rowsNormalizadas = rows.map((row) => {
       const juegoKey = normalizarJuegoKey(row.juego);
@@ -672,7 +714,7 @@ const getFacturacionJuegosUTE = async (req, res) => {
             numero_sorteo,
             SUM(total_apuestas) AS vendidos
           FROM control_previo_agencias
-          WHERE LOWER(TRIM(juego)) = 'la_grande'
+          WHERE ${SQL_LA_GRANDE_FILTRO}
             AND ${colFechaCPA} >= ?
             AND ${colFechaCPA} <= ?
           GROUP BY numero_sorteo
@@ -727,7 +769,7 @@ const getFacturacionJuegosUTE = async (req, res) => {
               numero_sorteo,
               SUM(total_apuestas) AS vendidos
             FROM control_previo_agencias
-            WHERE LOWER(TRIM(juego)) = 'la_grande'
+            WHERE ${SQL_LA_GRANDE_FILTRO}
               AND ${colFechaCPAPrev} >= ?
               AND ${colFechaCPAPrev} <= ?
             GROUP BY numero_sorteo
@@ -779,7 +821,7 @@ const getFacturacionJuegosUTE = async (req, res) => {
             const [prevRec] = await query(`
               SELECT COALESCE(SUM(total_recaudacion), 0) AS recaudacion
               FROM control_previo_agencias
-              WHERE LOWER(TRIM(juego)) = 'la_grande'
+              WHERE ${SQL_LA_GRANDE_FILTRO}
                 AND ${colFechaCPAPrev} >= ?
                 AND ${colFechaCPAPrev} <= ?
             `, [rangoMesAnterior.desde, rangoMesAnterior.hasta]);
