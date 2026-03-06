@@ -3465,28 +3465,28 @@
                 <label>Tope Estipulado ($)</label>
                 <input type="number" id="fjg-tope" class="form-control" value="105000000" step="1000000">
               </div>
-              <div class="form-group" style="flex:1; min-width:220px;">
+              <div class="form-group hidden" id="fjg-billete-precio-wrap" style="flex:1; min-width:220px;">
                 <label>La Grande - Precio billete manual ($)</label>
                 <input type="number" id="fjg-la-grande-precio-billete" class="form-control" value="0" step="1" min="0">
               </div>
-              <div class="form-group" style="flex:1; min-width:190px;">
+              <div class="form-group hidden" id="fjg-billete-sorteos-wrap" style="flex:1; min-width:190px;">
                 <label>La Grande - Sorteos manuales (opcional)</label>
                 <input type="number" id="fjg-la-grande-sorteos" class="form-control" value="" step="1" min="0" placeholder="Auto por período">
               </div>
-              <div class="form-group" style="flex:1; min-width:180px;">
+              <div class="form-group hidden" id="fjg-billete-pcto-wrap" style="flex:1; min-width:180px;">
                 <label>Billetes - % ofertado (E34)</label>
                 <input type="number" id="fjg-la-grande-pct-ofertado" class="form-control" value="0.0242" step="0.0001" min="0">
               </div>
-              <div class="form-group" style="flex:1; min-width:180px;">
+              <div class="form-group hidden" id="fjg-billete-pctr-wrap" style="flex:1; min-width:180px;">
                 <label>Billetes - % reducción (N35/O35)</label>
                 <input type="number" id="fjg-la-grande-pct-reducido" class="form-control" value="0.01815" step="0.0001" min="0">
               </div>
-              <div class="form-group" style="flex:1; min-width:220px;">
+              <div class="form-group hidden" id="fjg-billete-arrastre-wrap" style="flex:1; min-width:220px;">
                 <label>Billetes - Arrastre mes anterior ($)</label>
                 <input type="number" id="fjg-la-grande-arrastre-importe" class="form-control" value="0" step="1" min="0">
               </div>
               <div class="fjg-actions" style="flex:0 0 auto; padding-bottom:0.1rem;">
-                <button class="btn btn-secondary" onclick="abrirModalBilletesLaGrande()" style="margin-right:.5rem;">
+                <button class="btn btn-secondary hidden" id="fjg-btn-valores-sorteo" onclick="abrirModalBilletesLaGrande()" style="margin-right:.5rem;">
                   <i class="fas fa-list"></i> Valores por sorteo
                 </button>
                 <button class="btn btn-primary" onclick="calcularFacturacionJuegosUTE()">
@@ -3494,14 +3494,21 @@
                 </button>
               </div>
             </div>
-            <small class="text-muted" id="fjg-billetes-config-resumen" style="display:block; margin-top:.5rem;">
+            <small class="text-muted hidden" id="fjg-billetes-config-resumen" style="display:block; margin-top:.5rem;">
               Sin valores por sorteo configurados (usa precio manual o recaudación).
             </small>
+            <div id="fjg-billetes-mes-anterior-wrap" class="hidden" style="margin-top:.6rem;">
+              <label style="display:flex; align-items:center; gap:.5rem; font-weight:600;">
+                <input type="checkbox" id="fjg-la-grande-incluir-mes-anterior">
+                Incluir emisión del mes anterior
+              </label>
+              <small id="fjg-billetes-mes-anterior-info" class="text-muted"></small>
+            </div>
           </div>
         </div>
 
         <!-- Origen y trazabilidad -->
-        <div class="card fjg-card" style="margin-bottom:1.5rem;">
+        <div class="card fjg-card hidden" style="margin-bottom:1.5rem;">
           <div class="card-header">
             <h3 class="card-title"><i class="fas fa-circle-info"></i> Origen de datos y cálculo</h3>
           </div>
@@ -3527,7 +3534,7 @@
           </div>
         </div>
 
-        <div class="card fjg-card" style="margin-bottom:1.5rem;">
+        <div class="card fjg-card hidden" style="margin-bottom:1.5rem;">
           <div class="card-header">
             <h3 class="card-title"><i class="fas fa-sitemap"></i> Flujo Total Gral. (modelo Excel)</h3>
           </div>
@@ -3651,12 +3658,6 @@
             <div class="card-header">
               <h3 class="card-title"><i class="fas fa-list-ol"></i> Líneas SAP (HES GRAL)</h3>
               <div style="display:flex; gap:0.5rem;">
-                <button class="btn btn-sm btn-secondary" onclick="copiarLineasSAPJuegos()">
-                  <i class="fas fa-copy"></i> Copiar
-                </button>
-                <button class="btn btn-sm btn-secondary" onclick="exportarLineasSAPJuegosCSV()">
-                  <i class="fas fa-download"></i> CSV
-                </button>
                 <button class="btn btn-sm btn-secondary" onclick="copiarLineasSAPJuegosOnline()">
                   <i class="fas fa-copy"></i> Copiar Online
                 </button>
@@ -3800,9 +3801,9 @@
   <!-- Config local (API keys) - debe cargarse primero, no se sube a git -->
   <script src="js/config.local.js" onerror="console.warn('config.local.js no encontrado - usando config por defecto')"></script>
   <script src="js/config.js?v=20260206g"></script>
-  <script src="js/api.js?v=20260306b"></script>
+  <script src="js/api.js?v=20260306c"></script>
   <script src="js/ocr-extractos.js?v=20260304b"></script>
-  <script src="js/app.js?v=20260306b"></script>
+  <script src="js/app.js?v=20260306d"></script>
 </body>
 
 </html>

@@ -15171,6 +15171,7 @@ async function calcularFacturacionJuegosUTE() {
   const laGrandePctOfertado = document.getElementById('fjg-la-grande-pct-ofertado')?.value || '';
   const laGrandePctReducido = document.getElementById('fjg-la-grande-pct-reducido')?.value || '';
   const laGrandeArrastreImporte = document.getElementById('fjg-la-grande-arrastre-importe')?.value || '';
+  const laGrandeIncluirMesAnterior = document.getElementById('fjg-la-grande-incluir-mes-anterior')?.checked;
   const valoresBilletes = window._fjgValoresBilletesPorSorteo || {};
 
   if (!fechaInicio || !fechaFin) {
@@ -15204,6 +15205,9 @@ async function calcularFacturacionJuegosUTE() {
     }
     if (laGrandeArrastreImporte !== '') {
       params.la_grande_arrastre_importe = laGrandeArrastreImporte;
+    }
+    if (laGrandeIncluirMesAnterior) {
+      params.la_grande_incluir_mes_anterior = '1';
     }
     if (Object.keys(valoresBilletes).length > 0) {
       params.la_grande_valores_sorteo = JSON.stringify(valoresBilletes);
@@ -15329,8 +15333,7 @@ function guardarValoresBilletesLaGrande(btn) {
 }
 
 function renderFacturacionJuegosUTE(data) {
-  renderOrigenFacturacionJuegos(data);
-  renderFlujoTotalGralFacturacionJuegos(data);
+  actualizarPanelBilletesFacturacion(data);
   renderCuadroTotalGralFacturacionJuegos(data);
 
   // --- Cards resumen ---
@@ -15414,6 +15417,54 @@ function renderFacturacionJuegosUTE(data) {
   renderTablaLineasSAPJuegos(data.lineasSAP || []);
 
   document.getElementById('fjg-resultados')?.classList.remove('hidden');
+}
+
+function actualizarPanelBilletesFacturacion(data) {
+  const filaBilletes = (data?.cuadroTotalGral?.filas || []).find((f) => f.canal === 'FACTURACIÓN BILLETES');
+  const hayBilletes = Number(filaBilletes?.recaudacion || 0) > 0;
+
+  const ids = [
+    'fjg-billete-precio-wrap',
+    'fjg-billete-sorteos-wrap',
+    'fjg-billete-pcto-wrap',
+    'fjg-billete-pctr-wrap',
+    'fjg-billete-arrastre-wrap',
+    'fjg-btn-valores-sorteo',
+    'fjg-billetes-config-resumen'
+  ];
+
+  ids.forEach((id) => {
+    const el = document.getElementById(id);
+    if (!el) return;
+    el.classList.toggle('hidden', !hayBilletes);
+  });
+
+  const wrapMesAnterior = document.getElementById('fjg-billetes-mes-anterior-wrap');
+  const infoMesAnterior = document.getElementById('fjg-billetes-mes-anterior-info');
+
+  if (!hayBilletes) {
+    if (wrapMesAnterior) wrapMesAnterior.classList.add('hidden');
+    return;
+  }
+
+  const vendidosPrev = filaBilletes?.metadata?.vendidosMesAnterior || [];
+  const rangoPrev = filaBilletes?.metadata?.rangoMesAnterior;
+  const tienePrev = Array.isArray(vendidosPrev) && vendidosPrev.length > 0;
+
+  if (wrapMesAnterior) wrapMesAnterior.classList.toggle('hidden', !tienePrev);
+  if (infoMesAnterior) {
+    if (!tienePrev) {
+      infoMesAnterior.textContent = '';
+    } else {
+      const detalle = vendidosPrev
+        .map((x) => `${x.numero_sorteo} (${Number(x.vendidos || 0).toLocaleString('es-AR')} vendidos)`)
+        .join(' | ');
+      const rango = rangoPrev?.desde && rangoPrev?.hasta
+        ? `Mes anterior ${rangoPrev.desde} a ${rangoPrev.hasta}. `
+        : '';
+      infoMesAnterior.textContent = `${rango}Detectado: ${detalle}`;
+    }
+  }
 }
 
 function renderTablaLineasSAPJuegos(lineas) {
@@ -15554,22 +15605,7 @@ function renderCuadroTotalGralFacturacionJuegos(data) {
 }
 
 function copiarLineasSAPJuegos() {
-  if (!_fjgDatosUTE?.lineasSAP?.length) {
-    showToast('No hay líneas SAP para copiar', 'warning');
-    return;
-  }
-
-  const lineas = _fjgDatosUTE.lineasSAP;
-  // Formato Hoja1 columnas B, C, D, F, H
-  const cabecera = 'B_Descripcion\tC_Cantidad\tD_UM\tF_Importe\tH_Ref_SAP';
-  const filas = lineas.map(l =>
-    `${l.descripcion}\t${l.cantidad}\t${l.unidad}\t${(l.redondeado || 0).toFixed(3)}\t${l.material || '-'} / ${l.centro || '-'}`
-  );
-  const texto = [cabecera, ...filas].join('\n');
-
-  navigator.clipboard.writeText(texto).then(() => {
-    showToast(`${lineas.length} líneas SAP copiadas al portapapeles`, 'success');
-  }).catch(() => showToast('Error al copiar', 'error'));
+  showToast('La copia general está deshabilitada para evitar mezcla. Usá Copiar Online o Copiar Web.', 'info');
 }
 
 function obtenerLineasSAPOnlineYWeb() {
@@ -15748,5 +15784,18 @@ function initFacturacionJuegos() {
   if (!window._fjgValoresBilletesPorSorteo) {
     window._fjgValoresBilletesPorSorteo = {};
   }
+  [
+    'fjg-billete-precio-wrap',
+    'fjg-billete-sorteos-wrap',
+    'fjg-billete-pcto-wrap',
+    'fjg-billete-pctr-wrap',
+    'fjg-billete-arrastre-wrap',
+    'fjg-btn-valores-sorteo',
+    'fjg-billetes-config-resumen',
+    'fjg-billetes-mes-anterior-wrap'
+  ].forEach((id) => {
+    const el = document.getElementById(id);
+    if (el) el.classList.add('hidden');
+  });
   actualizarResumenValoresBilletesLaGrande();
 }

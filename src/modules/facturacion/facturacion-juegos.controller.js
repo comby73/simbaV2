@@ -416,6 +416,29 @@ function parsearValoresBilletesPorSorteo(raw) {
   }
 }
 
+function parseBool(value) {
+  const v = String(value || '').toLowerCase().trim();
+  return v === '1' || v === 'true' || v === 'si' || v === 'yes';
+}
+
+function obtenerRangoMesAnterior(fechaISO) {
+  const base = new Date(`${fechaISO}T00:00:00`);
+  if (Number.isNaN(base.getTime())) return null;
+
+  const firstOfCurrent = new Date(base.getFullYear(), base.getMonth(), 1);
+  const lastOfPrevious = new Date(firstOfCurrent.getTime() - 24 * 60 * 60 * 1000);
+  const firstOfPrevious = new Date(lastOfPrevious.getFullYear(), lastOfPrevious.getMonth(), 1);
+
+  const fmt = (d) => {
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    return `${y}-${m}-${day}`;
+  };
+
+  return { desde: fmt(firstOfPrevious), hasta: fmt(lastOfPrevious) };
+}
+
 // ============================================================
 // ENDPOINT: GET /api/facturacion/juegos-ute
 // Query params: fecha_inicio, fecha_fin (YYYY-MM-DD), tope (opcional)
@@ -433,6 +456,7 @@ const getFacturacionJuegosUTE = async (req, res) => {
     );
     const laGrandeArrastreImporte = Math.max(0, parseFloat(req.query.la_grande_arrastre_importe) || 0);
     const laGrandeValoresPorSorteo = parsearValoresBilletesPorSorteo(req.query.la_grande_valores_sorteo);
+    const laGrandeIncluirMesAnterior = parseBool(req.query.la_grande_incluir_mes_anterior);
 
     if (!fecha_inicio || !fecha_fin) {
       return res.status(400).json({
@@ -637,6 +661,9 @@ const getFacturacionJuegosUTE = async (req, res) => {
     const tieneValoresPorSorteo = Object.keys(laGrandeValoresPorSorteo).length > 0;
     let vendidosPorSorteo = [];
 
+    let vendidosMesAnterior = [];
+    let rangoMesAnterior = null;
+
     if (filaLaGrande || tieneValoresPorSorteo) {
       try {
         const vendidosPorSorteoRows = await query(`
@@ -656,12 +683,38 @@ const getFacturacionJuegosUTE = async (req, res) => {
       } catch {
         vendidosPorSorteo = [];
       }
+
+      rangoMesAnterior = obtenerRangoMesAnterior(fecha_inicio);
+      if (rangoMesAnterior) {
+        try {
+          const prevRows = await query(`
+            SELECT numero_sorteo, SUM(registros_validos) AS vendidos
+            FROM control_previo_la_grande
+            WHERE fecha >= ? AND fecha <= ?
+            GROUP BY numero_sorteo
+            ORDER BY numero_sorteo
+          `, [rangoMesAnterior.desde, rangoMesAnterior.hasta]);
+
+          vendidosMesAnterior = Array.isArray(prevRows)
+            ? prevRows.map((r) => ({
+                numero_sorteo: Number(r.numero_sorteo) || 0,
+                vendidos: Number(r.vendidos) || 0
+              })).filter((r) => r.numero_sorteo > 0)
+            : [];
+        } catch {
+          vendidosMesAnterior = [];
+        }
+      }
     }
 
     let baseFacturacionBilletes = 0;
 
     if (tieneValoresPorSorteo && vendidosPorSorteo.length > 0) {
-      baseFacturacionBilletes = vendidosPorSorteo.reduce((acc, item) => {
+      const vendidosBase = laGrandeIncluirMesAnterior
+        ? vendidosPorSorteo.concat(vendidosMesAnterior || [])
+        : vendidosPorSorteo;
+
+      baseFacturacionBilletes = vendidosBase.reduce((acc, item) => {
         const key = String(item.numero_sorteo);
         const valorSorteo = Number(laGrandeValoresPorSorteo[key] || 0);
         const valorAplicado = valorSorteo > 0 ? valorSorteo : laGrandePrecioBilleteManual;
@@ -775,6 +828,9 @@ const getFacturacionJuegosUTE = async (req, res) => {
           recaudacionOriginal: recBilletesOriginal,
           valoresPorSorteo: laGrandeValoresPorSorteo,
           vendidosPorSorteo,
+          vendidosMesAnterior,
+          rangoMesAnterior,
+          incluirMesAnterior: laGrandeIncluirMesAnterior,
           usaValoresPorSorteo: tieneValoresPorSorteo
         }
       }
@@ -1026,6 +1082,7 @@ const getFacturacionJuegosUTE = async (req, res) => {
             la_grande_pct_ofertado: laGrandePctOfertado,
             la_grande_pct_reducido: laGrandePctReducido,
             la_grande_arrastre_importe: laGrandeArrastreImporte,
+            la_grande_incluir_mes_anterior: laGrandeIncluirMesAnterior,
             la_grande_valores_sorteo: laGrandeValoresPorSorteo
           }
         },
