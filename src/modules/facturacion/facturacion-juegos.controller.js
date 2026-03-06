@@ -653,7 +653,7 @@ const getFacturacionJuegosUTE = async (req, res) => {
     const filaLaGrande = rowsConsolidadas.find((r) => String(r?.juego || '').toLowerCase() === 'la_grande') || null;
     const filasSinBilletes = rowsConsolidadas.filter((r) => String(r?.juego || '').toLowerCase() !== 'la_grande');
     const recBilletesOriginal = parseFloat(filaLaGrande?.rec_total) || 0;
-    const recBilletes = recBilletesOriginal + laGrandeArrastreImporte;
+    let recBilletesMesAnterior = 0;
     const sorteosBilletes = laGrandeSorteosManual > 0
       ? laGrandeSorteosManual
       : (parseInt(filaLaGrande?.cant_sorteos, 10) || 0);
@@ -664,7 +664,7 @@ const getFacturacionJuegosUTE = async (req, res) => {
     let vendidosMesAnterior = [];
     let rangoMesAnterior = null;
 
-    if (filaLaGrande || tieneValoresPorSorteo) {
+    if (filaLaGrande || tieneValoresPorSorteo || laGrandeIncluirMesAnterior) {
       try {
         const vendidosPorSorteoRows = await query(`
           SELECT numero_sorteo, SUM(registros_validos) AS vendidos
@@ -704,12 +704,37 @@ const getFacturacionJuegosUTE = async (req, res) => {
         } catch {
           vendidosMesAnterior = [];
         }
+
+        if (laGrandeIncluirMesAnterior) {
+          try {
+            const colFechaCPAPrev = await resolverColumnaFechaControlPrevioAgenciasConDatos(
+              rangoMesAnterior.desde,
+              rangoMesAnterior.hasta
+            ) || colFechaCPA;
+
+            const [prevRec] = await query(`
+              SELECT COALESCE(SUM(total_recaudacion), 0) AS recaudacion
+              FROM control_previo_agencias
+              WHERE LOWER(TRIM(juego)) = 'la_grande'
+                AND ${colFechaCPAPrev} >= ?
+                AND ${colFechaCPAPrev} <= ?
+            `, [rangoMesAnterior.desde, rangoMesAnterior.hasta]);
+
+            recBilletesMesAnterior = Number(prevRec?.recaudacion) || 0;
+          } catch {
+            recBilletesMesAnterior = 0;
+          }
+        }
       }
     }
 
+    const recBilletes = recBilletesOriginal
+      + (laGrandeIncluirMesAnterior ? recBilletesMesAnterior : 0)
+      + laGrandeArrastreImporte;
+
     let baseFacturacionBilletes = 0;
 
-    if (tieneValoresPorSorteo && vendidosPorSorteo.length > 0) {
+    if (tieneValoresPorSorteo && (vendidosPorSorteo.length > 0 || (laGrandeIncluirMesAnterior && vendidosMesAnterior.length > 0))) {
       const vendidosBase = laGrandeIncluirMesAnterior
         ? vendidosPorSorteo.concat(vendidosMesAnterior || [])
         : vendidosPorSorteo;
@@ -723,10 +748,8 @@ const getFacturacionJuegosUTE = async (req, res) => {
     } else if (laGrandePrecioBilleteManual > 0) {
       baseFacturacionBilletes = laGrandePrecioBilleteManual * sorteosBilletes;
     } else {
-      baseFacturacionBilletes = recBilletesOriginal;
+      baseFacturacionBilletes = recBilletes;
     }
-
-    baseFacturacionBilletes += laGrandeArrastreImporte;
 
     // --- Calcular total recaudación para proporcionar tope ---
     const totalRecaudacionBruta = rowsConsolidadas.reduce((acc, r) => acc + (parseFloat(r.rec_total) || 0), 0);
@@ -826,6 +849,7 @@ const getFacturacionJuegosUTE = async (req, res) => {
           porcentajeReducido: laGrandePctReducido,
           arrastreImporte: laGrandeArrastreImporte,
           recaudacionOriginal: recBilletesOriginal,
+          recaudacionMesAnterior: recBilletesMesAnterior,
           valoresPorSorteo: laGrandeValoresPorSorteo,
           vendidosPorSorteo,
           vendidosMesAnterior,
@@ -1001,16 +1025,40 @@ const getFacturacionJuegosUTE = async (req, res) => {
           billingJuego.internet = b;
           billingJuego.total_neto += b.total_neto;
           const centroInt = cfg.centroInt || cfg.centro;
-          lineasJuego.push(
-            {
-              material: cfg.int[0],
-              descripcion: `INTERNET - ${nombreComponente} completo 11%`,
-              cantidad: 1, unidad: 'C/U',
-              importe: b.total_neto,
-              redondeado: Math.round(b.total_neto * 1000) / 1000,
-              centro: centroInt
-            }
-          );
+
+          // Mantener dos líneas (completo/reducido) para HES Web,
+          // consistente con la estructura de materiales SAP y el layout operativo.
+          if (cfg.int.length >= 2) {
+            lineasJuego.push(
+              {
+                material: cfg.int[0],
+                descripcion: `INTERNET - ${nombreComponente} completo 14,65%`,
+                cantidad: 1, unidad: 'C/U',
+                importe: b.importe_completo,
+                redondeado: Math.round(b.importe_completo * 1000) / 1000,
+                centro: centroInt
+              },
+              {
+                material: cfg.int[1],
+                descripcion: `INTERNET - ${nombreComponente} reducido 11%`,
+                cantidad: 1, unidad: 'C/U',
+                importe: b.importe_reducido,
+                redondeado: Math.round(b.importe_reducido * 1000) / 1000,
+                centro: centroInt
+              }
+            );
+          } else {
+            lineasJuego.push(
+              {
+                material: cfg.int[0],
+                descripcion: `INTERNET - ${nombreComponente} total`,
+                cantidad: 1, unidad: 'C/U',
+                importe: b.total_neto,
+                redondeado: Math.round(b.total_neto * 1000) / 1000,
+                centro: centroInt
+              }
+            );
+          }
         }
 
         totalBillingNeto += billingJuego.total_neto;

@@ -3582,6 +3582,42 @@ const obtenerStatsDashboard = async (req, res) => {
       });
     }
 
+    // La Grande
+    if (!juego || juego === 'la_grande') {
+      const [cpLG] = await query(`
+        SELECT
+          COUNT(DISTINCT CONCAT(fecha, numero_sorteo)) as sorteos,
+          COALESCE(SUM(total_recaudacion), 0) as recaudacion,
+          COALESCE(SUM(total_tickets), 0) as tickets,
+          COALESCE(SUM(total_apuestas), 0) as apuestas
+        FROM control_previo_agencias
+        WHERE juego = 'la_grande' ${whereQ}
+      `, paramsQ);
+
+      const [escLG] = await query(`
+        SELECT COALESCE(SUM(total_premios), 0) as premios
+        FROM escrutinio_la_grande
+        WHERE 1=1 ${whereQ}
+      `, paramsQ);
+
+      stats.total_recaudacion += parseFloat(cpLG?.recaudacion || 0);
+      stats.total_tickets += parseInt(cpLG?.tickets || 0);
+      stats.total_apuestas += parseInt(cpLG?.apuestas || 0);
+      stats.total_sorteos += parseInt(cpLG?.sorteos || 0);
+      stats.total_premios += parseFloat(escLG?.premios || 0);
+
+      const provinciasLG = await query(`
+        SELECT DISTINCT codigo_provincia
+        FROM control_previo_agencias
+        WHERE juego = 'la_grande' ${whereQ}
+      `, paramsQ);
+      provinciasLG.forEach(p => {
+        if (provinciaCuentaComoActiva(p.codigo_provincia)) {
+          provinciasSet.add(normalizarCodigoProvincia(p.codigo_provincia));
+        }
+      });
+    }
+
     // BLOQUE GENÉRICO PARA OTROS JUEGOS (Quini 6, Brinco, Loto, etc.)
     const otrosJuegosStats = ['quini6', 'brinco', 'loto', 'loto5', 'quinielaya'];
     for (const j of otrosJuegosStats) {
@@ -3852,7 +3888,7 @@ const obtenerFiltrosDashboard = async (req, res) => {
           sorteos: { min: sorteosQY?.min_sorteo || null, max: sorteosQY?.max_sorteo || null }
         }
       },
-      juegos: ['quiniela', 'quinielaya', 'poceada', 'tombolina', 'loto', 'loto5', 'quini6', 'brinco', 'hipicas'],
+      juegos: ['quiniela', 'quinielaya', 'poceada', 'tombolina', 'loto', 'loto5', 'quini6', 'brinco', 'la_grande', 'hipicas'],
       modalidades: ['R', 'P', 'M', 'V', 'N']
     });
 
