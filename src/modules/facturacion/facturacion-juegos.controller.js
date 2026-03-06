@@ -663,13 +663,18 @@ const getFacturacionJuegosUTE = async (req, res) => {
 
     let vendidosMesAnterior = [];
     let rangoMesAnterior = null;
+    let fuenteVendidosLaGrande = 'control_previo_agencias.total_apuestas';
 
     if (filaLaGrande || tieneValoresPorSorteo || laGrandeIncluirMesAnterior) {
       try {
         const vendidosPorSorteoRows = await query(`
-          SELECT numero_sorteo, SUM(registros_validos) AS vendidos
-          FROM control_previo_la_grande
-          WHERE fecha >= ? AND fecha <= ?
+          SELECT
+            numero_sorteo,
+            SUM(total_apuestas) AS vendidos
+          FROM control_previo_agencias
+          WHERE LOWER(TRIM(juego)) = 'la_grande'
+            AND ${colFechaCPA} >= ?
+            AND ${colFechaCPA} <= ?
           GROUP BY numero_sorteo
           ORDER BY numero_sorteo
         `, [fecha_inicio, fecha_fin]);
@@ -684,13 +689,47 @@ const getFacturacionJuegosUTE = async (req, res) => {
         vendidosPorSorteo = [];
       }
 
-      rangoMesAnterior = obtenerRangoMesAnterior(fecha_inicio);
-      if (rangoMesAnterior) {
+      if (vendidosPorSorteo.length === 0) {
         try {
-          const prevRows = await query(`
+          const vendidosFallbackRows = await query(`
             SELECT numero_sorteo, SUM(registros_validos) AS vendidos
             FROM control_previo_la_grande
             WHERE fecha >= ? AND fecha <= ?
+            GROUP BY numero_sorteo
+            ORDER BY numero_sorteo
+          `, [fecha_inicio, fecha_fin]);
+
+          vendidosPorSorteo = Array.isArray(vendidosFallbackRows)
+            ? vendidosFallbackRows.map((r) => ({
+                numero_sorteo: Number(r.numero_sorteo) || 0,
+                vendidos: Number(r.vendidos) || 0
+              })).filter((r) => r.numero_sorteo > 0)
+            : [];
+
+          if (vendidosPorSorteo.length > 0) {
+            fuenteVendidosLaGrande = 'control_previo_la_grande.registros_validos (fallback)';
+          }
+        } catch {
+          vendidosPorSorteo = [];
+        }
+      }
+
+      rangoMesAnterior = obtenerRangoMesAnterior(fecha_inicio);
+      if (rangoMesAnterior) {
+        try {
+          const colFechaCPAPrev = await resolverColumnaFechaControlPrevioAgenciasConDatos(
+            rangoMesAnterior.desde,
+            rangoMesAnterior.hasta
+          ) || colFechaCPA;
+
+          const prevRows = await query(`
+            SELECT
+              numero_sorteo,
+              SUM(total_apuestas) AS vendidos
+            FROM control_previo_agencias
+            WHERE LOWER(TRIM(juego)) = 'la_grande'
+              AND ${colFechaCPAPrev} >= ?
+              AND ${colFechaCPAPrev} <= ?
             GROUP BY numero_sorteo
             ORDER BY numero_sorteo
           `, [rangoMesAnterior.desde, rangoMesAnterior.hasta]);
@@ -703,6 +742,31 @@ const getFacturacionJuegosUTE = async (req, res) => {
             : [];
         } catch {
           vendidosMesAnterior = [];
+        }
+
+        if (vendidosMesAnterior.length === 0) {
+          try {
+            const prevFallbackRows = await query(`
+              SELECT numero_sorteo, SUM(registros_validos) AS vendidos
+              FROM control_previo_la_grande
+              WHERE fecha >= ? AND fecha <= ?
+              GROUP BY numero_sorteo
+              ORDER BY numero_sorteo
+            `, [rangoMesAnterior.desde, rangoMesAnterior.hasta]);
+
+            vendidosMesAnterior = Array.isArray(prevFallbackRows)
+              ? prevFallbackRows.map((r) => ({
+                  numero_sorteo: Number(r.numero_sorteo) || 0,
+                  vendidos: Number(r.vendidos) || 0
+                })).filter((r) => r.numero_sorteo > 0)
+              : [];
+
+            if (vendidosMesAnterior.length > 0 && fuenteVendidosLaGrande === 'control_previo_agencias.total_apuestas') {
+              fuenteVendidosLaGrande = 'control_previo_la_grande.registros_validos (fallback)';
+            }
+          } catch {
+            vendidosMesAnterior = [];
+          }
         }
 
         if (laGrandeIncluirMesAnterior) {
@@ -851,6 +915,7 @@ const getFacturacionJuegosUTE = async (req, res) => {
           recaudacionOriginal: recBilletesOriginal,
           recaudacionMesAnterior: recBilletesMesAnterior,
           valoresPorSorteo: laGrandeValoresPorSorteo,
+          fuenteVendidos: fuenteVendidosLaGrande,
           vendidosPorSorteo,
           vendidosMesAnterior,
           rangoMesAnterior,
