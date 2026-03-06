@@ -956,42 +956,69 @@ const getFacturacionJuegosUTE = async (req, res) => {
         let baseFacturacionTotal = comp.recFactTotal;
         let notaComponente = null;
 
-        if (juegoKey === 'la_grande' && laGrandePrecioBilleteManual > 0) {
-          const sorteosParaCalculo = laGrandeSorteosManual > 0 ? laGrandeSorteosManual : cantSorteos;
-          const baseManualTotal = laGrandePrecioBilleteManual * (sorteosParaCalculo || 0);
-          const distribuido = distribuirPorCanal(baseManualTotal, comp.recFactCABA, comp.recFactProv, comp.recFactInt);
+        if (juegoKey === 'la_grande') {
+          // En La Grande la recaudación real participa del prorrateo (topeRatio),
+          // pero el monto facturable surge de vendidos x valor por emisión.
+          baseFacturacionCABA = baseFacturacionBilletes;
+          baseFacturacionProv = 0;
+          baseFacturacionInt = 0;
+          baseFacturacionTotal = baseFacturacionBilletes;
 
-          baseFacturacionCABA = distribuido.caba;
-          baseFacturacionProv = distribuido.provincias;
-          baseFacturacionInt = distribuido.internet;
-          baseFacturacionTotal = baseManualTotal;
-
-          notaComponente = `Base manual La Grande: ${laGrandePrecioBilleteManual.toLocaleString('es-AR')} x ${sorteosParaCalculo} sorteo(s) = ${Math.round(baseManualTotal * 100) / 100}`;
+          notaComponente = `La Grande: recaudación real para prorrateo = ${Math.round(recBilletes * 100) / 100}; base facturable billetes = ${Math.round(baseFacturacionBilletes * 100) / 100}`;
         }
 
         // -- CABA 3.1.1 --
         if (baseFacturacionCABA > 0 && cfg.caba?.length >= 2) {
-          const b = calcularBillingCanal(baseFacturacionCABA, 'caba', topeRatio);
-          billingJuego.caba = b;
-          billingJuego.total_neto += b.total_neto;
-          lineasJuego.push(
-            {
-              material: cfg.caba[0],
-              descripcion: `${nombreComponente} 3.1.1 completo 6%`,
-              cantidad: 1, unidad: 'C/U',
-              importe: b.importe_completo,
-              redondeado: Math.round(b.importe_completo * 1000) / 1000,
-              centro: cfg.centro
-            },
-            {
-              material: cfg.caba[1],
-              descripcion: `${nombreComponente} 3.1.1 reducido 4,5%`,
-              cantidad: 1, unidad: 'C/U',
-              importe: b.importe_reducido,
-              redondeado: Math.round(b.importe_reducido * 1000) / 1000,
-              centro: cfg.centro
-            }
-          );
+          if (juegoKey === 'la_grande') {
+            const b = calcularBillingBilletes(
+              baseFacturacionCABA,
+              topeRatio,
+              laGrandePctOfertado,
+              laGrandePctReducido
+            );
+            billingJuego.caba = b;
+            billingJuego.total_neto += b.total_neto;
+            lineasJuego.push(
+              {
+                material: cfg.caba[0],
+                descripcion: `${nombreComponente} FACTURACIÓN BILLETES ofertado ${(laGrandePctOfertado * 100).toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}%`,
+                cantidad: 1, unidad: 'C/U',
+                importe: b.importe_completo,
+                redondeado: Math.round(b.importe_completo * 1000) / 1000,
+                centro: cfg.centro
+              },
+              {
+                material: cfg.caba[1],
+                descripcion: `${nombreComponente} FACTURACIÓN BILLETES reducido ${(laGrandePctReducido * 100).toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}%`,
+                cantidad: 1, unidad: 'C/U',
+                importe: b.importe_reducido,
+                redondeado: Math.round(b.importe_reducido * 1000) / 1000,
+                centro: cfg.centro
+              }
+            );
+          } else {
+            const b = calcularBillingCanal(baseFacturacionCABA, 'caba', topeRatio);
+            billingJuego.caba = b;
+            billingJuego.total_neto += b.total_neto;
+            lineasJuego.push(
+              {
+                material: cfg.caba[0],
+                descripcion: `${nombreComponente} 3.1.1 completo 6%`,
+                cantidad: 1, unidad: 'C/U',
+                importe: b.importe_completo,
+                redondeado: Math.round(b.importe_completo * 1000) / 1000,
+                centro: cfg.centro
+              },
+              {
+                material: cfg.caba[1],
+                descripcion: `${nombreComponente} 3.1.1 reducido 4,5%`,
+                cantidad: 1, unidad: 'C/U',
+                importe: b.importe_reducido,
+                redondeado: Math.round(b.importe_reducido * 1000) / 1000,
+                centro: cfg.centro
+              }
+            );
+          }
         }
 
         // -- Provincias 3.1.2 --
