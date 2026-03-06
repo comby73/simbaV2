@@ -397,6 +397,25 @@ function distribuirPorCanal(baseTotal, recCABA, recProv, recInt) {
   };
 }
 
+function parsearValoresBilletesPorSorteo(raw) {
+  if (!raw) return {};
+
+  try {
+    const data = typeof raw === 'string' ? JSON.parse(raw) : raw;
+    if (!data || typeof data !== 'object') return {};
+
+    const out = {};
+    for (const [k, v] of Object.entries(data)) {
+      const sorteo = String(k || '').trim();
+      const valor = Math.max(0, Number(v) || 0);
+      if (sorteo && valor > 0) out[sorteo] = valor;
+    }
+    return out;
+  } catch {
+    return {};
+  }
+}
+
 // ============================================================
 // ENDPOINT: GET /api/facturacion/juegos-ute
 // Query params: fecha_inicio, fecha_fin (YYYY-MM-DD), tope (opcional)
@@ -412,6 +431,7 @@ const getFacturacionJuegosUTE = async (req, res) => {
       0,
       parseFloat(req.query.la_grande_pct_reducido) || (laGrandePctOfertado * (1 - LIMITE_REDUCCION_WEB))
     );
+    const laGrandeValoresPorSorteo = parsearValoresBilletesPorSorteo(req.query.la_grande_valores_sorteo);
 
     if (!fecha_inicio || !fecha_fin) {
       return res.status(400).json({
@@ -611,9 +631,45 @@ const getFacturacionJuegosUTE = async (req, res) => {
     const sorteosBilletes = laGrandeSorteosManual > 0
       ? laGrandeSorteosManual
       : (parseInt(filaLaGrande?.cant_sorteos, 10) || 0);
-    const baseFacturacionBilletes = laGrandePrecioBilleteManual > 0
-      ? (laGrandePrecioBilleteManual * sorteosBilletes)
-      : recBilletes;
+
+    const tieneValoresPorSorteo = Object.keys(laGrandeValoresPorSorteo).length > 0;
+    let vendidosPorSorteo = [];
+
+    if (filaLaGrande || tieneValoresPorSorteo) {
+      try {
+        const vendidosPorSorteoRows = await query(`
+          SELECT numero_sorteo, SUM(registros_validos) AS vendidos
+          FROM control_previo_la_grande
+          WHERE fecha >= ? AND fecha <= ?
+          GROUP BY numero_sorteo
+          ORDER BY numero_sorteo
+        `, [fecha_inicio, fecha_fin]);
+
+        vendidosPorSorteo = Array.isArray(vendidosPorSorteoRows)
+          ? vendidosPorSorteoRows.map((r) => ({
+              numero_sorteo: Number(r.numero_sorteo) || 0,
+              vendidos: Number(r.vendidos) || 0
+            })).filter((r) => r.numero_sorteo > 0)
+          : [];
+      } catch {
+        vendidosPorSorteo = [];
+      }
+    }
+
+    let baseFacturacionBilletes = 0;
+
+    if (tieneValoresPorSorteo && vendidosPorSorteo.length > 0) {
+      baseFacturacionBilletes = vendidosPorSorteo.reduce((acc, item) => {
+        const key = String(item.numero_sorteo);
+        const valorSorteo = Number(laGrandeValoresPorSorteo[key] || 0);
+        const valorAplicado = valorSorteo > 0 ? valorSorteo : laGrandePrecioBilleteManual;
+        return acc + (item.vendidos * Math.max(0, Number(valorAplicado) || 0));
+      }, 0);
+    } else if (laGrandePrecioBilleteManual > 0) {
+      baseFacturacionBilletes = laGrandePrecioBilleteManual * sorteosBilletes;
+    } else {
+      baseFacturacionBilletes = recBilletes;
+    }
 
     // --- Calcular total recaudación para proporcionar tope ---
     const totalRecaudacionBruta = rowsConsolidadas.reduce((acc, r) => acc + (parseFloat(r.rec_total) || 0), 0);
@@ -710,7 +766,10 @@ const getFacturacionJuegosUTE = async (req, res) => {
           sorteos: sorteosBilletes,
           precioBilleteManual: laGrandePrecioBilleteManual,
           porcentajeOfertado: laGrandePctOfertado,
-          porcentajeReducido: laGrandePctReducido
+          porcentajeReducido: laGrandePctReducido,
+          valoresPorSorteo: laGrandeValoresPorSorteo,
+          vendidosPorSorteo,
+          usaValoresPorSorteo: tieneValoresPorSorteo
         }
       }
     ];
@@ -959,7 +1018,8 @@ const getFacturacionJuegosUTE = async (req, res) => {
             la_grande_sorteos_manual: laGrandeSorteosManual,
             la_grande_base_billetes: baseFacturacionBilletes,
             la_grande_pct_ofertado: laGrandePctOfertado,
-            la_grande_pct_reducido: laGrandePctReducido
+            la_grande_pct_reducido: laGrandePctReducido,
+            la_grande_valores_sorteo: laGrandeValoresPorSorteo
           }
         },
         flujoTotalGral,

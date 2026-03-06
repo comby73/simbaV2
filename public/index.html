@@ -3482,11 +3482,17 @@
                 <input type="number" id="fjg-la-grande-pct-reducido" class="form-control" value="0.01815" step="0.0001" min="0">
               </div>
               <div class="fjg-actions" style="flex:0 0 auto; padding-bottom:0.1rem;">
+                <button class="btn btn-secondary" onclick="abrirModalBilletesLaGrande()" style="margin-right:.5rem;">
+                  <i class="fas fa-list"></i> Valores por sorteo
+                </button>
                 <button class="btn btn-primary" onclick="calcularFacturacionJuegosUTE()">
                   <i class="fas fa-calculator"></i> Calcular
                 </button>
               </div>
             </div>
+            <small class="text-muted" id="fjg-billetes-config-resumen" style="display:block; margin-top:.5rem;">
+              Sin valores por sorteo configurados (usa precio manual o recaudación).
+            </small>
           </div>
         </div>
 
@@ -3790,9 +3796,9 @@
   <!-- Config local (API keys) - debe cargarse primero, no se sube a git -->
   <script src="js/config.local.js" onerror="console.warn('config.local.js no encontrado - usando config por defecto')"></script>
   <script src="js/config.js?v=20260206g"></script>
-  <script src="js/api.js?v=20260305d"></script>
+  <script src="js/api.js?v=20260306a"></script>
   <script src="js/ocr-extractos.js?v=20260304b"></script>
-  <script src="js/app.js?v=20260305d"></script>
+  <script src="js/app.js?v=20260306a"></script>
 </body>
 
 </html>

@@ -15170,6 +15170,7 @@ async function calcularFacturacionJuegosUTE() {
   const laGrandeSorteosManual = document.getElementById('fjg-la-grande-sorteos')?.value || '';
   const laGrandePctOfertado = document.getElementById('fjg-la-grande-pct-ofertado')?.value || '';
   const laGrandePctReducido = document.getElementById('fjg-la-grande-pct-reducido')?.value || '';
+  const valoresBilletes = window._fjgValoresBilletesPorSorteo || {};
 
   if (!fechaInicio || !fechaFin) {
     showToast('Seleccioná fecha inicio y fecha fin', 'warning');
@@ -15200,6 +15201,9 @@ async function calcularFacturacionJuegosUTE() {
     if (laGrandePctReducido !== '') {
       params.la_grande_pct_reducido = laGrandePctReducido;
     }
+    if (Object.keys(valoresBilletes).length > 0) {
+      params.la_grande_valores_sorteo = JSON.stringify(valoresBilletes);
+    }
 
     const clienteUTE = juegosOfflineAPI?.facturacionJuegos?.getUTE;
     let resp;
@@ -15225,6 +15229,99 @@ async function calcularFacturacionJuegosUTE() {
   } finally {
     document.getElementById('fjg-loading')?.classList.add('hidden');
   }
+}
+
+function actualizarResumenValoresBilletesLaGrande() {
+  const el = document.getElementById('fjg-billetes-config-resumen');
+  if (!el) return;
+
+  const valores = window._fjgValoresBilletesPorSorteo || {};
+  const entries = Object.entries(valores);
+  if (!entries.length) {
+    el.textContent = 'Sin valores por sorteo configurados (usa precio manual o recaudación).';
+    return;
+  }
+
+  const resumen = entries
+    .sort((a, b) => Number(a[0]) - Number(b[0]))
+    .map(([s, v]) => `${s}: $${Number(v).toLocaleString('es-AR')}`)
+    .join(' | ');
+
+  el.textContent = `Valores configurados: ${resumen}`;
+}
+
+function abrirModalBilletesLaGrande() {
+  const valoresActuales = window._fjgValoresBilletesPorSorteo || {};
+  const textoInicial = Object.entries(valoresActuales)
+    .sort((a, b) => Number(a[0]) - Number(b[0]))
+    .map(([s, v]) => `${s}=${v}`)
+    .join('\n');
+
+  const html = `
+    <div class="modal-overlay" onclick="cerrarModal(this)">
+      <div class="modal-content" style="max-width:700px;" onclick="event.stopPropagation()">
+        <div class="modal-header">
+          <h3><i class="fas fa-list"></i> Valores de Billete por Sorteo (La Grande)</h3>
+          <button class="btn-close" onclick="cerrarModal(this.closest('.modal-overlay'))">&times;</button>
+        </div>
+        <div class="modal-body">
+          <p class="text-muted" style="margin-bottom:.75rem;">
+            Ingresá una línea por sorteo con formato <code>sorteo=valor</code>.<br>
+            Ejemplo: <code>6018=750</code> y <code>6019=1500</code>
+          </p>
+          <textarea id="fjg-billetes-valores-text" class="form-control" rows="10" style="font-family:Consolas,monospace;">${textoInicial}</textarea>
+        </div>
+        <div class="modal-footer" style="display:flex; gap:.5rem; justify-content:flex-end;">
+          <button class="btn btn-secondary" onclick="limpiarValoresBilletesLaGrande(this)">Limpiar</button>
+          <button class="btn btn-primary" onclick="guardarValoresBilletesLaGrande(this)">Guardar</button>
+        </div>
+      </div>
+    </div>
+  `;
+
+  document.body.insertAdjacentHTML('beforeend', html);
+}
+
+function limpiarValoresBilletesLaGrande(btn) {
+  window._fjgValoresBilletesPorSorteo = {};
+  actualizarResumenValoresBilletesLaGrande();
+  cerrarModal(btn.closest('.modal-overlay'));
+  showToast('Valores por sorteo limpiados', 'info');
+}
+
+function guardarValoresBilletesLaGrande(btn) {
+  const textarea = document.getElementById('fjg-billetes-valores-text');
+  const raw = String(textarea?.value || '').trim();
+
+  const parsed = {};
+  if (raw) {
+    const lineas = raw.split(/\r?\n/);
+    for (const linea of lineas) {
+      const t = linea.trim();
+      if (!t) continue;
+
+      const parts = t.split('=');
+      if (parts.length !== 2) {
+        showToast(`Formato inválido: ${t} (usar sorteo=valor)`, 'warning');
+        return;
+      }
+
+      const sorteo = String(parts[0] || '').trim();
+      const valor = Number(String(parts[1] || '').trim().replace(',', '.'));
+
+      if (!/^\d+$/.test(sorteo) || !Number.isFinite(valor) || valor <= 0) {
+        showToast(`Dato inválido: ${t}`, 'warning');
+        return;
+      }
+
+      parsed[sorteo] = valor;
+    }
+  }
+
+  window._fjgValoresBilletesPorSorteo = parsed;
+  actualizarResumenValoresBilletesLaGrande();
+  cerrarModal(btn.closest('.modal-overlay'));
+  showToast('Valores por sorteo guardados', 'success');
 }
 
 function renderFacturacionJuegosUTE(data) {
@@ -15643,4 +15740,9 @@ function initFacturacionJuegos() {
       ? '<i class="fas fa-expand-alt"></i> Vista normal'
       : '<i class="fas fa-compress-alt"></i> Vista compacta';
   }
+
+  if (!window._fjgValoresBilletesPorSorteo) {
+    window._fjgValoresBilletesPorSorteo = {};
+  }
+  actualizarResumenValoresBilletesLaGrande();
 }
