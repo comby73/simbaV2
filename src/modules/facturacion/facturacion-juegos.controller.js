@@ -181,9 +181,32 @@ async function obtenerDesgloseQuini6Dinamico(fecha_inicio, fecha_fin) {
     const mod = data?.porModalidad;
     if (!mod) continue;
 
-    acc.quini6_tradicional += Number(mod?.tradicional?.recaudacion || 0);
-    acc.quini6_revancha += Number(mod?.revancha?.recaudacion || 0);
-    acc.quini6_siempre_sale += Number(mod?.siempreSale?.recaudacion || 0);
+    const apuestasTrad = Number(mod?.tradicional?.apuestasSimples || 0);
+    const apuestasRev = Number(mod?.revancha?.apuestasSimples || 0);
+    const apuestasSiempreSale = Number(mod?.siempreSale?.apuestasSimples || 0);
+
+    // Regla operativa: en facturación, Tradicional contempla también Premio Extra.
+    // Si no existe un contador separado de Extra en datos_json, se espeja Tradicional.
+    const apuestasExtra = Number(mod?.extra?.apuestasSimples || apuestasTrad || 0);
+
+    const hayApuestas = (apuestasTrad + apuestasRev + apuestasSiempreSale) > 0;
+
+    if (hayApuestas) {
+      acc.quini6_tradicional += (apuestasTrad + apuestasExtra);
+      acc.quini6_revancha += apuestasRev;
+      acc.quini6_siempre_sale += apuestasSiempreSale;
+      continue;
+    }
+
+    // Fallback defensivo para históricos sin apuestasSimples por modalidad.
+    const recTrad = Number(mod?.tradicional?.recaudacion || 0);
+    const recRev = Number(mod?.revancha?.recaudacion || 0);
+    const recSiempreSale = Number(mod?.siempreSale?.recaudacion || 0);
+    const recExtra = Number(mod?.extra?.recaudacion || recTrad || 0);
+
+    acc.quini6_tradicional += (recTrad + recExtra);
+    acc.quini6_revancha += recRev;
+    acc.quini6_siempre_sale += recSiempreSale;
   }
 
   return normalizarDesglose([
