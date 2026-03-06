@@ -15170,6 +15170,7 @@ async function calcularFacturacionJuegosUTE() {
   const laGrandeSorteosManual = document.getElementById('fjg-la-grande-sorteos')?.value || '';
   const laGrandePctOfertado = document.getElementById('fjg-la-grande-pct-ofertado')?.value || '';
   const laGrandePctReducido = document.getElementById('fjg-la-grande-pct-reducido')?.value || '';
+  const laGrandeArrastreImporte = document.getElementById('fjg-la-grande-arrastre-importe')?.value || '';
   const valoresBilletes = window._fjgValoresBilletesPorSorteo || {};
 
   if (!fechaInicio || !fechaFin) {
@@ -15200,6 +15201,9 @@ async function calcularFacturacionJuegosUTE() {
     }
     if (laGrandePctReducido !== '') {
       params.la_grande_pct_reducido = laGrandePctReducido;
+    }
+    if (laGrandeArrastreImporte !== '') {
+      params.la_grande_arrastre_importe = laGrandeArrastreImporte;
     }
     if (Object.keys(valoresBilletes).length > 0) {
       params.la_grande_valores_sorteo = JSON.stringify(valoresBilletes);

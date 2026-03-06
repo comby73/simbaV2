@@ -3481,6 +3481,10 @@
                 <label>Billetes - % reducción (N35/O35)</label>
                 <input type="number" id="fjg-la-grande-pct-reducido" class="form-control" value="0.01815" step="0.0001" min="0">
               </div>
+              <div class="form-group" style="flex:1; min-width:220px;">
+                <label>Billetes - Arrastre mes anterior ($)</label>
+                <input type="number" id="fjg-la-grande-arrastre-importe" class="form-control" value="0" step="1" min="0">
+              </div>
               <div class="fjg-actions" style="flex:0 0 auto; padding-bottom:0.1rem;">
                 <button class="btn btn-secondary" onclick="abrirModalBilletesLaGrande()" style="margin-right:.5rem;">
                   <i class="fas fa-list"></i> Valores por sorteo
@@ -3796,9 +3800,9 @@
   <!-- Config local (API keys) - debe cargarse primero, no se sube a git -->
   <script src="js/config.local.js" onerror="console.warn('config.local.js no encontrado - usando config por defecto')"></script>
   <script src="js/config.js?v=20260206g"></script>
-  <script src="js/api.js?v=20260306a"></script>
+  <script src="js/api.js?v=20260306b"></script>
   <script src="js/ocr-extractos.js?v=20260304b"></script>
-  <script src="js/app.js?v=20260306a"></script>
+  <script src="js/app.js?v=20260306b"></script>
 </body>
 
 </html>

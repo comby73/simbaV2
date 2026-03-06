@@ -431,6 +431,7 @@ const getFacturacionJuegosUTE = async (req, res) => {
       0,
       parseFloat(req.query.la_grande_pct_reducido) || (laGrandePctOfertado * (1 - LIMITE_REDUCCION_WEB))
     );
+    const laGrandeArrastreImporte = Math.max(0, parseFloat(req.query.la_grande_arrastre_importe) || 0);
     const laGrandeValoresPorSorteo = parsearValoresBilletesPorSorteo(req.query.la_grande_valores_sorteo);
 
     if (!fecha_inicio || !fecha_fin) {
@@ -627,7 +628,8 @@ const getFacturacionJuegosUTE = async (req, res) => {
     // --- Separar FACTURACIÓN BILLETES (La Grande) del flujo por canales ---
     const filaLaGrande = rowsConsolidadas.find((r) => String(r?.juego || '').toLowerCase() === 'la_grande') || null;
     const filasSinBilletes = rowsConsolidadas.filter((r) => String(r?.juego || '').toLowerCase() !== 'la_grande');
-    const recBilletes = parseFloat(filaLaGrande?.rec_total) || 0;
+    const recBilletesOriginal = parseFloat(filaLaGrande?.rec_total) || 0;
+    const recBilletes = recBilletesOriginal + laGrandeArrastreImporte;
     const sorteosBilletes = laGrandeSorteosManual > 0
       ? laGrandeSorteosManual
       : (parseInt(filaLaGrande?.cant_sorteos, 10) || 0);
@@ -668,8 +670,10 @@ const getFacturacionJuegosUTE = async (req, res) => {
     } else if (laGrandePrecioBilleteManual > 0) {
       baseFacturacionBilletes = laGrandePrecioBilleteManual * sorteosBilletes;
     } else {
-      baseFacturacionBilletes = recBilletes;
+      baseFacturacionBilletes = recBilletesOriginal;
     }
+
+    baseFacturacionBilletes += laGrandeArrastreImporte;
 
     // --- Calcular total recaudación para proporcionar tope ---
     const totalRecaudacionBruta = rowsConsolidadas.reduce((acc, r) => acc + (parseFloat(r.rec_total) || 0), 0);
@@ -767,6 +771,8 @@ const getFacturacionJuegosUTE = async (req, res) => {
           precioBilleteManual: laGrandePrecioBilleteManual,
           porcentajeOfertado: laGrandePctOfertado,
           porcentajeReducido: laGrandePctReducido,
+          arrastreImporte: laGrandeArrastreImporte,
+          recaudacionOriginal: recBilletesOriginal,
           valoresPorSorteo: laGrandeValoresPorSorteo,
           vendidosPorSorteo,
           usaValoresPorSorteo: tieneValoresPorSorteo
@@ -1019,6 +1025,7 @@ const getFacturacionJuegosUTE = async (req, res) => {
             la_grande_base_billetes: baseFacturacionBilletes,
             la_grande_pct_ofertado: laGrandePctOfertado,
             la_grande_pct_reducido: laGrandePctReducido,
+            la_grande_arrastre_importe: laGrandeArrastreImporte,
             la_grande_valores_sorteo: laGrandeValoresPorSorteo
           }
         },
