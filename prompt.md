@@ -1,6 +1,6 @@
 # Bitácora de Prompts y Cambios - SIMBA V2
 
-**Fecha de corte:** 03/03/2026  
+**Fecha de corte:** 07/03/2026  
 **Objetivo:** mantener un historial técnico útil, sin duplicados y alineado con el estado real del repositorio.
 
 ---
@@ -80,6 +80,33 @@ No busca reemplazar el `git log`, sino servir como contexto rápido de continuid
 
 ---
 
+### 2.4 Modulo Scoring Regenerativo (06-07 marzo 2026)
+
+#### Foco
+- implementacion completa del modelo de scoring de agencias,
+- eliminacion de dependencia de Excel,
+- deploy a produccion.
+
+#### Implementacion realizada
+- Diseño funcional y técnico documentado en `SCORING_REGENERATIVO.md`.
+- Backend: `scoring.controller.js` con motor de cálculo real-time (5 ejes ponderados: Ventas 35%, Cliente 30%, LOTO 15%, Compliance 10%, Digital 10%).
+- 7 tablas MySQL creadas via `database/migration_scoring_agencias.js`.
+- CRUD completo de datasets auxiliares (parametros, coeficientes, asesores, compliance, digital, cliente, historial).
+- Auto-seed de 31 parametros + 6 coeficientes al primer uso.
+- Frontend: sección Comercial en sidebar, 5 tabs (Ranking, Ficha, Análisis, Simulador, Configuración).
+- Ranking con medallas top-3, posiciones, indicadores de movimiento.
+- Snapshot histórico para cierre de periodo trimestral.
+- Acceso restringido a `admin` y `ogonzalez`.
+- Deploy confirmado en Hostinger (chatomar.shop).
+
+#### Decisiones clave
+- Se eliminó la dependencia de Excel: la app arranca sola con auto-seed.
+- Ventas (50% del score) se calculan automáticamente desde datos NTF ya cargados.
+- Los otros ejes (Cliente, Compliance, Digital) se cargan/editan desde la pestaña Config.
+- Los parámetros del modelo son 100% editables desde la UI sin tocar código.
+
+---
+
 ## 3) Resumen técnico por áreas
 
 ### 3.1 Control Previo
@@ -101,6 +128,14 @@ No busca reemplazar el `git log`, sino servir como contexto rápido de continuid
 - Pipeline de carga manual/XML/OCR.
 - Mejoras de robustez de parser PDF y clasificación por provincia.
 - Ajustes para ambientes de producción sin dependencias de configuración local.
+
+### 3.5 Scoring de Agencias
+- Motor de cálculo real-time desde `control_previo_agencias` + 6 tablas auxiliares.
+- 5 ejes ponderados: Ventas (35%), Cliente (30%), LOTO (15%), Compliance (10%), Digital (10%).
+- Categorías por percentiles + umbrales históricos: DIAMANTE, PLATINO, ORO, PLATA, BRONCE, CERRADO.
+- CRUD de 7 datasets desde UI (sin Excel).
+- Snapshot histórico para comparación entre periodos.
+- Vista con 5 tabs: Ranking, Ficha, Análisis, Simulador, Configuración.
 
 ---
 
@@ -134,6 +169,8 @@ No busca reemplazar el `git log`, sino servir como contexto rápido de continuid
 - `6fe0562` reemplazo de registros por `numero_sorteo`.
 - `30bdffd` normalización sorteo/modalidad/recaudación.
 - `03/03/2026` normalización `cta_cte` + mejoras de UX de procesamiento + fallback de programación.
+- `ab41247` feat(scoring): modulo Scoring Agencias completo — UI tabs, seccion Comercial, auto-seed.
+- `b3c908e` fix(scoring): ajustes UI y controller post-deploy.
 
 ---
 

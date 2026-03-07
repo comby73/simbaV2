@@ -24,6 +24,7 @@ return errorResponse(res, 'Error message', 400);
 - JWT tokens via `authenticate` middleware
 - RBAC with `requirePermission('module.action')` 
 - Roles: `admin`, `operador`, `analista`, `auditor`
+- Scoring access: `allowScoringUsers` middleware (admin + ogonzalez only)
 
 ### NTF File Parsing (Critical)
 Lottery data comes in fixed-width text format (NTF v2). Positions are 1-based in docs, 0-based in code:
@@ -57,9 +58,12 @@ npm run db:seed    # Seed test data
 
 ## Important Files
 - `DOCUMENTACION.md` - Detailed system documentation (Spanish)
+- `SCORING_REGENERATIVO.md` - Scoring module specification and implementation status
 - `src/shared/helpers.js` - Date formatting (Argentina TZ), response utilities, province maps
-- `src/shared/middleware.js` - JWT auth, role-based access control
+- `src/shared/middleware.js` - JWT auth, role-based access control, scoring access
+- `src/modules/scoring-agencias/scoring.controller.js` - Scoring engine + CRUD (real-time calculation)
 - `database/init.js` - Full MySQL schema definition
+- `database/migration_scoring_agencias.js` - 7 scoring tables migration
 
 ## Conventions
 - All dates use `America/Argentina/Buenos_Aires` timezone via dayjs
@@ -71,3 +75,11 @@ npm run db:seed    # Seed test data
 - Quiniela: `QNL*.TXT` files, game code `'81'`
 - Poceada: `PCD*.TXT` or `TMB*.TXT` files, game code `'82'`
 - Cancelled tickets: `FECHA_CANCELACION` field not blank (positions 71-78)
+
+## Scoring Module
+- Real-time calculation from `control_previo_agencias` + 6 support tables
+- 5 weighted axes: Ventas (35%), Cliente (30%), LOTO (15%), Compliance (10%), Digital (10%)
+- Categories: DIAMANTE, PLATINO, ORO, PLATA, BRONCE, CERRADO (percentile + historical thresholds)
+- Auto-seed: `ensureDefaultScoringData()` populates defaults on first use
+- Frontend: "Comercial" sidebar section, 5 tabs (Ranking, Ficha, Análisis, Simulador, Config)
+- Tables: `scoring_modelo_parametros`, `scoring_cliente_coeficientes`, `scoring_asesores`, `scoring_compliance`, `scoring_digital`, `scoring_cliente`, `scoring_hist_score`

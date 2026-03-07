@@ -1,12 +1,13 @@
 # Modulo Regenerativo de Scoring de Agencias
 
 Ultima actualizacion: 07/03/2026
-Estado: especificacion funcional y tecnica validada contra Word + XLSM real
+Estado: **IMPLEMENTADO Y EN PRODUCCION** (chatomar.shop)
 
 ## 0. Alcance validado
 - Fuente funcional: `Informe_Modelo_Regenerativo_Scoring_POP_LOTBA_RTM.docx`
 - Fuente tecnica/calculo: `Modelo_Regenerativo_Scoring_POP_LOTBA_RTM.xlsm`
 - Objetivo: implementar en SIMBA el mismo modelo operativo del Excel, con trazabilidad y seguridad por usuario.
+- **Resultado**: modulo completo, sin dependencia de Excel, datos 100% manejados desde la app.
 
 ## 1. Estructura real del modelo (XLSM)
 Hojas detectadas y su rol:
@@ -106,24 +107,34 @@ Interpretacion:
 - Mantiene estabilidad de categorias entre periodos.
 - Requiere mantener actualizado `HIST_SCORE` y `PIVOT_HIST`.
 
-## 6. Integracion en SIMBA (arquitectura objetivo)
-Backend propuesto:
-- `src/modules/scoring-agencias/scoring.controller.js`
-- `src/modules/scoring-agencias/scoring.routes.js`
-- `src/modules/scoring-agencias/scoring.service.js`
-- `src/modules/scoring-agencias/scoring.engine.js`
-- `src/modules/scoring-agencias/scoring.repository.js`
+## 6. Implementacion real en SIMBA
 
-Frontend propuesto:
-- `public/js/scoring-agencias.js`
-- nueva vista/tab en `public/index.html`
-- integracion de navegacion/carga en `public/js/app.js`
+### Backend (implementado)
+- `src/modules/scoring-agencias/scoring.controller.js` — Motor de calculo + CRUD de datasets + snapshot historico
+- `src/modules/scoring-agencias/scoring.routes.js` — Rutas REST con RBAC
 
-Persistencia recomendada:
-- `scoring_agencias_config`
-- `scoring_agencias_inputs`
-- `scoring_agencias_snapshot`
-- `scoring_agencias_hist` (opcional si no se reutiliza `HIST_SCORE` logico)
+### Frontend (implementado)
+- `public/js/scoring-agencias.js` — Estado reactivo, tabs, ranking, ficha, simulador, config
+- Seccion **Comercial** en sidebar de `public/index.html`
+- Integracion de navegacion/carga en `public/js/app.js`
+
+### Persistencia (7 tablas activas)
+- `scoring_modelo_parametros` — 31 parametros del modelo (pesos, caps, percentiles)
+- `scoring_cliente_coeficientes` — 6 categorias con coeficiente multiplicador
+- `scoring_asesores` — Mapeo agencia → asesor
+- `scoring_compliance` — Puntaje de compliance por agencia
+- `scoring_digital` — Puntaje digital por agencia
+- `scoring_cliente` — Experiencia de cliente por agencia (QR, quejas, incognito, Google)
+- `scoring_hist_score` — Historico de score/categoria/ranking por periodo
+- Migracion: `database/migration_scoring_agencias.js`
+- Import opcional desde Excel: `database/import_scoring_xlsm.js`
+
+### Auto-seed
+- Al primer uso, si las tablas estan vacias, se insertan automaticamente:
+  - 31 parametros por defecto (B1-B53)
+  - 6 coeficientes de categoria (DIAMANTE=1.0 ... CERRADO=0.90)
+- Funcion: `ensureDefaultScoringData()` en `scoring.controller.js`
+- No requiere Excel ni carga manual para arrancar
 
 ## 7. Adaptacion de datos desde SIMBA
 Fuente principal:
@@ -134,27 +145,22 @@ Fuentes complementarias:
 - Compliance, digital y cliente inicialmente cargables por CSV/API interna.
 - Mientras no haya fuente online, usar tabla de insumos manual con versionado por periodo.
 
-## 8. Seguridad y restriccion de acceso (fase 1)
-Requisito operativo confirmado:
-- Solo pueden ver/usar el modulo: `admin` y usuario `ogonzalez`.
+## 8. Seguridad y restriccion de acceso (implementado)
+- `authenticate` obligatorio en todas las rutas.
+- Middleware `allowScoringUsers` valida: `req.user.rol === 'admin'` o `req.user.username === 'ogonzalez'`.
+- Middleware `isAdmin` protege escritura (POST/DELETE en datasets y snapshot).
+- Permiso RBAC requerido: `control_previo.ver`.
+- Frontend: clase `.scoring-only` oculta la seccion Comercial para usuarios no autorizados.
 
-Propuesta de implementacion (sin hardcode inseguro):
-- Mantener `authenticate` obligatorio.
-- Crear middleware especifico `allowScoringUsers` que valide `req.user.username` en allowlist configurable.
-- Configuracion via `.env`:
-  - `SCORING_ENABLED=true`
-  - `SCORING_ALLOWED_USERS=admin,ogonzalez`
-- Adicionalmente exigir permiso RBAC de lectura (`reportes.read`) para no romper modelo de permisos existente.
-- En frontend ocultar la vista si el usuario no esta autorizado (validacion de conveniencia, no de seguridad).
-
-## 9. Endpoints definidos para implementacion
-- `GET /api/scoring-agencias/resumen?periodo=2025-Q3`
-- `GET /api/scoring-agencias/ranking?periodo=2025-Q3&asesor=&categoria=`
-- `GET /api/scoring-agencias/agencia/:ctaCte?periodo=2025-Q3`
-- `POST /api/scoring-agencias/simular`
-- `GET /api/scoring-agencias/config`
-- `PUT /api/scoring-agencias/config`
-- `POST /api/scoring-agencias/snapshot` (cierre de periodo)
+## 9. Endpoints implementados
+- `GET /api/scoring-agencias/resumen?periodo=2026-Q1` — Snapshot completo (KPIs + ranking + distribucion)
+- `GET /api/scoring-agencias/ranking?periodo=2026-Q1&categoria=ORO` — Ranking filtrado
+- `GET /api/scoring-agencias/agencia/:ctaCte?periodo=2026-Q1` — Ficha individual
+- `GET /api/scoring-agencias/configuracion` — Resumen de datasets + periodos historicos
+- `GET /api/scoring-agencias/configuracion/:dataset` — Listar registros de un dataset
+- `POST /api/scoring-agencias/configuracion/:dataset` — Crear/actualizar registro (admin)
+- `DELETE /api/scoring-agencias/configuracion/:dataset` — Eliminar registro (admin)
+- `POST /api/scoring-agencias/snapshot` — Generar snapshot historico del periodo (admin)
 
 ## 10. Flujo operativo trimestral
 1. Cargar/validar insumos de `VENTAS`, `LOTO`, `COMPLIANCE`, `DIGITAL`, `CLIENTE`.
@@ -174,18 +180,29 @@ Propuesta de implementacion (sin hardcode inseguro):
   - cliente `Malo` (penalizacion),
   - categoria `DIAMANTE` y `CERRADO` (probabilidad y distancias no aplican).
 
-## 12. Plan de implementacion por fases
-Fase 1 (acceso restringido):
-- endpoints de lectura (`resumen`, `ranking`, `ficha`) y vista ejecutiva.
-- permiso solo `admin` + `ogonzalez`.
+## 12. Estado de implementacion por fases
 
-Fase 2:
-- simulador y recomendaciones predictivas completas.
-- snapshot/historico automatizado.
+### Fase 1 — COMPLETADA (07/03/2026)
+- Seccion Comercial en sidebar con Scoring Agencias
+- UI con 5 tabs: Ranking, Ficha de agencia, Analisis, Simulador, Configuracion
+- Ranking con medallas (top-3), posiciones, indicadores de movimiento (Mejora/Baja/Estable)
+- Backend con calculo real-time desde `control_previo_agencias` + 6 tablas auxiliares
+- CRUD completo de los 7 datasets desde pestaña Configuracion
+- Auto-seed de parametros y coeficientes (sin Excel)
+- Snapshot historico para cierre de periodo
+- Acceso restringido: admin + ogonzalez
+- Deploy en produccion (chatomar.shop)
 
-Fase 3:
-- tablero ejecutivo completo con graficos y exportables.
-- eventual exposicion a mas perfiles segun resultado.
+### Fase 2 — PENDIENTE
+- Graficos de tendencia y distribucion (Chart.js o similar) en tab Analisis
+- Importacion masiva CSV para datasets (Cliente, Compliance, Digital)
+- Simulador con proyeccion mas granular por sub-eje
+
+### Fase 3 — PENDIENTE
+- Exportar ranking/ficha a PDF
+- Notificaciones por prioridad alta
+- Permisos granulares por asesor (ver solo sus agencias)
+- Historico visual multi-periodo (evolucion Q1→Q2→Q3→Q4)
 
 ---
-Este documento reemplaza el diseno preliminar y queda como base de desarrollo alineada con el modelo real entregado por negocio (Word + XLSM).
+Este documento refleja el estado real de implementacion del modulo Scoring Regenerativo en SIMBA V2.

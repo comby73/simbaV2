@@ -1,6 +1,6 @@
 # SIMBA V2 - Documentación Técnica y Operativa
 
-**Última actualización:** 03/03/2026  
+**Última actualización:** 07/03/2026  
 **Repositorio:** simbaV2 (`main`)  
 **Versión de referencia:** `APP_VERSION` expuesta por `/api/version`
 
@@ -56,16 +56,16 @@ Está orientado a operación diaria de sorteos y auditoría posterior, con traza
 
 ## 4) Estructura funcional (estado real)
 
-### 4.0 Modulo en diseno: Scoring Regenerativo de Agencias
+### 4.0 Modulo Scoring Regenerativo de Agencias (IMPLEMENTADO)
 
-- Se incorporo el blueprint tecnico-funcional del modulo de negocio:
-  - Documento: `SCORING_REGENERATIVO.md`
-- Objetivo:
-  - convertir recaudacion por agencia/juego en un scoring accionable y explicable
-- Estado:
-  - diseno listo para implementacion integrada (backend + frontend + configuracion)
-- Principio de negocio:
-  - la venta es un eje del desempeno, no un castigo; el enfoque es regenerativo y de mejora
+- Seccion **Comercial** en sidebar, visible para `admin` y `ogonzalez`.
+- Backend: `src/modules/scoring-agencias/scoring.controller.js` + `scoring.routes.js`
+- Frontend: `public/js/scoring-agencias.js`, 5 tabs en `public/index.html`
+- 7 tablas MySQL: `scoring_modelo_parametros`, `scoring_cliente_coeficientes`, `scoring_asesores`, `scoring_compliance`, `scoring_digital`, `scoring_cliente`, `scoring_hist_score`
+- Calculo real-time desde `control_previo_agencias` (ventas NTF) + datasets auxiliares
+- Auto-seed de parametros y coeficientes al primer uso (sin Excel)
+- CRUD completo de datasets desde pestaña Configuracion
+- Documentacion detallada: `SCORING_REGENERATIVO.md`
 
 ### 4.1 Módulos backend registrados en `src/app.js`
 
@@ -80,6 +80,7 @@ Está orientado a operación diaria de sorteos y auditoría posterior, con traza
 - `/api/extractos` → CRUD de extractos y carga masiva
 - `/api/juegos-offline` → facturación/ventas de Hipicas
 - `/api/ocr` → proxy de OCR del lado servidor
+- `/api/scoring-agencias` → scoring regenerativo de agencias (ranking, ficha, config, snapshot)
 
 ### 4.2 Frontend
 
@@ -269,6 +270,16 @@ npm run db:seed
   - mapeo de parametros (`PARAMS_MODELO`) y formulas por columna (`CALCULOS_AGENCIA`),
   - criterio de categoria con percentiles + umbrales historicos,
   - especificacion de acceso restringido fase 1 para `admin` y `ogonzalez`.
+
+### Marzo 2026 (07/03 — implementacion scoring)
+- **Modulo Scoring Agencias completo e implementado en produccion** (chatomar.shop).
+- Backend: `scoring.controller.js` con motor de calculo real-time (5 ejes ponderados) + CRUD de 7 datasets.
+- Frontend: seccion Comercial en sidebar, vista con 5 tabs (Ranking, Ficha, Analisis, Simulador, Config).
+- Ranking con medallas top-3, posiciones numeradas, indicadores de movimiento (Mejora/Baja/Estable).
+- Auto-seed de 31 parametros y 6 coeficientes al primer uso — sin dependencia de Excel.
+- Snapshot historico para cierre de periodo y comparacion entre trimestres.
+- Migracion: `database/migration_scoring_agencias.js` (7 tablas `scoring_*`).
+- Deploy confirmado en Hostinger via GitHub auto-deploy.
 
 ---
 
