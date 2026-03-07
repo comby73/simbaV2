@@ -147,23 +147,32 @@
       categoryClass: categoryClass(item.categoria || 'PLATA'),
       score: Number(item.scoreFinal || item.score || 0),
       baseScore: Number(item.scoreBase || item.baseScore || item.scoreFinal || 0),
+      previousScore: Number(item.scoreAnterior || item.scoreFinal || 0),
+      deltaPuntaje: item.deltaPuntaje !== null && item.deltaPuntaje !== undefined ? Number(item.deltaPuntaje) : null,
+      rankingActual: Number(item.rankingActual || 0),
+      movilidadRanking: item.movilidadRanking !== null && item.movilidadRanking !== undefined ? Number(item.movilidadRanking) : null,
       movement: item.movilidad || 'Estable',
       probability: Number(item.probabilidadAscenso || item.probabilidad || 0),
       priority: normalizePriority(item.prioridad || 'MEDIA'),
       axis: item.ejeMayorImpacto || item.eje || 'VENTAS',
       clientCategory: item.categoriaCliente || 'Regular',
       clientCoefficient: Number(item.coefCliente || 1),
+      clientScore: Number(item.clienteScore || 0),
       ascentGap: Number(item.distAscenso || 0),
       descentMargin: Number(item.distDescenso || 0),
       impactLabel: item.impactoPotencial || item.mensajeImpacto || 'Sin simulacion disponible.',
       recommendation: item.recomendacion || item.accion || 'Sin recomendacion operativa.',
-      factors: Array.isArray(item.factores) ? item.factores : []
+      diagnostic: item.diagnostico || '',
+      factors: Array.isArray(item.factores) ? item.factores : [],
+      metadata: item.metadata || {}
     })) : [];
 
     const summary = data.kpis ? {
       averageScore: Number(data.kpis.scorePromedio || 0),
       scoreDelta: Number(data.kpis.variacion || 0),
       agenciesEvaluated: Number(data.kpis.agenciasEvaluadas || agencies.length),
+      coefClientePromedio: Number(data.kpis.coefClientePromedio || 0),
+      promedioIncVentasPct: Number(data.kpis.promedioIncVentasPct || 0),
       highPriority: Number(data.kpis.prioridadAlta || 0),
       upliftCandidates: Number(data.kpis.candidatasSubida || 0),
       topAdvisor: data.kpis.asesorTop || 'No definido',
@@ -172,6 +181,12 @@
         count: Number(item.cantidad || 0),
         colorClass: categoryClass(item.categoria)
       })) : [],
+      ejeImpacto: data.ejeImpactoDistribucion || {},
+      riesgo: data.riesgoDistribucion || { ascenso: 0, descenso: 0, neutro: 0 },
+      concentracion: data.concentracionCrecimiento || {},
+      top20AltaPrioridad: Array.isArray(data.top20AltaPrioridad) ? data.top20AltaPrioridad : [],
+      top20PorMovilidad: Array.isArray(data.top20PorMovilidad) ? data.top20PorMovilidad : [],
+      top20PorPuntaje: Array.isArray(data.top20PorPuntaje) ? data.top20PorPuntaje : [],
       priorities: buildSummaryPriorities(data, agencies),
       chips: buildSummaryChips(data, agencies)
     } : buildEmptyPayload(data.periodo?.clave || '').summary;
@@ -389,6 +404,8 @@
     const miniGrid = document.getElementById('scoring-hero-mini-grid');
     miniGrid.innerHTML = [
       { label: 'Agencias evaluadas', value: summary.agenciesEvaluated },
+      { label: 'Coef. cliente prom.', value: summary.coefClientePromedio ? summary.coefClientePromedio.toFixed(3) : '-' },
+      { label: 'Inc. ventas prom.', value: summary.promedioIncVentasPct ? (summary.promedioIncVentasPct >= 0 ? '+' : '') + formatNumber(summary.promedioIncVentasPct, 1) + '%' : '-' },
       { label: 'Prioridad alta', value: summary.highPriority },
       { label: 'Candidatas a subir', value: summary.upliftCandidates },
       { label: 'Asesor destacado', value: summary.topAdvisor }
@@ -404,11 +421,17 @@
     const summary = scoringState.summary;
     const highPotential = scoringState.agencies.filter(item => item.probability >= 0.7).length;
     const lowClient = scoringState.agencies.filter(item => item.clientCoefficient < 0.95).length;
+    const riesgo = summary.riesgo || {};
+    const ejeTop = summary.ejeImpacto
+      ? Object.entries(summary.ejeImpacto).sort((a, b) => b[1] - a[1])[0]
+      : null;
     const stats = [
       { label: 'Score promedio', value: formatNumber(summary.averageScore, 1), foot: 'Indicador consolidado de red', accent: 'linear-gradient(90deg, #22d3ee, #0ea5e9)' },
       { label: 'Foco inmediato', value: summary.highPriority, foot: 'Agencias en prioridad alta', accent: 'linear-gradient(90deg, #fb7185, #f97316)' },
-      { label: 'Ascenso probable', value: highPotential, foot: 'Probabilidad >= 70%', accent: 'linear-gradient(90deg, #34d399, #10b981)' },
-      { label: 'Cliente penaliza', value: lowClient, foot: 'Coeficiente menor a 0.95', accent: 'linear-gradient(90deg, #f59e0b, #facc15)' }
+      { label: 'En ascenso', value: riesgo.ascenso || 0, foot: `Descenso: ${riesgo.descenso || 0} | Neutro: ${riesgo.neutro || 0}`, accent: 'linear-gradient(90deg, #34d399, #10b981)' },
+      { label: 'Cliente penaliza', value: lowClient, foot: 'Coeficiente menor a 0.95', accent: 'linear-gradient(90deg, #f59e0b, #facc15)' },
+      { label: 'Eje mas frecuente', value: ejeTop ? ejeTop[0] : '-', foot: ejeTop ? `${ejeTop[1]} agencias` : 'Sin datos', accent: 'linear-gradient(90deg, #a78bfa, #7c3aed)' },
+      { label: 'Ascenso probable', value: highPotential, foot: 'Probabilidad >= 70%', accent: 'linear-gradient(90deg, #67e8f9, #06b6d4)' }
     ];
 
     const grid = document.getElementById('scoring-stats-grid');
@@ -450,6 +473,80 @@
         </div>
       `).join('')
       : '<div class="scoring-empty-state">No hay observaciones ampliadas para este periodo.</div>';
+
+    // Eje de impacto
+    const ejeEl = document.getElementById('scoring-eje-impacto');
+    if (ejeEl && summary.ejeImpacto) {
+      const totalEje = Object.values(summary.ejeImpacto).reduce((a, b) => a + b, 0) || 1;
+      ejeEl.innerHTML = Object.entries(summary.ejeImpacto)
+        .sort((a, b) => b[1] - a[1])
+        .map(([eje, cant]) => `
+          <div class="scoring-distribution-item scoring-fade-in">
+            <div class="scoring-distribution-top">
+              <span class="scoring-muted">${eje}</span>
+              <strong>${cant}</strong>
+            </div>
+            <div class="scoring-bar-track">
+              <div class="scoring-bar-fill" style="width:${(cant / totalEje) * 100}%;background:var(--primary);"></div>
+            </div>
+          </div>
+        `).join('') || '<div class="scoring-muted">Sin datos</div>';
+    }
+
+    // Concentración de crecimiento
+    const concEl = document.getElementById('scoring-concentracion');
+    if (concEl && summary.concentracion) {
+      const c = summary.concentracion;
+      concEl.innerHTML = [10, 20, 50, 100, 200].map(n => {
+        const pct = c[`top${n}`] !== undefined ? (c[`top${n}`] * 100).toFixed(1) : '-';
+        return `<div class="scoring-concentracion-item"><span>Top ${n}</span><strong>${pct}%</strong></div>`;
+      }).join('');
+    }
+
+    // Top 20 Alta Prioridad
+    const top20El = document.getElementById('scoring-top20-prioridad');
+    if (top20El) {
+      top20El.innerHTML = (summary.top20AltaPrioridad || []).length
+        ? (summary.top20AltaPrioridad || []).map((item, i) => `
+            <div class="scoring-top20-row scoring-fade-in">
+              <span class="scoring-top20-num">${i + 1}</span>
+              <span class="scoring-top20-ag">${item.ctaCte}</span>
+              <span class="scoring-table-chip ${categoryClass(item.categoria)}">${item.categoria}</span>
+              <span class="scoring-top20-delta scoring-muted">&Delta;${item.distAscenso ?? '-'}</span>
+            </div>
+          `).join('')
+        : '<div class="scoring-muted">Sin agencias en prioridad alta</div>';
+    }
+
+    // Top 20 por Movilidad
+    const top20MovEl = document.getElementById('scoring-top20-movilidad');
+    if (top20MovEl) {
+      top20MovEl.innerHTML = (summary.top20PorMovilidad || []).length
+        ? (summary.top20PorMovilidad || []).map((item, i) => `
+            <div class="scoring-top20-row scoring-fade-in">
+              <span class="scoring-top20-num">${i + 1}</span>
+              <span class="scoring-top20-ag">${item.ctaCte}</span>
+              <span class="scoring-table-chip ${categoryClass(item.categoria)}">${item.categoria}</span>
+              <span class="scoring-top20-delta ${item.deltaPuntaje >= 0 ? 'text-success' : 'text-danger'}">${item.deltaPuntaje >= 0 ? '+' : ''}${item.deltaPuntaje}</span>
+            </div>
+          `).join('')
+        : '<div class="scoring-muted">Sin datos de movilidad</div>';
+    }
+
+    // Top 20 por Puntaje
+    const top20PtsEl = document.getElementById('scoring-top20-puntaje');
+    if (top20PtsEl) {
+      top20PtsEl.innerHTML = (summary.top20PorPuntaje || []).length
+        ? (summary.top20PorPuntaje || []).map((item, i) => `
+            <div class="scoring-top20-row scoring-fade-in">
+              <span class="scoring-top20-num">${i + 1}</span>
+              <span class="scoring-top20-ag">${item.ctaCte}</span>
+              <span class="scoring-table-chip ${categoryClass(item.categoria)}">${item.categoria}</span>
+              <strong>${formatNumber(item.scoreFinal, 1)}</strong>
+            </div>
+          `).join('')
+        : '<div class="scoring-muted">Sin datos</div>';
+    }
   }
 
   function populateCategoryFilter() {
@@ -504,7 +601,7 @@
     }
 
     tbody.innerHTML = scoringState.filteredAgencies.map((item, idx) => {
-      const pos = idx + 1;
+      const pos = item.rankingActual || idx + 1;
       const medal = pos === 1 ? '<i class="fas fa-trophy scoring-medal gold"></i>'
         : pos === 2 ? '<i class="fas fa-medal scoring-medal silver"></i>'
         : pos === 3 ? '<i class="fas fa-medal scoring-medal bronze"></i>'
@@ -512,9 +609,17 @@
       const movIcon = item.movement === 'Mejora' ? '<i class="fas fa-arrow-up scoring-mov-up"></i>'
         : item.movement === 'Baja' ? '<i class="fas fa-arrow-down scoring-mov-down"></i>'
         : '<i class="fas fa-minus scoring-mov-stable"></i>';
+      const deltaTxt = item.deltaPuntaje !== null
+        ? `<span class="${item.deltaPuntaje >= 0 ? 'text-success' : 'text-danger'}">${item.deltaPuntaje >= 0 ? '+' : ''}${formatNumber(item.deltaPuntaje, 1)}</span>`
+        : '<span class="scoring-muted">-</span>';
+      const rankMov = item.movilidadRanking !== null
+        ? (item.movilidadRanking > 0 ? `<small class="text-success">▲${item.movilidadRanking}</small>`
+          : item.movilidadRanking < 0 ? `<small class="text-danger">▼${Math.abs(item.movilidadRanking)}</small>`
+          : '<small class="scoring-muted">→</small>')
+        : '';
       return `
       <tr class="scoring-fade-in ${item.id === scoringState.selectedAgencyId ? 'active' : ''}" data-scoring-id="${item.id}">
-        <td class="scoring-rank-cell">${medal}</td>
+        <td class="scoring-rank-cell">${medal}${rankMov}</td>
         <td>
           <div class="scoring-table-name">
             <strong>${item.name}</strong>
@@ -522,7 +627,7 @@
           </div>
         </td>
         <td>${item.advisor}</td>
-        <td><span class="scoring-pill score">${formatNumber(item.score, 1)}</span></td>
+        <td><span class="scoring-pill score">${formatNumber(item.score, 1)}</span> ${deltaTxt}</td>
         <td><span class="scoring-table-chip ${item.categoryClass}">${item.category}</span></td>
         <td>${movIcon} ${item.movement}</td>
         <td>${Math.round(item.probability * 100)}%</td>
@@ -576,7 +681,7 @@
         <div class="scoring-gauge-subtitle">Score final de la agencia</div>
         <div class="scoring-gauge-main">
           <div class="scoring-gauge-value">${formatNumber(agency.score, 1)}</div>
-          <div class="scoring-muted">Base ${formatNumber(agency.baseScore, 1)} · coef. cliente ${formatNumber(agency.clientCoefficient, 2)}</div>
+          <div class="scoring-muted">Base ${formatNumber(agency.baseScore, 1)} · coef. cliente ${formatNumber(agency.clientCoefficient, 2)} · Score cliente ${formatNumber(agency.clientScore, 1)}/100</div>
         </div>
         <div class="scoring-bar-track">
           <div class="scoring-bar-fill" style="width:${Math.min(100, agency.score)}%;"></div>
@@ -585,7 +690,19 @@
 
       <div class="scoring-metric-grid scoring-fade-in">
         <div class="scoring-metric-card">
-          <span>Movilidad</span>
+          <span>Ranking actual</span>
+          <strong>#${agency.rankingActual || '-'}</strong>
+        </div>
+        <div class="scoring-metric-card">
+          <span>Δ Puntaje periodo</span>
+          <strong class="${agency.deltaPuntaje !== null && agency.deltaPuntaje >= 0 ? 'text-success' : 'text-danger'}">${agency.deltaPuntaje !== null ? (agency.deltaPuntaje >= 0 ? '+' : '') + formatNumber(agency.deltaPuntaje, 1) : 'Nuevo'}</strong>
+        </div>
+        <div class="scoring-metric-card">
+          <span>Movilidad ranking</span>
+          <strong class="${agency.movilidadRanking > 0 ? 'text-success' : agency.movilidadRanking < 0 ? 'text-danger' : ''}">${agency.movilidadRanking !== null ? (agency.movilidadRanking > 0 ? '▲ ' + agency.movilidadRanking : agency.movilidadRanking < 0 ? '▼ ' + Math.abs(agency.movilidadRanking) : '→ Sin cambio') : 'Sin historial'}</strong>
+        </div>
+        <div class="scoring-metric-card">
+          <span>Movilidad categoría</span>
           <strong>${agency.movement}</strong>
         </div>
         <div class="scoring-metric-card">
@@ -594,13 +711,19 @@
         </div>
         <div class="scoring-metric-card">
           <span>Falta para subir</span>
-          <strong>${formatNumber(agency.ascentGap, 1)} puntos base</strong>
+          <strong>${formatNumber(agency.ascentGap, 1)} pts base</strong>
         </div>
         <div class="scoring-metric-card">
           <span>Margen antes de bajar</span>
-          <strong>${formatNumber(agency.descentMargin, 1)} puntos</strong>
+          <strong>${formatNumber(agency.descentMargin, 1)} pts</strong>
+        </div>
+        <div class="scoring-metric-card">
+          <span>Cliente ${agency.clientCategory}</span>
+          <strong>${formatNumber(agency.clientScore, 1)}/100</strong>
         </div>
       </div>
+
+      ${agency.diagnostic ? `<div class="scoring-fade-in scoring-muted" style="padding:0.5rem 0;font-size:0.85rem;">${agency.diagnostic}</div>` : ''}
 
       <div class="scoring-fade-in">
         <div class="scoring-block-title">Como se forma el score</div>
@@ -888,10 +1011,18 @@
         averageScore: 0,
         scoreDelta: 0,
         agenciesEvaluated: 0,
+        coefClientePromedio: 0,
+        promedioIncVentasPct: 0,
         highPriority: 0,
         upliftCandidates: 0,
         topAdvisor: '-',
         categories: [],
+        ejeImpacto: {},
+        riesgo: { ascenso: 0, descenso: 0, neutro: 0 },
+        concentracion: {},
+        top20AltaPrioridad: [],
+        top20PorMovilidad: [],
+        top20PorPuntaje: [],
         priorities: [],
         chips: ['Sin datos reales cargados']
       },
@@ -904,6 +1035,8 @@
     chips.push(`${agencies.length} agencias procesadas`);
     if (data?.periodo?.clave) chips.push(`Periodo ${data.periodo.clave}`);
     if (data?.kpis?.prioridadAlta) chips.push(`${data.kpis.prioridadAlta} en prioridad alta`);
+    if (data?.riesgoDistribucion?.ascenso) chips.push(`${data.riesgoDistribucion.ascenso} en ascenso`);
+    if (data?.kpis?.coefClientePromedio) chips.push(`Coef. cliente prom. ${Number(data.kpis.coefClientePromedio).toFixed(2)}`);
     return chips;
   }
 
@@ -924,6 +1057,13 @@
         text: `${data.kpis.prioridadAlta} agencias quedaron con prioridad alta.`
       });
     }
+    if (data?.riesgoDistribucion) {
+      const r = data.riesgoDistribucion;
+      notes.push({
+        title: 'Riesgo de movilidad',
+        text: `Ascenso: ${r.ascenso} | Descenso: ${r.descenso} | Neutro: ${r.neutro}`
+      });
+    }
     if (agencies.length) {
       const bestAgency = agencies.slice().sort((a, b) => b.score - a.score)[0];
       notes.push({
@@ -931,7 +1071,14 @@
         text: `${bestAgency.name} lidera con ${formatNumber(bestAgency.score, 1)} puntos.`
       });
     }
-    return notes.slice(0, 3);
+    if (data?.concentracionCrecimiento?.top10 !== undefined) {
+      const c = data.concentracionCrecimiento;
+      notes.push({
+        title: 'Concentracion de ventas',
+        text: `Top 10: ${(c.top10 * 100).toFixed(1)}% | Top 50: ${(c.top50 * 100).toFixed(1)}% | Top 100: ${(c.top100 * 100).toFixed(1)}%`
+      });
+    }
+    return notes.slice(0, 4);
   }
 
   function getCurrentDatasetMeta() {

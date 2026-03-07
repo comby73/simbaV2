@@ -5,7 +5,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Control de Loterías</title>
-  <link rel="stylesheet" href="css/styles.css?v=20260307a">
+  <link rel="stylesheet" href="css/styles.css?v=20260307b">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
 </head>
 
@@ -372,6 +372,35 @@
                 <div class="scoring-priority-card">
                   <div class="scoring-block-title">Radar de prioridades</div>
                   <div id="scoring-priority-list" class="scoring-priority-list"></div>
+                </div>
+                <div class="scoring-distribution-card">
+                  <div class="scoring-block-title">Eje de impacto (agencias por eje)</div>
+                  <div id="scoring-eje-impacto" class="scoring-distribution-bars"></div>
+                </div>
+                <div class="scoring-priority-card">
+                  <div class="scoring-block-title">Concentración de ventas</div>
+                  <div id="scoring-concentracion" class="scoring-concentracion-grid"></div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Top 20 tablas — igual que DASH_EJECUTIVO del Excel -->
+            <div class="card scoring-card" style="margin-top:1rem;">
+              <div class="card-header">
+                <h3><i class="fas fa-ranking-star"></i> Tablero Ejecutivo — Top 20</h3>
+              </div>
+              <div class="scoring-top20-grid">
+                <div>
+                  <div class="scoring-block-title"><i class="fas fa-fire text-danger"></i> Top 20 Alta Prioridad</div>
+                  <div id="scoring-top20-prioridad" class="scoring-top20-list"></div>
+                </div>
+                <div>
+                  <div class="scoring-block-title"><i class="fas fa-chart-line text-success"></i> Top 20 por Movilidad (Δ puntaje)</div>
+                  <div id="scoring-top20-movilidad" class="scoring-top20-list"></div>
+                </div>
+                <div>
+                  <div class="scoring-block-title"><i class="fas fa-trophy" style="color:#f59e0b"></i> Top 20 por Puntaje Final</div>
+                  <div id="scoring-top20-puntaje" class="scoring-top20-list"></div>
                 </div>
               </div>
             </div>
@@ -4034,7 +4063,7 @@
   <script src="js/api.js?v=20260307a"></script>
   <script src="js/ocr-extractos.js?v=20260304b"></script>
   <script src="js/app.js?v=20260306d"></script>
-  <script src="js/scoring-agencias.js?v=20260307a"></script>
+  <script src="js/scoring-agencias.js?v=20260307b"></script>
 </body>
 
 </html>

@@ -839,7 +839,7 @@ async function getScoringSnapshot(periodKey) {
   const maxCompliancePts = Math.max(0, ...baseRows.map(row => row.compliancePts));
   const maxDigitalPts = Math.max(0, ...baseRows.map(row => row.digitalPts));
 
-  const ranking = baseRows.map(row => {
+  const rankingUnsorted = baseRows.map(row => {
     const categoria = buildCategory(row.scoreFinal, thresholds);
     const cuts = buildCutsForCategory(categoria, thresholds);
     const distAscenso = ['DIAMANTE', 'CERRADO'].includes(categoria)
@@ -849,7 +849,6 @@ async function getScoringSnapshot(periodKey) {
       ? 0
       : Math.max(0, row.scoreFinal - cuts.floorCut);
     const movilidad = movementFromCategories(categoria, row.categoriaAnterior);
-    const deltaScore = row.categoriaAnterior === 'No encontrado' ? null : row.scoreFinal - row.scoreAnterior;
     const ventasHeadroom = Math.max(0, maxVentasPot - (row.crecimientoPts + row.impactoAbsolutoPts + row.diferencialPts));
     const lotoHeadroom = Math.max(0, maxLotoPts - row.lotoPts);
     const complianceHeadroom = Math.max(0, maxCompliancePts - row.compliancePts);
@@ -890,12 +889,14 @@ async function getScoringSnapshot(periodKey) {
       scoreAnterior: round(row.scoreAnterior, 1),
       scoreBase: round(row.scoreBase, 1),
       scoreFinal: round(row.scoreFinal, 1),
+      deltaPuntaje: row.deltaScore !== null ? round(row.deltaScore, 1) : null,
       movilidad,
       probabilidadAscenso: round(probability, 2),
       prioridad: getPriorityLabel(priorityIndex),
       ejeMayorImpacto,
       categoriaCliente: row.categoriaCliente,
       coefCliente: round(row.coefCliente, 2),
+      clienteScore: round(row.clienteScore, 1),
       distAscenso: round(distAscenso, 1),
       distDescenso: round(distDescenso, 1),
       impactoPotencial: categoria === 'CERRADO'
@@ -906,7 +907,7 @@ async function getScoringSnapshot(periodKey) {
         h: row.impactoAbsolutoPts,
         j: row.diferencialPts
       }),
-      diagnostico: buildDiagnostic(categoria, deltaScore),
+      diagnostico: buildDiagnostic(categoria, row.deltaScore),
       metadata: {
         totalActual: round(row.totalActual, 2),
         totalAnterior: round(row.totalAnterior, 2),
@@ -915,6 +916,7 @@ async function getScoringSnapshot(periodKey) {
         mixLotoPct: round(row.mixLoto * 100, 1),
         compliance: round(row.complianceScore, 1),
         digital: round(row.digitalScore, 1),
+        cliente: round(row.clienteScore, 1),
         categoriaAnterior: row.categoriaAnterior,
         previousRanking: row.previousRanking
       },
@@ -924,7 +926,8 @@ async function getScoringSnapshot(periodKey) {
         { label: 'Compliance', value: round(row.compliancePts, 1) },
         { label: 'Digital', value: round(row.digitalPts, 1) },
         { label: 'Cliente', value: round(row.coefCliente * 100, 1) }
-      ]
+      ],
+      _previousRankingRaw: row.previousRanking
     };
   }).sort((left, right) => {
     if (right.scoreFinal !== left.scoreFinal) {
@@ -933,12 +936,88 @@ async function getScoringSnapshot(periodKey) {
     return left.ctaCte.localeCompare(right.ctaCte);
   });
 
+  // Segundo pass: asignar rankingActual y movilidadRanking (posiciones ganadas/perdidas)
+  const ranking = rankingUnsorted.map((item, index) => {
+    const rankingActual = index + 1;
+    const movilidadRanking = item._previousRankingRaw !== null
+      ? item._previousRankingRaw - rankingActual
+      : null;
+    const { _previousRankingRaw, ...rest } = item;
+    return { ...rest, rankingActual, movilidadRanking };
+  });
+
   const averageScore = ranking.length
     ? ranking.reduce((acc, item) => acc + item.scoreFinal, 0) / ranking.length
     : 0;
   const averagePrevious = ranking.length
     ? ranking.reduce((acc, item) => acc + item.scoreAnterior, 0) / ranking.length
     : 0;
+  const coefClientePromedio = ranking.length
+    ? round(ranking.reduce((acc, item) => acc + item.coefCliente, 0) / ranking.length, 4)
+    : 0;
+  const promedioIncVentas = ranking.length
+    ? round(ranking.reduce((acc, item) => acc + item.metadata.crecimientoPct, 0) / ranking.length, 1)
+    : 0;
+
+  // Distribución eje de impacto
+  const ejeImpactoDistribucion = ranking.reduce((acc, item) => {
+    const eje = item.ejeMayorImpacto || 'SOSTENER';
+    acc[eje] = (acc[eje] || 0) + 1;
+    return acc;
+  }, {});
+
+  // Riesgo: Ascenso/Descenso/Neutro por movilidad
+  const riesgoDistribucion = {
+    ascenso: ranking.filter(item => item.movilidad === 'Mejora').length,
+    descenso: ranking.filter(item => item.movilidad === 'Baja').length,
+    neutro: ranking.filter(item => item.movilidad === 'Estable').length
+  };
+
+  // Top 20 Alta Prioridad
+  const top20AltaPrioridad = ranking
+    .filter(item => item.prioridad.toUpperCase().includes('ALTA'))
+    .slice(0, 20)
+    .map(item => ({
+      ctaCte: item.ctaCte,
+      agenciaNombre: item.agenciaNombre,
+      categoria: item.categoria,
+      recomendacion: item.recomendacion,
+      prioridad: item.prioridad,
+      distAscenso: item.distAscenso
+    }));
+
+  // Top 20 por Movilidad (mayor Δ puntaje)
+  const top20PorMovilidad = ranking
+    .filter(item => item.deltaPuntaje !== null)
+    .slice()
+    .sort((a, b) => (b.deltaPuntaje || 0) - (a.deltaPuntaje || 0))
+    .slice(0, 20)
+    .map(item => ({
+      ctaCte: item.ctaCte,
+      agenciaNombre: item.agenciaNombre,
+      deltaPuntaje: item.deltaPuntaje,
+      categoria: item.categoria,
+      movilidad: item.movilidad
+    }));
+
+  // Top 20 por Puntaje Final
+  const top20PorPuntaje = ranking
+    .slice(0, 20)
+    .map(item => ({
+      ctaCte: item.ctaCte,
+      agenciaNombre: item.agenciaNombre,
+      scoreFinal: item.scoreFinal,
+      categoria: item.categoria
+    }));
+
+  // Concentración de crecimiento (Top 10/20/50/100/200)
+  const totalVentasRed = ranking.reduce((acc, item) => acc + item.metadata.totalActual, 0);
+  const concentracionCrecimiento = {};
+  for (const n of [10, 20, 50, 100, 200]) {
+    const topN = ranking.slice(0, Math.min(n, ranking.length))
+      .reduce((acc, item) => acc + item.metadata.totalActual, 0);
+    concentracionCrecimiento[`top${n}`] = totalVentasRed > 0 ? round(topN / totalVentasRed, 4) : 0;
+  }
 
   return {
     periodo: {
@@ -951,6 +1030,8 @@ async function getScoringSnapshot(periodKey) {
       scorePromedio: round(averageScore, 1),
       variacion: round(averageScore - averagePrevious, 1),
       agenciasEvaluadas: ranking.length,
+      coefClientePromedio,
+      promedioIncVentasPct: promedioIncVentas,
       prioridadAlta: ranking.filter(item => item.prioridad.toUpperCase().includes('ALTA')).length,
       candidatasSubida: ranking.filter(item => item.distAscenso > 0 && item.distAscenso <= 5).length,
       asesorTop: topAdvisor(ranking)
@@ -959,6 +1040,12 @@ async function getScoringSnapshot(periodKey) {
       categoria,
       cantidad: ranking.filter(item => item.categoria === categoria).length
     })),
+    ejeImpactoDistribucion,
+    riesgoDistribucion,
+    concentracionCrecimiento,
+    top20AltaPrioridad,
+    top20PorMovilidad,
+    top20PorPuntaje,
     ranking
   };
 }
@@ -982,8 +1069,14 @@ const obtenerRanking = async (req, res) => {
       ranking = ranking.filter(item => item.categoria === req.query.categoria);
     }
 
+    if (req.query.asesor) {
+      const asesorBuscar = String(req.query.asesor).trim().toLowerCase();
+      ranking = ranking.filter(item => String(item.asesor || '').toLowerCase().includes(asesorBuscar));
+    }
+
     return successResponse(res, {
       periodo: payload.periodo,
+      kpis: payload.kpis,
       ranking
     }, 'Ranking de scoring obtenido');
   } catch (error) {

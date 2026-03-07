@@ -3611,3 +3611,89 @@ span.game-quinielaya {
     width: 100%;
   }
 }
+
+/* === SCORING — NUEVOS COMPONENTES DASHBOARD ========================= */
+.scoring-pulse-grid {
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+}
+
+.scoring-top20-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 1.25rem;
+  padding: 1rem;
+}
+
+.scoring-top20-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  max-height: 520px;
+  overflow-y: auto;
+}
+
+.scoring-top20-row {
+  display: grid;
+  grid-template-columns: 1.4rem 5rem 1fr auto;
+  gap: 0.4rem;
+  align-items: center;
+  padding: 0.3rem 0.5rem;
+  border-radius: 6px;
+  background: var(--bg-secondary, rgba(255,255,255,0.04));
+  font-size: 0.82rem;
+}
+
+.scoring-top20-num {
+  color: var(--text-muted);
+  font-size: 0.75rem;
+}
+
+.scoring-top20-ag {
+  font-family: monospace;
+  font-size: 0.8rem;
+  color: var(--text-primary);
+}
+
+.scoring-top20-delta {
+  font-size: 0.8rem;
+  font-weight: 600;
+  min-width: 3rem;
+  text-align: right;
+}
+
+.scoring-concentracion-grid {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 0.5rem;
+  padding: 0.5rem 0;
+}
+
+.scoring-concentracion-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  background: var(--bg-secondary, rgba(255,255,255,0.04));
+  border-radius: 8px;
+  padding: 0.5rem;
+  text-align: center;
+}
+
+.scoring-concentracion-item span {
+  font-size: 0.7rem;
+  color: var(--text-muted);
+  margin-bottom: 0.2rem;
+}
+
+.scoring-concentracion-item strong {
+  font-size: 1rem;
+  color: var(--primary);
+}
+
+@media (max-width: 768px) {
+  .scoring-top20-grid {
+    grid-template-columns: 1fr;
+  }
+  .scoring-concentracion-grid {
+    grid-template-columns: repeat(3, 1fr);
+  }
+}
