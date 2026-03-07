@@ -9,6 +9,7 @@ router.use(allowScoringUsers);
 
 router.get('/resumen', scoringController.obtenerResumen);
 router.get('/ranking', scoringController.obtenerRanking);
+router.get('/exportar', scoringController.exportarRanking);
 router.get('/agencia/:ctaCte', scoringController.obtenerAgencia);
 router.get('/configuracion', scoringController.obtenerConfiguracionResumen);
 router.get('/configuracion/:dataset', scoringController.listarConfiguracionDataset);

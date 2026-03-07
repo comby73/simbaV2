@@ -5,7 +5,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Control de Loterías</title>
-  <link rel="stylesheet" href="css/styles.css?v=20260307c">
+  <link rel="stylesheet" href="css/styles.css?v=20260307d">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
 </head>
 
@@ -310,7 +310,10 @@
                   <div id="scoring-ranking-caption" class="scoring-muted">Cargando agencias...</div>
                 </div>
                 <div class="scoring-toolbar">
-                  <input type="text" id="scoring-search" class="form-control scoring-search" placeholder="Buscar agencia o asesor...">
+                  <input type="text" id="scoring-search" class="form-control scoring-search" placeholder="Buscar agencia...">
+                  <select id="scoring-filter-asesor" class="form-control">
+                    <option value="">Todos los asesores</option>
+                  </select>
                   <select id="scoring-filter-category" class="form-control">
                     <option value="">Todas las categorías</option>
                   </select>
@@ -320,8 +323,14 @@
                     <option value="MEDIA">Prioridad media</option>
                     <option value="BAJA">Prioridad baja</option>
                   </select>
-                  <button class="btn btn-secondary" id="scoring-btn-focus-top">
+                  <button class="btn btn-secondary" id="scoring-btn-focus-top" title="Ir a la agencia de mayor prioridad">
                     <i class="fas fa-bullseye"></i> Foco
+                  </button>
+                  <button class="btn btn-secondary" id="scoring-btn-export-csv" title="Exportar ranking a Excel/CSV">
+                    <i class="fas fa-file-csv"></i> CSV
+                  </button>
+                  <button class="btn btn-primary" id="scoring-btn-snapshot" title="Guardar snapshot del período actual en el historial" style="display:none">
+                    <i class="fas fa-camera"></i> Snapshot
                   </button>
                 </div>
               </div>
@@ -4063,7 +4072,7 @@
   <script src="js/api.js?v=20260307a"></script>
   <script src="js/ocr-extractos.js?v=20260304b"></script>
   <script src="js/app.js?v=20260306d"></script>
-  <script src="js/scoring-agencias.js?v=20260307b"></script>
+  <script src="js/scoring-agencias.js?v=20260307c"></script>
 </body>
 
 </html>

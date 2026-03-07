@@ -211,8 +211,11 @@
     const search = document.getElementById('scoring-search');
     const filterCategory = document.getElementById('scoring-filter-category');
     const filterPriority = document.getElementById('scoring-filter-priority');
+    const filterAsesor = document.getElementById('scoring-filter-asesor');
     const refreshBtn = document.getElementById('scoring-btn-refresh');
     const focusBtn = document.getElementById('scoring-btn-focus-top');
+    const exportBtn = document.getElementById('scoring-btn-export-csv');
+    const snapshotBtn = document.getElementById('scoring-btn-snapshot');
     const applyPeriodBtn = document.getElementById('scoring-btn-apply-period');
     const autoPeriodBtn = document.getElementById('scoring-btn-period-auto');
     const periodInput = document.getElementById('scoring-period-input');
@@ -229,6 +232,7 @@
     if (search) search.addEventListener('input', applyFilters);
     if (filterCategory) filterCategory.addEventListener('change', applyFilters);
     if (filterPriority) filterPriority.addEventListener('change', applyFilters);
+    if (filterAsesor) filterAsesor.addEventListener('change', applyFilters);
 
     if (refreshBtn) {
       refreshBtn.addEventListener('click', async () => {
@@ -271,6 +275,35 @@
         switchScoringTab('ficha');
         renderAgencyDetail();
         highlightSelectedRow();
+      });
+    }
+
+    if (exportBtn) {
+      exportBtn.addEventListener('click', async () => {
+        if (!window.scoringAPI) return;
+        exportBtn.disabled = true;
+        const orig = exportBtn.innerHTML;
+        exportBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i>';
+        try {
+          await window.scoringAPI.exportarRanking(scoringState.period ? { periodo: scoringState.period } : {});
+        } catch (err) {
+          if (typeof showToast === 'function') showToast(err.message || 'Error al exportar', 'error');
+        } finally {
+          exportBtn.disabled = false;
+          exportBtn.innerHTML = orig;
+        }
+      });
+    }
+
+    if (snapshotBtn) {
+      snapshotBtn.addEventListener('click', async () => {
+        if (!scoringState.admin.canEdit) return;
+        snapshotBtn.disabled = true;
+        const orig = snapshotBtn.innerHTML;
+        snapshotBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Guardando...';
+        await createSnapshot();
+        snapshotBtn.disabled = false;
+        snapshotBtn.innerHTML = orig;
       });
     }
 
@@ -373,10 +406,29 @@
     renderStats();
     renderSummary();
     populateCategoryFilter();
+    populateAsesorFilter();
+    updateSnapshotButtonVisibility();
     applyFilters();
     renderAgencyDetail();
     renderSimulator();
     renderConfigPanel();
+  }
+
+  function updateSnapshotButtonVisibility() {
+    const btn = document.getElementById('scoring-btn-snapshot');
+    if (btn) btn.style.display = scoringState.admin.canEdit ? '' : 'none';
+  }
+
+  function populateAsesorFilter() {
+    const select = document.getElementById('scoring-filter-asesor');
+    if (!select) return;
+    const current = select.value;
+    const asesores = Array.from(new Set(
+      scoringState.agencies.map(item => item.advisor).filter(a => a && a !== 'Sin asesor')
+    )).sort();
+    select.innerHTML = '<option value="">Todos los asesores</option>' +
+      asesores.map(a => `<option value="${a}">${a}</option>`).join('');
+    if (asesores.includes(current)) select.value = current;
   }
 
   function switchScoringTab(tabId) {
@@ -564,15 +616,16 @@
     const search = String(document.getElementById('scoring-search')?.value || '').trim().toLowerCase();
     const category = document.getElementById('scoring-filter-category')?.value || '';
     const priority = document.getElementById('scoring-filter-priority')?.value || '';
+    const asesor = document.getElementById('scoring-filter-asesor')?.value || '';
 
     scoringState.filteredAgencies = scoringState.agencies.filter(item => {
       const matchesSearch = !search
         || item.name.toLowerCase().includes(search)
-        || item.advisor.toLowerCase().includes(search)
         || item.id.toLowerCase().includes(search);
       const matchesCategory = !category || item.category === category;
       const matchesPriority = !priority || item.priority === priority;
-      return matchesSearch && matchesCategory && matchesPriority;
+      const matchesAsesor = !asesor || item.advisor === asesor;
+      return matchesSearch && matchesCategory && matchesPriority && matchesAsesor;
     });
 
     if (!scoringState.filteredAgencies.some(item => item.id === scoringState.selectedAgencyId)) {
@@ -651,6 +704,40 @@
     document.querySelectorAll('#scoring-ranking-body tr[data-scoring-id]').forEach(row => {
       row.classList.toggle('active', row.dataset.scoringId === scoringState.selectedAgencyId);
     });
+  }
+
+  function buildSparklineSVG(historial) {
+    if (!historial || historial.length < 2) return '';
+    const pts = historial.map(h => h.puntaje);
+    const min = Math.min(...pts);
+    const max = Math.max(...pts);
+    const range = Math.max(max - min, 0.1);
+    const W = 260, H = 60, PAD = 8;
+    const xs = pts.map((_, i) => PAD + (i / (pts.length - 1)) * (W - PAD * 2));
+    const ys = pts.map(p => H - PAD - ((p - min) / range) * (H - PAD * 2));
+    const polyline = xs.map((x, i) => `${x},${ys[i]}`).join(' ');
+    const areaClose = `${xs[xs.length - 1]},${H - PAD} ${xs[0]},${H - PAD}`;
+    const lastX = xs[xs.length - 1], lastY = ys[ys.length - 1];
+    const trend = pts[pts.length - 1] >= pts[0] ? '#34d399' : '#fb7185';
+    return `<svg viewBox="0 0 ${W} ${H}" width="100%" height="${H}" xmlns="http://www.w3.org/2000/svg" class="scoring-sparkline">
+      <defs>
+        <linearGradient id="spark-grad" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stop-color="${trend}" stop-opacity="0.22"/>
+          <stop offset="100%" stop-color="${trend}" stop-opacity="0.01"/>
+        </linearGradient>
+      </defs>
+      <polygon points="${polyline} ${areaClose}" fill="url(#spark-grad)"/>
+      <polyline points="${polyline}" fill="none" stroke="${trend}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+      <circle cx="${lastX}" cy="${lastY}" r="3.5" fill="${trend}" stroke="#0f172a" stroke-width="1.5"/>
+    </svg>`;
+  }
+
+  async function loadAgencyHistory(agencyId) {
+    if (!window.scoringAPI || !agencyId) return [];
+    try {
+      const res = await window.scoringAPI.obtenerAgencia(agencyId, scoringState.period ? { periodo: scoringState.period } : {});
+      return Array.isArray(res?.data?.historial) ? res.data.historial : [];
+    } catch { return []; }
   }
 
   function renderAgencyDetail() {
@@ -742,7 +829,33 @@
         <strong>${agency.impactLabel}</strong>
         <div>${agency.recommendation}</div>
       </div>
+
+      <div class="scoring-sparkline-card scoring-fade-in" id="scoring-sparkline-wrap">
+        <div class="scoring-block-title">Evolución histórica del puntaje</div>
+        <div id="scoring-sparkline-chart" class="scoring-sparkline-placeholder">
+          <i class="fas fa-spinner fa-spin"></i> Cargando historial...
+        </div>
+      </div>
     `;
+
+    // Carga asíncrona del historial sin bloquear el render
+    loadAgencyHistory(agency.id).then(historial => {
+      const chartEl = document.getElementById('scoring-sparkline-chart');
+      if (!chartEl) return;
+      if (!historial.length) {
+        chartEl.innerHTML = '<span class="scoring-muted">Sin historial disponible para esta agencia.</span>';
+        return;
+      }
+      const labelsHtml = historial.map(h =>
+        `<span class="scoring-spark-label">${h.periodo}<br><strong>${h.puntaje.toFixed(1)}</strong></span>`
+      ).join('');
+      chartEl.innerHTML = `
+        <div style="overflow-x:auto;">
+          ${buildSparklineSVG(historial)}
+          <div class="scoring-spark-labels">${labelsHtml}</div>
+        </div>
+      `;
+    });
   }
 
   function renderSimulator() {

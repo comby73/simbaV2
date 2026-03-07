@@ -404,6 +404,24 @@ const scoringAPI = {
     const query = new URLSearchParams(params).toString();
     return apiRequest(`/scoring-agencias/agencia/${ctaCte}${query ? `?${query}` : ''}`);
   },
+  exportarRanking: (params = {}) => {
+    const query = new URLSearchParams(params).toString();
+    const token = typeof getToken === 'function' ? getToken() : (localStorage.getItem('simba_token') || '');
+    const url = `${API_BASE}/scoring-agencias/exportar${query ? `?${query}` : ''}`;
+    const a = document.createElement('a');
+    a.href = url;
+    a.setAttribute('download', '');
+    // Para autenticación Bearer en descarga directa usamos fetch + blob
+    return fetch(url, { headers: { Authorization: `Bearer ${token}` } })
+      .then(r => r.blob())
+      .then(blob => {
+        const blobUrl = URL.createObjectURL(blob);
+        a.href = blobUrl;
+        document.body.appendChild(a);
+        a.click();
+        setTimeout(() => { URL.revokeObjectURL(blobUrl); a.remove(); }, 1000);
+      });
+  },
   obtenerConfiguracion: () => apiRequest('/scoring-agencias/configuracion'),
   obtenerDataset: (dataset, params = {}) => {
     const query = new URLSearchParams(params).toString();

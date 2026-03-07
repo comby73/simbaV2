@@ -1088,19 +1088,94 @@ const obtenerRanking = async (req, res) => {
 const obtenerAgencia = async (req, res) => {
   try {
     const payload = await getScoringSnapshot(req.query.periodo);
-    const agencia = payload.ranking.find(item => item.ctaCte === normalizeCtaCte(req.params.ctaCte));
+    const ctaCte = normalizeCtaCte(req.params.ctaCte);
+    const agencia = payload.ranking.find(item => item.ctaCte === ctaCte);
 
     if (!agencia) {
       return errorResponse(res, 'Agencia no encontrada para el periodo solicitado', 404);
     }
 
+    // Historial completo de la agencia para el gráfico de evolución
+    const histRows = await query(
+      `SELECT periodo_key, puntaje_final, categoria, ranking_puntaje
+       FROM scoring_hist_score
+       WHERE cta_cte = ?
+       ORDER BY periodo_key ASC
+       LIMIT 24`,
+      [ctaCte]
+    );
+
     return successResponse(res, {
       periodo: payload.periodo,
-      agencia
+      agencia,
+      historial: histRows.map(row => ({
+        periodo: row.periodo_key,
+        puntaje: Number(row.puntaje_final),
+        categoria: row.categoria,
+        ranking: Number(row.ranking_puntaje)
+      }))
     }, 'Ficha de agencia obtenida');
   } catch (error) {
     console.error('Error obteniendo agencia de scoring:', error);
     return errorResponse(res, 'Error obteniendo ficha de scoring', 500);
+  }
+};
+
+const exportarRanking = async (req, res) => {
+  try {
+    const payload = await getScoringSnapshot(req.query.periodo);
+
+    const headers = [
+      'Ranking', 'CTA CTE', 'Agencia', 'Asesor', 'Categoria',
+      'Score Final', 'Score Base', 'Delta Puntaje', 'Movilidad Ranking',
+      'Movilidad', 'Prob. Ascenso', 'Prioridad', 'Eje Mayor Impacto',
+      'Dist. Ascenso', 'Dist. Descenso', 'Coef. Cliente', 'Cat. Cliente',
+      'Score Cliente', 'Ventas Actual', 'Ventas Anterior', 'Inc. Ventas %',
+      'Mix LOTO %', 'Compliance', 'Digital', 'Recomendacion'
+    ];
+
+    const rows = payload.ranking.map(item => [
+      item.rankingActual,
+      item.ctaCte,
+      item.agenciaNombre,
+      item.asesor,
+      item.categoria,
+      item.scoreFinal,
+      item.scoreBase,
+      item.deltaPuntaje ?? '',
+      item.movilidadRanking ?? '',
+      item.movilidad,
+      item.probabilidadAscenso,
+      item.prioridad,
+      item.ejeMayorImpacto,
+      item.distAscenso,
+      item.distDescenso,
+      item.coefCliente,
+      item.categoriaCliente,
+      item.clienteScore,
+      item.metadata.totalActual,
+      item.metadata.totalAnterior,
+      item.metadata.crecimientoPct,
+      item.metadata.mixLotoPct,
+      item.metadata.compliance,
+      item.metadata.digital,
+      item.recomendacion
+    ]);
+
+    const csvLines = [headers, ...rows].map(row =>
+      row.map(cell => {
+        const str = String(cell ?? '').replace(/"/g, '""');
+        return str.includes(',') || str.includes('"') || str.includes('\n') ? `"${str}"` : str;
+      }).join(',')
+    );
+
+    const periodo = payload.periodo.clave || 'ranking';
+    res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+    res.setHeader('Content-Disposition', `attachment; filename="scoring_${periodo}.csv"`);
+    res.send('\uFEFF' + csvLines.join('\r\n'));
+  } catch (error) {
+    console.error('Error exportando ranking de scoring:', error);
+    return errorResponse(res, `Error exportando ranking: ${error.message}`, 500);
   }
 };
 
@@ -1229,6 +1304,7 @@ module.exports = {
   obtenerResumen,
   obtenerRanking,
   obtenerAgencia,
+  exportarRanking,
   obtenerConfiguracionResumen,
   listarConfiguracionDataset,
   guardarConfiguracionDataset,
