@@ -5,7 +5,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Control de Loterías</title>
-  <link rel="stylesheet" href="css/styles.css?v=20260302b">
+  <link rel="stylesheet" href="css/styles.css?v=20260307a">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
 </head>
 
@@ -91,6 +91,11 @@
         <div class="nav-section">Configuración</div>
         <a class="nav-item" data-view="programacion">
           <i class="fas fa-calendar-alt"></i> Programación
+        </a>
+
+        <div class="nav-section hidden scoring-only">Comercial</div>
+        <a class="nav-item hidden scoring-only" data-view="scoring">
+          <i class="fas fa-store"></i> Scoring Agencias
         </a>
 
         <div class="nav-section">Documentos</div>
@@ -231,6 +236,231 @@
               <i class="fas fa-upload"></i> Cargar Programación
             </button>
           </div>
+        </div>
+      </section>
+
+      <section id="view-scoring" class="view hidden">
+        <div class="scoring-shell">
+          <!-- Hero compacto con branding Comercial -->
+          <div class="scoring-hero">
+            <div class="scoring-hero-copy">
+              <div class="scoring-kicker">
+                <span class="scoring-kicker-dot"></span>
+                Área comercial
+              </div>
+              <h1>Scoring de la red de agencias</h1>
+              <p id="scoring-hero-subtitle">Evaluá el desempeño de cada agencia, filtrá por categoría y tomá decisiones con datos reales.</p>
+              <div class="scoring-hero-actions">
+                <div class="scoring-period-controls">
+                  <input type="text" id="scoring-period-input" class="form-control" placeholder="2026-Q1">
+                  <button class="btn btn-secondary" id="scoring-btn-apply-period">
+                    <i class="fas fa-filter"></i> Periodo
+                  </button>
+                  <button class="btn btn-secondary" id="scoring-btn-period-auto">
+                    <i class="fas fa-wand-magic-sparkles"></i> Auto
+                  </button>
+                </div>
+                <button class="btn btn-primary" id="scoring-btn-refresh">
+                  <i class="fas fa-rotate-right"></i> Actualizar
+                </button>
+              </div>
+            </div>
+
+            <div class="scoring-hero-panel">
+              <div class="scoring-hero-panel-header">
+                <span id="scoring-period-badge" class="scoring-period-badge">Periodo actual</span>
+                <span id="scoring-source-badge" class="scoring-source-badge">Datos reales</span>
+              </div>
+              <div class="scoring-hero-score-wrap">
+                <div class="scoring-hero-score-label">Score promedio de red</div>
+                <div class="scoring-hero-score-value" id="scoring-hero-score">0.0</div>
+                <div class="scoring-hero-score-foot" id="scoring-hero-foot">Sin variación disponible</div>
+              </div>
+              <div class="scoring-hero-mini-grid" id="scoring-hero-mini-grid"></div>
+            </div>
+          </div>
+
+          <div class="scoring-stats-grid" id="scoring-stats-grid"></div>
+
+          <!-- Pestañas internas -->
+          <div class="scoring-tabs">
+            <button class="scoring-tab active" data-scoring-tab="ranking">
+              <i class="fas fa-ranking-star"></i> Ranking
+            </button>
+            <button class="scoring-tab" data-scoring-tab="ficha">
+              <i class="fas fa-building-user"></i> Ficha de agencia
+            </button>
+            <button class="scoring-tab" data-scoring-tab="analisis">
+              <i class="fas fa-chart-pie"></i> Análisis
+            </button>
+            <button class="scoring-tab" data-scoring-tab="simulador">
+              <i class="fas fa-sliders"></i> Simulador
+            </button>
+            <button class="scoring-tab" data-scoring-tab="config">
+              <i class="fas fa-cogs"></i> Configuración
+            </button>
+          </div>
+
+          <!-- TAB: Ranking -->
+          <div class="scoring-tab-panel active" id="scoring-panel-ranking">
+            <div class="card scoring-card scoring-resizable">
+              <div class="card-header scoring-ranking-header">
+                <div>
+                  <h3><i class="fas fa-trophy"></i> Ranking de agencias</h3>
+                  <div id="scoring-ranking-caption" class="scoring-muted">Cargando agencias...</div>
+                </div>
+                <div class="scoring-toolbar">
+                  <input type="text" id="scoring-search" class="form-control scoring-search" placeholder="Buscar agencia o asesor...">
+                  <select id="scoring-filter-category" class="form-control">
+                    <option value="">Todas las categorías</option>
+                  </select>
+                  <select id="scoring-filter-priority" class="form-control">
+                    <option value="">Todas las prioridades</option>
+                    <option value="ALTA">Prioridad alta</option>
+                    <option value="MEDIA">Prioridad media</option>
+                    <option value="BAJA">Prioridad baja</option>
+                  </select>
+                  <button class="btn btn-secondary" id="scoring-btn-focus-top">
+                    <i class="fas fa-bullseye"></i> Foco
+                  </button>
+                </div>
+              </div>
+              <div class="scoring-ranking-table-wrap">
+                <table class="table scoring-ranking-table">
+                  <thead>
+                    <tr>
+                      <th>#</th>
+                      <th>Agencia</th>
+                      <th>Asesor</th>
+                      <th>Score</th>
+                      <th>Categoría</th>
+                      <th>Movilidad</th>
+                      <th>Prob. subida</th>
+                      <th>Prioridad</th>
+                      <th>Eje</th>
+                    </tr>
+                  </thead>
+                  <tbody id="scoring-ranking-body"></tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+
+          <!-- TAB: Ficha -->
+          <div class="scoring-tab-panel" id="scoring-panel-ficha">
+            <div class="card scoring-card scoring-agency-card scoring-resizable">
+              <div class="card-header">
+                <h3><i class="fas fa-building-user"></i> Ficha de agencia</h3>
+                <span id="scoring-selected-category" class="scoring-category-badge">-</span>
+              </div>
+              <div id="scoring-agency-detail" class="scoring-agency-detail"></div>
+            </div>
+          </div>
+
+          <!-- TAB: Análisis -->
+          <div class="scoring-tab-panel" id="scoring-panel-analisis">
+            <div id="scoring-summary-card" class="card scoring-card scoring-card-spotlight scoring-resizable">
+              <div class="card-header">
+                <h3><i class="fas fa-wave-square"></i> Distribución y prioridades</h3>
+                <div class="scoring-chip-row" id="scoring-summary-chips"></div>
+              </div>
+              <div class="scoring-pulse-grid">
+                <div class="scoring-distribution-card">
+                  <div class="scoring-block-title">Distribución por categoría</div>
+                  <div id="scoring-distribution-bars" class="scoring-distribution-bars"></div>
+                </div>
+                <div class="scoring-priority-card">
+                  <div class="scoring-block-title">Radar de prioridades</div>
+                  <div id="scoring-priority-list" class="scoring-priority-list"></div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- TAB: Simulador -->
+          <div class="scoring-tab-panel" id="scoring-panel-simulador">
+            <div id="scoring-simulator-card" class="card scoring-card scoring-simulator-card scoring-resizable">
+              <div class="card-header">
+                <h3><i class="fas fa-sliders"></i> Simulador de mejora</h3>
+              </div>
+              <div class="scoring-simulator-copy">Probá cuánto impacta mover los ejes clave sobre el score final de la agencia seleccionada.</div>
+              <div class="scoring-simulator-controls">
+                <label class="scoring-slider-group">
+                  <span>Ventas</span>
+                  <input type="range" id="scoring-sim-ventas" min="0" max="15" value="4">
+                  <strong id="scoring-sim-ventas-value">+4</strong>
+                </label>
+                <label class="scoring-slider-group">
+                  <span>LOTO</span>
+                  <input type="range" id="scoring-sim-loto" min="0" max="15" value="3">
+                  <strong id="scoring-sim-loto-value">+3</strong>
+                </label>
+                <label class="scoring-slider-group">
+                  <span>Cliente</span>
+                  <input type="range" id="scoring-sim-cliente" min="0" max="20" value="6">
+                  <strong id="scoring-sim-cliente-value">+6</strong>
+                </label>
+              </div>
+              <div id="scoring-simulator-result" class="scoring-simulator-result"></div>
+            </div>
+          </div>
+
+          <!-- TAB: Config -->
+          <div class="scoring-tab-panel" id="scoring-panel-config">
+            <div id="scoring-admin-grid" class="scoring-admin-grid">
+              <div class="card scoring-card scoring-admin-card scoring-resizable">
+                <div class="card-header scoring-ranking-header">
+                  <div>
+                    <h3><i class="fas fa-table-list"></i> Tablas auxiliares</h3>
+                    <div id="scoring-config-summary" class="scoring-muted">Cargando configuración operativa...</div>
+                  </div>
+                  <div class="scoring-toolbar">
+                    <select id="scoring-config-dataset" class="form-control"></select>
+                    <input type="text" id="scoring-config-search" class="form-control scoring-search" placeholder="Filtrar registros">
+                    <button class="btn btn-secondary" id="scoring-config-refresh">
+                      <i class="fas fa-rotate-right"></i> Recargar
+                    </button>
+                    <button class="btn btn-primary" id="scoring-config-new">
+                      <i class="fas fa-plus"></i> Nuevo
+                    </button>
+                    <button class="btn btn-secondary" id="scoring-config-snapshot">
+                      <i class="fas fa-camera"></i> Snapshot
+                    </button>
+                  </div>
+                </div>
+                <div class="scoring-chip-row" id="scoring-config-periods"></div>
+                <div class="scoring-ranking-table-wrap scoring-config-table-wrap">
+                  <table class="table scoring-ranking-table scoring-config-table">
+                    <thead id="scoring-config-head"></thead>
+                    <tbody id="scoring-config-body"></tbody>
+                  </table>
+                </div>
+              </div>
+
+              <div class="card scoring-card scoring-config-form-card scoring-resizable">
+                <div class="card-header">
+                  <div>
+                    <h3><i class="fas fa-pen-to-square"></i> Edición operativa</h3>
+                    <div id="scoring-config-form-caption" class="scoring-muted">Seleccioná un registro para editar o creá uno nuevo.</div>
+                  </div>
+                  <span id="scoring-config-mode" class="scoring-source-badge">Lectura</span>
+                </div>
+                <form id="scoring-config-form" class="scoring-config-form"></form>
+                <div class="scoring-config-actions">
+                  <button class="btn btn-primary" id="scoring-config-save" type="button">
+                    <i class="fas fa-save"></i> Guardar
+                  </button>
+                  <button class="btn btn-secondary" id="scoring-config-cancel" type="button">
+                    <i class="fas fa-ban"></i> Cancelar
+                  </button>
+                  <button class="btn btn-danger" id="scoring-config-delete" type="button">
+                    <i class="fas fa-trash"></i> Eliminar
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+
         </div>
       </section>
 
@@ -3801,9 +4031,10 @@
   <!-- Config local (API keys) - debe cargarse primero, no se sube a git -->
   <script src="js/config.local.js" onerror="console.warn('config.local.js no encontrado - usando config por defecto')"></script>
   <script src="js/config.js?v=20260206g"></script>
-  <script src="js/api.js?v=20260306c"></script>
+  <script src="js/api.js?v=20260307a"></script>
   <script src="js/ocr-extractos.js?v=20260304b"></script>
   <script src="js/app.js?v=20260306d"></script>
+  <script src="js/scoring-agencias.js?v=20260307a"></script>
 </body>
 
 </html>

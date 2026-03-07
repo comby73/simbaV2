@@ -95,6 +95,17 @@ function showApp() {
       el.classList.add('hidden');
     }
   });
+
+  const scoringElements = document.querySelectorAll('.scoring-only');
+  const username = String(currentUser.username || '').toLowerCase();
+  const canSeeScoring = currentUser.rol === 'admin' || username === 'ogonzalez';
+  scoringElements.forEach(el => {
+    if (canSeeScoring) {
+      el.classList.remove('hidden');
+    } else {
+      el.classList.add('hidden');
+    }
+  });
 }
 
 async function initApp() {
@@ -246,6 +257,11 @@ function navigateTo(view) {
       break;
     case 'facturacion-juegos':
       initFacturacionJuegos();
+      break;
+    case 'scoring':
+      if (typeof initScoring === 'function') {
+        initScoring();
+      }
       break;
   }
 }

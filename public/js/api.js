@@ -391,6 +391,38 @@ const agenciasAPI = {
   }
 };
 
+const scoringAPI = {
+  obtenerResumen: (params = {}) => {
+    const query = new URLSearchParams(params).toString();
+    return apiRequest(`/scoring-agencias/resumen${query ? `?${query}` : ''}`);
+  },
+  obtenerRanking: (params = {}) => {
+    const query = new URLSearchParams(params).toString();
+    return apiRequest(`/scoring-agencias/ranking${query ? `?${query}` : ''}`);
+  },
+  obtenerAgencia: (ctaCte, params = {}) => {
+    const query = new URLSearchParams(params).toString();
+    return apiRequest(`/scoring-agencias/agencia/${ctaCte}${query ? `?${query}` : ''}`);
+  },
+  obtenerConfiguracion: () => apiRequest('/scoring-agencias/configuracion'),
+  obtenerDataset: (dataset, params = {}) => {
+    const query = new URLSearchParams(params).toString();
+    return apiRequest(`/scoring-agencias/configuracion/${dataset}${query ? `?${query}` : ''}`);
+  },
+  guardarDataset: (dataset, record) => apiRequest(`/scoring-agencias/configuracion/${dataset}`, {
+    method: 'POST',
+    body: JSON.stringify({ record })
+  }),
+  eliminarDataset: (dataset, keys) => apiRequest(`/scoring-agencias/configuracion/${dataset}`, {
+    method: 'DELETE',
+    body: JSON.stringify({ keys })
+  }),
+  generarSnapshot: (periodo) => apiRequest('/scoring-agencias/snapshot', {
+    method: 'POST',
+    body: JSON.stringify({ periodo })
+  })
+};
+
 // Extractos API
 const extractosAPI = {
   listar: (params = {}) => {
@@ -476,5 +508,7 @@ if (!juegosOfflineAPI.facturacionJuegos) {
 }
 
 window.juegosOfflineAPI = juegosOfflineAPI;
+window.scoringAPI = scoringAPI;
 window.API = window.API || {};
 window.API.facturacionJuegos = juegosOfflineAPI.facturacionJuegos;
+window.API.scoring = scoringAPI;

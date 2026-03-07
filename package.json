@@ -7,7 +7,9 @@
     "start": "node src/app.js",
     "dev": "nodemon src/app.js",
     "db:init": "node database/init.js",
-    "db:seed": "node database/seed.js"
+    "db:seed": "node database/seed.js",
+    "db:migrate:scoring": "node database/migration_scoring_agencias.js",
+    "db:import:scoring": "node database/import_scoring_xlsm.js"
   },
   "keywords": [
     "loteria",

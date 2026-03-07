@@ -260,6 +260,16 @@ npm run db:seed
   - adaptador a recaudacion real,
   - estrategia de salida a produccion.
 
+### Marzo 2026 (07/03)
+- Se valido el modelo de scoring contra los insumos reales cargados en raiz:
+  - `Informe_Modelo_Regenerativo_Scoring_POP_LOTBA_RTM.docx`
+  - `Modelo_Regenerativo_Scoring_POP_LOTBA_RTM.xlsm`
+- Se actualizo `SCORING_REGENERATIVO.md` con:
+  - estructura real de hojas,
+  - mapeo de parametros (`PARAMS_MODELO`) y formulas por columna (`CALCULOS_AGENCIA`),
+  - criterio de categoria con percentiles + umbrales historicos,
+  - especificacion de acceso restringido fase 1 para `admin` y `ogonzalez`.
+
 ---
 
 ## 13) Checklist de deploy

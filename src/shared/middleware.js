@@ -118,6 +118,27 @@ const isAdmin = (req, res, next) => {
   next();
 };
 
+// Permitir acceso solo a usuarios habilitados para el módulo de scoring.
+const allowScoringUsers = (req, res, next) => {
+  if (!req.user) {
+    return res.status(401).json({ success: false, message: 'No autenticado' });
+  }
+
+  const allowedUsers = String(process.env.SCORING_ALLOWED_USERS || 'admin,ogonzalez')
+    .split(',')
+    .map(username => username.trim().toLowerCase())
+    .filter(Boolean);
+
+  if (!allowedUsers.includes(String(req.user.username || '').toLowerCase())) {
+    return res.status(403).json({
+      success: false,
+      message: 'No tenes permisos para acceder al modulo de scoring'
+    });
+  }
+
+  next();
+};
+
 // Registrar acción en auditoría
 const registrarAuditoria = async (userId, accion, modulo, tabla, registroId, datosAnteriores, datosNuevos, ip) => {
   try {
@@ -139,5 +160,6 @@ module.exports = {
   authorize,
   requirePermission,
   isAdmin,
+  allowScoringUsers,
   registrarAuditoria
 };

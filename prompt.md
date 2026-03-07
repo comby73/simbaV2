@@ -158,6 +158,8 @@ No busca reemplazar el `git log`, sino servir como contexto rápido de continuid
 
 - Se definio y documento el modulo `Modelo Regenerativo de Scoring de Agencias`.
 - Documento base agregado: `SCORING_REGENERATIVO.md`.
+- El diseno fue validado contra `Informe_Modelo_Regenerativo_Scoring_POP_LOTBA_RTM.docx` y `Modelo_Regenerativo_Scoring_POP_LOTBA_RTM.xlsm`.
+- Quedo especificado acceso restringido fase 1 del modulo para `admin` y `ogonzalez`.
 - Alcance del diseno:
 	- integracion sobre stack actual (Express + Vanilla JS + MySQL),
 	- calculo de score base y score final con coeficiente cliente,

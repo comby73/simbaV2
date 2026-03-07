@@ -1,260 +1,191 @@
 # Modulo Regenerativo de Scoring de Agencias
 
-Ultima actualizacion: 06/03/2026
-Estado: Diseno funcional y tecnico listo para implementacion integrada
+Ultima actualizacion: 07/03/2026
+Estado: especificacion funcional y tecnica validada contra Word + XLSM real
 
-## 0. Contexto real del sistema
-- Stack actual: Node.js + Express (backend), Vanilla JS SPA (frontend), MySQL (datos)
-- Estructura actual: rutas modulares en `src/modules/*`, UI central en `public/js/app.js`
-- Fuente base disponible: recaudacion/venta por agencia y por juego desde `control_previo_agencias`
-- Seccion objetivo sugerida en la app: nueva vista dentro de Facturacion/Reportes
+## 0. Alcance validado
+- Fuente funcional: `Informe_Modelo_Regenerativo_Scoring_POP_LOTBA_RTM.docx`
+- Fuente tecnica/calculo: `Modelo_Regenerativo_Scoring_POP_LOTBA_RTM.xlsm`
+- Objetivo: implementar en SIMBA el mismo modelo operativo del Excel, con trazabilidad y seguridad por usuario.
 
-## 1. Diagnostico de integracion en la app actual
-- Encaje backend: nuevo modulo `src/modules/scoring-agencias/` siguiendo patron `{module}.controller.js` + `{module}.routes.js`
-- Encaje frontend: nueva vista `view-scoring-agencias` reutilizando el sistema de tabs y render en `public/js/app.js`
-- Encaje de datos: capa adaptadora sobre `control_previo_agencias` para no romper modulos existentes
-- Encaje de seguridad: usar `authenticate` + `requirePermission('reportes.read')` en lectura y `requirePermission('reportes.write')` en configuracion
+## 1. Estructura real del modelo (XLSM)
+Hojas detectadas y su rol:
+- `VENTAS`: base trimestral 2024/2025 por agencia.
+- `LOTO`: importes LOTO por agencia y trimestre.
+- `COMPLIANCE`: score y observaciones de control.
+- `ASESORES`: mapeo agencia -> asesor.
+- `DIGITAL`: score digital por percentil ponderado.
+- `CLIENTE`: score de experiencia + categoria + coeficiente.
+- `MEDIDAS DIGITAL Y CLIENTE`: metrica auxiliar y criterios de negocio.
+- `PARAMS_MODELO`: parametros, pesos, caps, periodos.
+- `PIVOT_HIST`: percentiles historicos por periodo.
+- `HIST_SCORE`: historico de score final y categoria.
+- `SNAPSHOT_ACTUAL`: foto del periodo actual para historizar.
+- `CALCULOS_AGENCIA`: motor completo (score, categoria, movilidad, prediccion, impacto).
+- `DASH_EJECUTIVO`, `GRAF_EJECUTIVO`, `FICHA_AGENCIA`: visualizacion ejecutiva.
 
-Decision de producto:
-- No reemplaza reportes existentes
-- Se agrega como capa de inteligencia comercial-operativa
-- Debe funcionar aunque falten ejes no financieros (compliance/digital/cliente)
+## 2. Regla central del scoring
+- Puntaje base: `R` (0..100) con 6 componentes ponderados.
+- Capa cliente: `T` (coeficiente multiplicador por categoria de cliente).
+- Puntaje final: `U = clamp(R * T, 0, 100)`.
+- Categoria: se define por maximo entre percentiles actuales y umbrales historicos.
 
-## 2. Propuesta de arquitectura
+## 3. Parametros reales observados (PARAMS_MODELO)
+Llaves clave del modelo:
+- `B1`: anio seleccionado.
+- `B2`: quarter seleccionado (`Q1/Q2/Q3`).
+- `B3`: periodo actual (`YYYY-Qx`).
+- `B4`: periodo anterior (`YYYY-Qx`).
 
-### 2.1 Backend
+Pesos del score base:
+- `B7`: ventas crecimiento personal.
+- `B8`: ventas impacto absoluto.
+- `B9`: ventas diferencial vs red.
+- `B10`: mix LOTO.
+- `B11`: compliance.
+- `B12`: digital.
+
+Bandas y objetivos:
+- `B15/B16/B17`: piso/objetivo/cap para crecimiento personal.
+- `B18/B19`: piso/cap para diferencial vs red.
+- `B20/B21`: ponderacion interna del impacto absoluto (componente porcentual + log).
+- `B23`: target de mix LOTO.
+
+Cliente:
+- `B32`: ponderacion QR.
+- `B33`: base tasa cero de quejas.
+- `B34`: ponderacion cliente incognito.
+- `B35`: ponderacion resenas Google.
+- `A36:A40` + `B36:B40`: mapeo categoria cliente -> coeficiente `T`.
+
+Cortes y estabilidad:
+- `B50/B51/B52/B53`: percentiles objetivo (`P95/P80/P50/P20`).
+- `B45/B46/B47/B48`: pisos historicos por categoria.
+- `E16`: N periodos historicos para promedio en `PIVOT_HIST`.
+
+## 4. Motor real por columna (CALCULOS_AGENCIA)
+Columnas nucleares:
+- `E`: crecimiento (`D/C - 1`).
+- `F`: puntos crecimiento (con banda `B15..B17`, tope 100, luego peso `B7`).
+- `G`: incremento absoluto (`MAX(0,D-C)`).
+- `H`: puntos impacto absoluto usando mezcla de `%` + `LN(1+G)` normalizado y peso `B8`.
+- `I`: diferencial vs red (`E - PARAMS_MODELO!B5`).
+- `J`: puntos diferencial con banda `B18..B19` y peso `B9`.
+- `L`: mix LOTO (`K/D`).
+- `M`: puntos mix con target `B23` y peso `B10`.
+- `N/O`: compliance y puntos (`O = N * B11`).
+- `P/Q`: digital y puntos (`Q = P * B12`).
+- `R`: score base `clamp(F+H+J+M+O+Q,0,100)`.
+- `S/T`: categoria cliente y coeficiente.
+- `U`: score final `clamp(R*T,0,100)`.
+
+Categoria y movilidad:
+- `V`: categoria actual (`DIAMANTE/PLATINO/ORO/PLATA/BRONCE/CERRADO`) usando `MAX(percentil_actual, piso_historico)`.
+- `W`: categoria anterior por lookup en `HIST_SCORE` y `PARAMS_MODELO!B4`.
+- `X`: movilidad (`Mejora`, `Estable`, `Baja`).
+
+Gestion predictiva:
+- `AE`: proximo corte de ascenso en `U`.
+- `AF`: piso de permanencia en categoria actual.
+- `AG`: delta requerido en score base `R` para subir.
+- `AH`: eje predictivo recomendado (`VENTAS/LOTO/COMPLIANCE/DIGITAL/CLIENTE`).
+- `AI`: accion predictiva textual.
+- `AJ`: probabilidad operativa de ascenso (0..1), ajustada por movilidad y cliente.
+- `AK`: distancia al ascenso.
+- `AL`: distancia al descenso.
+- `AM/AN`: indice y prioridad de gestion.
+- `AO..AV`: impacto potencial por eje y mayor retorno probable.
+
+## 5. Regla de categorias (critica)
+La categoria no depende solo del trimestre actual. Para cada corte se usa:
+
+`corte_efectivo = MAX(percentil_actual, umbral_historico)`
+
+Interpretacion:
+- Evita que los cortes caigan por un trimestre atipico.
+- Mantiene estabilidad de categorias entre periodos.
+- Requiere mantener actualizado `HIST_SCORE` y `PIVOT_HIST`.
+
+## 6. Integracion en SIMBA (arquitectura objetivo)
+Backend propuesto:
 - `src/modules/scoring-agencias/scoring.controller.js`
-: endpoints de resumen, ranking, ficha, configuracion y simulador
 - `src/modules/scoring-agencias/scoring.routes.js`
-: registro de rutas REST
 - `src/modules/scoring-agencias/scoring.service.js`
-: orquestacion de calculos por periodo
 - `src/modules/scoring-agencias/scoring.engine.js`
-: funciones puras de scoring (sin SQL)
 - `src/modules/scoring-agencias/scoring.repository.js`
-: consultas SQL y mapeo a DTOs de dominio
-- `src/modules/scoring-agencias/scoring.config.js`
-: parametros editables del modelo
 
-### 2.2 Frontend
+Frontend propuesto:
 - `public/js/scoring-agencias.js`
-: render de tablero, ranking, ficha, filtros, simulador
-- Reuso de helpers ya existentes
-: `apiRequest`, `showToast`, tabla y cards actuales
-- Carga diferida
-: inicializar solo cuando el usuario abre la vista
+- nueva vista/tab en `public/index.html`
+- integracion de navegacion/carga en `public/js/app.js`
 
-### 2.3 Persistencia
-Tablas nuevas sugeridas:
-- `scoring_agencias_config` (versionado de parametros)
-- `scoring_agencias_snapshot` (resultado por periodo/agencia)
-- `scoring_agencias_inputs` (compliance/digital/cliente por periodo/agencia)
+Persistencia recomendada:
+- `scoring_agencias_config`
+- `scoring_agencias_inputs`
+- `scoring_agencias_snapshot`
+- `scoring_agencias_hist` (opcional si no se reutiliza `HIST_SCORE` logico)
 
-Nota:
-- Si no se desea persistencia inicial, el motor puede correr on-demand y devolver calculo en caliente
+## 7. Adaptacion de datos desde SIMBA
+Fuente principal:
+- `control_previo_agencias` para ventas totales por agencia/periodo.
+- mismo set para extraer mix LOTO (`juego in ('loto','loto5')` segun homologacion local).
 
-## 3. Modelo de datos
+Fuentes complementarias:
+- Compliance, digital y cliente inicialmente cargables por CSV/API interna.
+- Mientras no haya fuente online, usar tabla de insumos manual con versionado por periodo.
 
-## 3.1 Entidades de entrada
-- Agencia
-: `cta_cte`, `codigo_agencia`, `nombre`, `zona`, `asesor`
-- Periodo
-: `desde`, `hasta`, `periodo_id`, `periodo_anterior_id`
-- VentasAgenciaPeriodo
-: `venta_total`, `venta_por_juego`, `venta_loto`
-- InputsNoFinancieros
-: `compliance_score`, `digital_score`, `cliente_nivel`
+## 8. Seguridad y restriccion de acceso (fase 1)
+Requisito operativo confirmado:
+- Solo pueden ver/usar el modulo: `admin` y usuario `ogonzalez`.
 
-## 3.2 Resultado de scoring
-- `score_base_r` (0..100)
-- `coef_cliente_t` (ej. 1.20, 1.15, 1.10, 1.00, 0.70)
-- `score_final_u = clamp(r * t, 0, 100)`
-- `categoria_actual`, `categoria_anterior`, `movilidad`
-- `dist_ascenso`, `dist_descenso`, `prob_ascenso`
-- `prioridad_gestion`, `eje_mayor_impacto`, `recomendacion`
+Propuesta de implementacion (sin hardcode inseguro):
+- Mantener `authenticate` obligatorio.
+- Crear middleware especifico `allowScoringUsers` que valide `req.user.username` en allowlist configurable.
+- Configuracion via `.env`:
+  - `SCORING_ENABLED=true`
+  - `SCORING_ALLOWED_USERS=admin,ogonzalez`
+- Adicionalmente exigir permiso RBAC de lectura (`reportes.read`) para no romper modelo de permisos existente.
+- En frontend ocultar la vista si el usuario no esta autorizado (validacion de conveniencia, no de seguridad).
 
-## 3.3 Parametros de scoring (configurables)
-- Pesos base:
-- `ventas_crecimiento = 0.35`
-- `ventas_impacto_abs = 0.15`
-- `ventas_diff_red = 0.15`
-- `mix_loto = 0.15`
-- `compliance = 0.10`
-- `digital = 0.10`
-- Coeficientes cliente:
-- `excelente=1.20`, `muy_bueno=1.15`, `bueno=1.10`, `regular=1.00`, `malo=0.70`
-- Modo categorias:
-- `percentiles` o `umbrales_fijos`
-
-## 4. Formulas del scoring
-
-## 4.1 Ventas
-- `crecimiento_agencia = (ventas_actual / ventas_anterior) - 1`
-- `incremento_abs = max(0, ventas_actual - ventas_anterior)`
-- `crecimiento_red = (ventas_red_actual / ventas_red_anterior) - 1`
-- `diff_red = crecimiento_agencia - crecimiento_red`
-- `mix_loto = venta_loto / max(venta_total, 1)`
-
-## 4.2 Normalizacion a subscore (0..100)
-Para cada eje se aplica una funcion de normalizacion configurable con caps:
-- `sub_ventas_crecimiento = norm(crecimiento_agencia, min, max)`
-- `sub_impacto_abs = norm(incremento_abs, min, max)`
-- `sub_diff_red = norm(diff_red, min, max)`
-- `sub_mix_loto = proximity(mix_loto, objetivo_mix_loto)`
-- `sub_compliance = clamp(compliance_score, 0, 100)`
-- `sub_digital = clamp(digital_score, 0, 100)`
-
-## 4.3 Score base y final
-- `R = sum(peso_eje * subscore_eje)`
-- `T = map(cliente_nivel)`
-- `U = clamp(R * T, 0, 100)`
-
-## 5. Flujo UX propuesto
-
-### 5.1 Vista ejecutiva
-- Filtro de periodo, asesor, zona, categoria
-- KPIs: promedio score, variacion, agencias en riesgo, prioridad alta
-- Distribucion por categorias
-- Ranking top/bottom
-- Tabla resumida con accion sugerida
-
-### 5.2 Ranking de agencias
-Columnas:
-- Agencia, Asesor, Ventas actual, Ventas anterior, Crecimiento
-- Score base R, Coeficiente T, Score final U
-- Categoria, Movilidad, Prioridad, Eje mayor impacto
-
-### 5.3 Ficha de agencia
-Bloques:
-- Resumen score/categoria
-- Desglose por ejes
-- Cliente (nivel y coeficiente)
-- Historico por periodos
-- Distancias a ascenso/descenso
-- Simulador de mejora
-
-### 5.4 Configuracion del modelo
-Editable por permisos:
-- pesos
-- targets/caps
-- coeficientes cliente
-- modo de cortes de categoria
-
-## 6. Estructura de pantallas
-- Pantalla 1: `Scoring > Resumen Ejecutivo`
-- Pantalla 2: `Scoring > Ranking Agencias`
-- Pantalla 3: `Scoring > Ficha Agencia`
-- Pantalla 4: `Scoring > Configuracion`
-
-## 7. Codigo necesario (esqueleto integrado)
-
-### 7.1 Endpoints backend sugeridos
-- `GET /api/scoring-agencias/resumen?desde=&hasta=`
-- `GET /api/scoring-agencias/ranking?desde=&hasta=&asesor=&zona=`
-- `GET /api/scoring-agencias/agencia/:ctaCte?desde=&hasta=`
+## 9. Endpoints definidos para implementacion
+- `GET /api/scoring-agencias/resumen?periodo=2025-Q3`
+- `GET /api/scoring-agencias/ranking?periodo=2025-Q3&asesor=&categoria=`
+- `GET /api/scoring-agencias/agencia/:ctaCte?periodo=2025-Q3`
 - `POST /api/scoring-agencias/simular`
 - `GET /api/scoring-agencias/config`
 - `PUT /api/scoring-agencias/config`
+- `POST /api/scoring-agencias/snapshot` (cierre de periodo)
 
-### 7.2 Contrato de respuesta (resumen)
-```json
-{
-  "success": true,
-  "data": {
-    "periodo": { "desde": "2026-01-01", "hasta": "2026-01-31" },
-    "kpis": {
-      "scorePromedio": 74.2,
-      "agenciasEvaluadas": 132,
-      "prioridadAlta": 21
-    },
-    "distribucionCategorias": [
-      { "categoria": "ORO", "cantidad": 34 }
-    ],
-    "ranking": []
-  }
-}
-```
+## 10. Flujo operativo trimestral
+1. Cargar/validar insumos de `VENTAS`, `LOTO`, `COMPLIANCE`, `DIGITAL`, `CLIENTE`.
+2. Confirmar periodo actual/anterior en parametros.
+3. Ejecutar calculo y publicar ranking + ficha.
+4. Cerrar periodo: guardar snapshot historico (score U + categoria + ranking).
+5. Refrescar percentiles historicos para cortes estables.
 
-## 8. Adaptador a datos reales de recaudacion
+## 11. QA minimo antes de liberar
+- Verificar agencias presentes en todos los ejes (o fallback controlado).
+- Revisar outliers de crecimiento e incremento absoluto.
+- Validar que `HIST_SCORE` tenga el periodo anterior (si no, movilidad queda sin base).
+- Validar que cortes historicos no queden en cero por pivot incompleto.
+- Testear casos borde:
+  - agencia nueva,
+  - agencia sin ventas,
+  - cliente `Malo` (penalizacion),
+  - categoria `DIAMANTE` y `CERRADO` (probabilidad y distancias no aplican).
 
-### 8.1 SQL base para ventas por agencia
-```sql
-SELECT
-  cta_cte,
-  SUM(total_recaudacion) AS venta_total,
-  SUM(CASE WHEN LOWER(TRIM(juego)) IN ('loto','loto5') THEN total_recaudacion ELSE 0 END) AS venta_loto
-FROM control_previo_agencias
-WHERE fecha >= ? AND fecha <= ?
-GROUP BY cta_cte;
-```
+## 12. Plan de implementacion por fases
+Fase 1 (acceso restringido):
+- endpoints de lectura (`resumen`, `ranking`, `ficha`) y vista ejecutiva.
+- permiso solo `admin` + `ogonzalez`.
 
-### 8.2 SQL base para ventas por juego
-```sql
-SELECT
-  cta_cte,
-  LOWER(TRIM(juego)) AS juego,
-  SUM(total_recaudacion) AS recaudacion
-FROM control_previo_agencias
-WHERE fecha >= ? AND fecha <= ?
-GROUP BY cta_cte, LOWER(TRIM(juego));
-```
+Fase 2:
+- simulador y recomendaciones predictivas completas.
+- snapshot/historico automatizado.
 
-### 8.3 Periodo anterior
-- Reusar mismo query cambiando rango de fechas
-- Calcular crecimiento comparando `actual` vs `anterior`
-
-## 9. Datos mock para desarrollo
-```json
-[
-  {
-    "cta_cte": "5101234",
-    "agencia": "Agencia Centro",
-    "venta_total_actual": 12500000,
-    "venta_total_anterior": 10800000,
-    "venta_loto_actual": 4200000,
-    "compliance_score": 88,
-    "digital_score": 64,
-    "cliente_nivel": "muy_bueno"
-  }
-]
-```
-
-## 10. Instrucciones para llevar a produccion
-1. Crear tablas nuevas (`config`, `inputs`, `snapshot`) o habilitar modo on-demand
-2. Registrar rutas en `src/app.js` bajo `/api/scoring-agencias`
-3. Integrar nueva vista en el menu del frontend
-4. Probar con un periodo cerrado y validar contra recaudacion ya disponible
-5. Activar fallback si faltan `compliance/digital/cliente`
-6. Versionar parametros de scoring para trazabilidad de cambios
-7. Publicar con feature flag inicial (solo admin/analista)
-
-## 11. Estado de datos parciales (degradacion controlada)
-- Si falta compliance: usar 50 por defecto y marcar `fuente=compliance_default`
-- Si falta digital: usar 50 por defecto y marcar `fuente=digital_default`
-- Si falta cliente: usar `regular (1.00)` y marcar `fuente=cliente_default`
-- La UI siempre debe mostrar indicador de cobertura de datos
-
-## 12. Mensajeria de producto (tono operativo)
-- "Tu principal oportunidad de mejora esta en el eje Digital."
-- "La experiencia cliente esta reduciendo tu score final."
-- "Tu crecimiento estuvo por debajo del promedio de la red."
-- "Con una mejora estimada de X puntos podrias subir de categoria."
-
-## 13. Archivos a crear y modificar (implementacion futura)
-Crear:
-- `src/modules/scoring-agencias/scoring.controller.js`
-- `src/modules/scoring-agencias/scoring.routes.js`
-- `src/modules/scoring-agencias/scoring.service.js`
-- `src/modules/scoring-agencias/scoring.engine.js`
-- `src/modules/scoring-agencias/scoring.repository.js`
-- `src/modules/scoring-agencias/scoring.config.js`
-- `public/js/scoring-agencias.js`
-
-Modificar:
-- `src/app.js` (registrar rutas)
-- `public/index.html` (nueva vista)
-- `public/js/app.js` (navegacion + init vista)
-- `DOCUMENTACION.md` (seccion del modulo)
+Fase 3:
+- tablero ejecutivo completo con graficos y exportables.
+- eventual exposicion a mas perfiles segun resultado.
 
 ---
-Este documento define la version base de diseno para integrar el modulo sin romper arquitectura actual y aprovechando la recaudacion existente por agencia/juego.
+Este documento reemplaza el diseno preliminar y queda como base de desarrollo alineada con el modelo real entregado por negocio (Word + XLSM).
