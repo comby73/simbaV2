@@ -673,7 +673,8 @@ async function loadAgencySales(period) {
   const lotoPlaceholders = LOTO_GAMES.map(() => '?').join(', ');
   const previousRange = buildPeriodRange(period.previousKey);
 
-  // Solo evalúa agencias con asesor asignado en scoring_asesores.
+  // Evalúa todas las agencias con ventas. LEFT JOIN con scoring_asesores
+  // para que el ranking funcione aunque la tabla de asesores esté vacía.
   // Ambos lados del JOIN se normalizan a 7 dígitos con LEFT(...,7) para
   // absorber el dígito verificador que tienen los cta_cte de las tablas
   // de scoring pero que no existe en control_previo_agencias ni en agencias.
@@ -690,8 +691,6 @@ async function loadAgencySales(period) {
         ROUND(SUM(cpa.total_recaudacion), 2) AS total_actual,
         ROUND(SUM(CASE WHEN LOWER(cpa.juego) IN (${lotoPlaceholders}) THEN cpa.total_recaudacion ELSE 0 END), 2) AS total_loto
       FROM control_previo_agencias cpa
-      INNER JOIN scoring_asesores sa
-        ON LEFT(sa.cta_cte, 7) = LEFT(cpa.codigo_agencia, 7)
       WHERE cpa.\`${col}\` BETWEEN ? AND ?
       GROUP BY LEFT(cpa.codigo_agencia, 7)
     ) current_data
@@ -700,8 +699,6 @@ async function loadAgencySales(period) {
         LEFT(cpa2.codigo_agencia, 7) AS ctaCteNorm,
         ROUND(SUM(cpa2.total_recaudacion), 2) AS total_anterior
       FROM control_previo_agencias cpa2
-      INNER JOIN scoring_asesores sa2
-        ON LEFT(sa2.cta_cte, 7) = LEFT(cpa2.codigo_agencia, 7)
       WHERE cpa2.\`${col}\` BETWEEN ? AND ?
       GROUP BY LEFT(cpa2.codigo_agencia, 7)
     ) previous_data ON previous_data.ctaCteNorm = current_data.ctaCteNorm

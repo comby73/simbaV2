@@ -54,8 +54,10 @@ async function apiRequest(endpoint, options = {}) {
     ...options
   };
 
+  const timeoutMs = options.timeout || 30000;
+  delete config.timeout;
   const controller = new AbortController();
-  const id = setTimeout(() => controller.abort(), 30000);
+  const id = setTimeout(() => controller.abort(), timeoutMs);
   config.signal = controller.signal;
 
   try {
@@ -394,11 +396,11 @@ const agenciasAPI = {
 const scoringAPI = {
   obtenerResumen: (params = {}) => {
     const query = new URLSearchParams(params).toString();
-    return apiRequest(`/scoring-agencias/resumen${query ? `?${query}` : ''}`);
+    return apiRequest(`/scoring-agencias/resumen${query ? `?${query}` : ''}`, { timeout: 90000 });
   },
   obtenerRanking: (params = {}) => {
     const query = new URLSearchParams(params).toString();
-    return apiRequest(`/scoring-agencias/ranking${query ? `?${query}` : ''}`);
+    return apiRequest(`/scoring-agencias/ranking${query ? `?${query}` : ''}`, { timeout: 90000 });
   },
   obtenerAgencia: (ctaCte, params = {}) => {
     const query = new URLSearchParams(params).toString();
