@@ -182,8 +182,10 @@ function formatDate(date) {
 }
 
 function normalizeCtaCte(value) {
+  // Elimina dígito verificador: si el código es numérico y tiene más de 7 dígitos
+  // (las tablas de scoring usan 8 dígitos, las de control_previo usan 7)
   const normalized = String(value || '').trim();
-  if (/^\d{8}$/.test(normalized)) {
+  if (/^\d{8,}$/.test(normalized)) {
     return normalized.slice(0, 7);
   }
   return normalized;
@@ -672,42 +674,40 @@ async function loadAgencySales(period) {
   const previousRange = buildPeriodRange(period.previousKey);
 
   // Solo evalúa agencias con asesor asignado en scoring_asesores.
-  // Esto filtra la tabla control_previo_agencias (que contiene toda la red)
-  // y restringe el scoring al universo comercial gestionado.
+  // Ambos lados del JOIN se normalizan a 7 dígitos con LEFT(...,7) para
+  // absorber el dígito verificador que tienen los cta_cte de las tablas
+  // de scoring pero que no existe en control_previo_agencias ni en agencias.
   const sql = `
     SELECT
-      current_data.codigo_agencia AS ctaCte,
-      COALESCE(ag.nombre, CONCAT('Agencia ', current_data.codigo_agencia)) AS agenciaNombre,
+      current_data.ctaCteNorm AS ctaCte,
+      COALESCE(ag.nombre, CONCAT('Agencia ', current_data.ctaCteNorm)) AS agenciaNombre,
       current_data.total_actual AS totalActual,
       current_data.total_loto AS totalLoto,
       COALESCE(previous_data.total_anterior, 0) AS totalAnterior
     FROM (
       SELECT
-        cpa.codigo_agencia,
+        LEFT(cpa.codigo_agencia, 7) AS ctaCteNorm,
         ROUND(SUM(cpa.total_recaudacion), 2) AS total_actual,
         ROUND(SUM(CASE WHEN LOWER(cpa.juego) IN (${lotoPlaceholders}) THEN cpa.total_recaudacion ELSE 0 END), 2) AS total_loto
       FROM control_previo_agencias cpa
       INNER JOIN scoring_asesores sa
-        ON sa.cta_cte = cpa.codigo_agencia
-        OR sa.cta_cte = LEFT(cpa.codigo_agencia, 7)
+        ON LEFT(sa.cta_cte, 7) = LEFT(cpa.codigo_agencia, 7)
       WHERE cpa.\`${col}\` BETWEEN ? AND ?
-      GROUP BY cpa.codigo_agencia
+      GROUP BY LEFT(cpa.codigo_agencia, 7)
     ) current_data
     LEFT JOIN (
       SELECT
-        cpa2.codigo_agencia,
+        LEFT(cpa2.codigo_agencia, 7) AS ctaCteNorm,
         ROUND(SUM(cpa2.total_recaudacion), 2) AS total_anterior
       FROM control_previo_agencias cpa2
       INNER JOIN scoring_asesores sa2
-        ON sa2.cta_cte = cpa2.codigo_agencia
-        OR sa2.cta_cte = LEFT(cpa2.codigo_agencia, 7)
+        ON LEFT(sa2.cta_cte, 7) = LEFT(cpa2.codigo_agencia, 7)
       WHERE cpa2.\`${col}\` BETWEEN ? AND ?
-      GROUP BY cpa2.codigo_agencia
-    ) previous_data ON previous_data.codigo_agencia = current_data.codigo_agencia
+      GROUP BY LEFT(cpa2.codigo_agencia, 7)
+    ) previous_data ON previous_data.ctaCteNorm = current_data.ctaCteNorm
     LEFT JOIN agencias ag
-      ON ag.numero = current_data.codigo_agencia
-      OR LEFT(ag.numero, 7) = current_data.codigo_agencia
-    ORDER BY current_data.total_actual DESC, current_data.codigo_agencia ASC
+      ON LEFT(ag.numero, 7) = current_data.ctaCteNorm
+    ORDER BY current_data.total_actual DESC, current_data.ctaCteNorm ASC
   `;
 
   return query(sql, [
