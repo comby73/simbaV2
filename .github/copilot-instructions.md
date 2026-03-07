@@ -83,3 +83,9 @@ npm run db:seed    # Seed test data
 - Auto-seed: `ensureDefaultScoringData()` populates defaults on first use
 - Frontend: "Comercial" sidebar section, 5 tabs (Ranking, Ficha, Análisis, Simulador, Config)
 - Tables: `scoring_modelo_parametros`, `scoring_cliente_coeficientes`, `scoring_asesores`, `scoring_compliance`, `scoring_digital`, `scoring_cliente`, `scoring_hist_score`
+- Excel parity notes (critical):
+  - `B5` used for network growth differential (`I = E - B5`, with fallback to operational calc if absent)
+  - category cuts apply `MAX(percentile, B45..B48)`
+  - client fallback score uses weighted `B32..B35`
+  - ranking follows Excel `RANK.EQ` tie behavior
+- Chart status: Excel has 6 charts; SIMBA currently has 6 equivalent visualizations (5 Chart.js in Analisis + 1 historical sparkline in Ficha)

@@ -65,6 +65,8 @@ Está orientado a operación diaria de sorteos y auditoría posterior, con traza
 - Calculo real-time desde `control_previo_agencias` (ventas NTF) + datasets auxiliares
 - Auto-seed de parametros y coeficientes al primer uso (sin Excel)
 - CRUD completo de datasets desde pestaña Configuracion
+- Paridad de formulas Excel->backend documentada en `SCORING_REGENERATIVO.md` (seccion 13)
+- Graficos: completitud 6/6 respecto al XLSM (5 Chart.js en Analisis + 1 sparkline historico en Ficha)
 - Documentacion detallada: `SCORING_REGENERATIVO.md`
 
 ### 4.1 Módulos backend registrados en `src/app.js`
@@ -258,6 +260,15 @@ npm run db:seed
   - modelo de datos,
   - formulas de scoring,
   - flujo UX y pantallas,
+
+### Marzo 2026 (07/03 noche)
+- Se cerro brecha de paridad con Excel en modulo scoring:
+  - uso de `B5` para diferencial vs red (con fallback operativo),
+  - aplicacion explicita de pisos historicos `B45..B48`,
+  - aplicacion de ponderaciones cliente `B32..B35` en fallback,
+  - ranking estilo `RANK.EQ` para empates y snapshot coherente.
+- Se completo tablero grafico de scoring a 6 visualizaciones equivalentes al XLSM.
+- Se agrego matriz de trazabilidad Excel->SIMBA para consumo por IA en `SCORING_REGENERATIVO.md`.
   - adaptador a recaudacion real,
   - estrategia de salida a produccion.
 

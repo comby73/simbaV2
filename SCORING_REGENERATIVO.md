@@ -1,6 +1,6 @@
 # Modulo Regenerativo de Scoring de Agencias
 
-Ultima actualizacion: 07/03/2026
+Ultima actualizacion: 07/03/2026 (noche)
 Estado: **IMPLEMENTADO Y EN PRODUCCION** (chatomar.shop)
 
 ## 0. Alcance validado
@@ -193,8 +193,7 @@ Fuentes complementarias:
 - Acceso restringido: admin + ogonzalez
 - Deploy en produccion (chatomar.shop)
 
-### Fase 2 — PENDIENTE
-- Graficos de tendencia y distribucion (Chart.js o similar) en tab Analisis
+### Fase 2 — EN PROGRESO
 - Importacion masiva CSV para datasets (Cliente, Compliance, Digital)
 - Simulador con proyeccion mas granular por sub-eje
 
@@ -203,6 +202,75 @@ Fuentes complementarias:
 - Notificaciones por prioridad alta
 - Permisos granulares por asesor (ver solo sus agencias)
 - Historico visual multi-periodo (evolucion Q1→Q2→Q3→Q4)
+
+## 13. Matriz de paridad Excel -> SIMBA (fuente unica para auditoria IA)
+
+Esta seccion resume la equivalencia funcional entre `Modelo_Regenerativo_Scoring_POP_LOTBA_RTM.xlsm`
+y la implementacion productiva en SIMBA.
+
+### 13.1 Formula a formula (CALCULOS_AGENCIA)
+
+- `E = D/C - 1` (crecimiento): replicado en backend.
+- `F` (banda `B15..B17`, peso `B7`): replicado.
+- `G = MAX(0,D-C)`: replicado.
+- `H` (mix componente porcentual + logaritmico, `B20/B21`, peso `B8`): replicado.
+- `I = E - B5` (diferencial vs red): replicado usando `PARAMS_MODELO.B5` con fallback operativo si falta dato.
+- `J` (banda `B18..B19`, peso `B9`): replicado.
+- `L = K/D` (mix loto): replicado.
+- `M` (target `B23`, peso `B10`): replicado.
+- `N/O` (compliance + peso `B11`): replicado.
+- `P/Q` (digital + peso `B12`): replicado.
+- `R = clamp(F+H+J+M+O+Q,0,100)`: replicado.
+- `S/T` (categoria/coeficiente cliente): replicado.
+- `U = clamp(R*T,0,100)`: replicado.
+- `V` (categoria por `MAX(percentil, piso historico)`): replicado usando `B50..B53` y `B45..B48`.
+- `W` (categoria anterior por periodo `B4`): replicado con `scoring_hist_score`.
+- `X` (movilidad por categoria): replicado.
+- `AA` (ranking tipo `RANK.EQ`): replicado (empates comparten posicion).
+- `AE..AV` (cortes, distancia, probabilidad, prioridad e impacto por eje): replicado en logica y campos API.
+
+### 13.2 Parametros del modelo
+
+- `B1..B4`: periodo actual/anterior y seleccion temporal, replicados.
+- `B5`: crecimiento de red, aplicado en diferencial.
+- `B7..B12`: pesos de ejes, replicados.
+- `B15..B23`: bandas y objetivos, replicados.
+- `B32..B35`: ponderaciones cliente, aplicadas al fallback de score cliente.
+- `B44`: periodos historicos para promediar umbrales historicos, replicado.
+- `B45..B48`: pisos historicos por categoria, replicados.
+- `B50..B53`: percentiles de corte, replicados.
+
+### 13.3 Snapshot historico
+
+- Tabla: `scoring_hist_score`.
+- Persistencia: score final, categoria y ranking del periodo.
+- Ranking historico guardado con el mismo criterio visual (estilo `RANK.EQ`) para consistencia con Excel.
+
+### 13.4 Graficos (estado real)
+
+En el XLSM hay **6 graficos reales** (`chart1.xml` ... `chart6.xml`).
+
+En SIMBA hay actualmente **6 visualizaciones equivalentes**:
+- 5 graficos Chart.js en tab Analisis:
+  - Distribucion por categoria
+  - Riesgo de movilidad
+  - Eje de impacto
+  - Concentracion de ventas
+  - Distribucion de prioridad
+- 1 sparkline historico en Ficha de agencia.
+
+Conclusion operativa:
+- **Completitud por cantidad de graficos: 6/6.**
+- **Completitud de formula de scoring: alta (paridad funcional).**
+- Puede haber diferencias menores de presentacion visual (estilo/layout) respecto a Excel, sin afectar calculo.
+
+### 13.5 Fuente de verdad para IA y auditoria
+
+Para consultas tecnicas automáticas, tomar este orden de prioridad:
+1. `SCORING_REGENERATIVO.md` (este documento, estado operativo real)
+2. `src/modules/scoring-agencias/scoring.controller.js` (implementacion efectiva)
+3. `Modelo_Regenerativo_Scoring_POP_LOTBA_RTM.xlsm` (origen de formulas)
+4. `DOCUMENTACION.md` (vista global del sistema)
 
 ---
 Este documento refleja el estado real de implementacion del modulo Scoring Regenerativo en SIMBA V2.
