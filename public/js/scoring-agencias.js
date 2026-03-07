@@ -9,6 +9,11 @@
     filteredAgencies: [],
     summary: null,
     period: '',
+    charts: {
+      categories: null,
+      ejeImpacto: null,
+      concentracion: null
+    },
     admin: {
       canEdit: false,
       datasets: [],
@@ -501,19 +506,7 @@
     document.getElementById('scoring-summary-chips').innerHTML = summary.chips
       .map(item => `<span class="scoring-chip">${item}</span>`)
       .join('');
-
-    const total = Math.max(1, summary.categories.reduce((acc, item) => acc + item.count, 0));
-    document.getElementById('scoring-distribution-bars').innerHTML = summary.categories.map(item => `
-      <div class="scoring-distribution-item scoring-fade-in">
-        <div class="scoring-distribution-top">
-          <span class="scoring-table-chip ${item.colorClass}">${item.name}</span>
-          <strong>${item.count}</strong>
-        </div>
-        <div class="scoring-bar-track">
-          <div class="scoring-bar-fill" style="width:${(item.count / total) * 100}%;"></div>
-        </div>
-      </div>
-    `).join('');
+    renderCategoryChart(summary);
 
     document.getElementById('scoring-priority-list').innerHTML = summary.priorities.length
       ? summary.priorities.map(item => `
@@ -526,34 +519,8 @@
       `).join('')
       : '<div class="scoring-empty-state">No hay observaciones ampliadas para este periodo.</div>';
 
-    // Eje de impacto
-    const ejeEl = document.getElementById('scoring-eje-impacto');
-    if (ejeEl && summary.ejeImpacto) {
-      const totalEje = Object.values(summary.ejeImpacto).reduce((a, b) => a + b, 0) || 1;
-      ejeEl.innerHTML = Object.entries(summary.ejeImpacto)
-        .sort((a, b) => b[1] - a[1])
-        .map(([eje, cant]) => `
-          <div class="scoring-distribution-item scoring-fade-in">
-            <div class="scoring-distribution-top">
-              <span class="scoring-muted">${eje}</span>
-              <strong>${cant}</strong>
-            </div>
-            <div class="scoring-bar-track">
-              <div class="scoring-bar-fill" style="width:${(cant / totalEje) * 100}%;background:var(--primary);"></div>
-            </div>
-          </div>
-        `).join('') || '<div class="scoring-muted">Sin datos</div>';
-    }
-
-    // Concentración de crecimiento
-    const concEl = document.getElementById('scoring-concentracion');
-    if (concEl && summary.concentracion) {
-      const c = summary.concentracion;
-      concEl.innerHTML = [10, 20, 50, 100, 200].map(n => {
-        const pct = c[`top${n}`] !== undefined ? (c[`top${n}`] * 100).toFixed(1) : '-';
-        return `<div class="scoring-concentracion-item"><span>Top ${n}</span><strong>${pct}%</strong></div>`;
-      }).join('');
-    }
+    renderEjeImpactoChart(summary);
+    renderConcentracionChart(summary);
 
     // Top 20 Alta Prioridad
     const top20El = document.getElementById('scoring-top20-prioridad');
@@ -599,6 +566,170 @@
           `).join('')
         : '<div class="scoring-muted">Sin datos</div>';
     }
+  }
+
+  function destroyChart(chartKey) {
+    const chart = scoringState.charts[chartKey];
+    if (chart && typeof chart.destroy === 'function') {
+      chart.destroy();
+    }
+    scoringState.charts[chartKey] = null;
+  }
+
+  function renderCategoryChart(summary) {
+    const canvas = document.getElementById('scoring-chart-categorias');
+    const empty = document.getElementById('scoring-chart-categorias-empty');
+    destroyChart('categories');
+    if (!canvas || typeof Chart === 'undefined') {
+      if (empty) empty.textContent = 'Chart.js no disponible.';
+      return;
+    }
+
+    const categories = Array.isArray(summary.categories) ? summary.categories.filter(item => Number(item.count) > 0) : [];
+    if (!categories.length) {
+      if (empty) empty.textContent = 'Sin datos para graficar.';
+      return;
+    }
+
+    if (empty) empty.textContent = '';
+    const labels = categories.map(item => item.name);
+    const values = categories.map(item => Number(item.count || 0));
+    const colors = ['#06b6d4', '#8b5cf6', '#f59e0b', '#10b981', '#f97316', '#64748b'];
+
+    scoringState.charts.categories = new Chart(canvas.getContext('2d'), {
+      type: 'doughnut',
+      data: {
+        labels,
+        datasets: [{
+          data: values,
+          backgroundColor: labels.map((_, i) => colors[i % colors.length]),
+          borderColor: '#0f172a',
+          borderWidth: 2
+        }]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: {
+          legend: {
+            position: 'bottom',
+            labels: { color: '#cbd5e1', boxWidth: 12, padding: 12 }
+          }
+        }
+      }
+    });
+  }
+
+  function renderEjeImpactoChart(summary) {
+    const canvas = document.getElementById('scoring-chart-eje-impacto');
+    const empty = document.getElementById('scoring-chart-eje-impacto-empty');
+    destroyChart('ejeImpacto');
+    if (!canvas || typeof Chart === 'undefined') {
+      if (empty) empty.textContent = 'Chart.js no disponible.';
+      return;
+    }
+
+    const entries = Object.entries(summary.ejeImpacto || {}).sort((a, b) => b[1] - a[1]);
+    if (!entries.length) {
+      if (empty) empty.textContent = 'Sin datos para graficar.';
+      return;
+    }
+
+    if (empty) empty.textContent = '';
+    scoringState.charts.ejeImpacto = new Chart(canvas.getContext('2d'), {
+      type: 'bar',
+      data: {
+        labels: entries.map(item => item[0]),
+        datasets: [{
+          label: 'Agencias',
+          data: entries.map(item => Number(item[1] || 0)),
+          backgroundColor: 'rgba(59, 130, 246, 0.75)',
+          borderColor: 'rgba(14, 165, 233, 0.95)',
+          borderWidth: 1.5,
+          borderRadius: 6
+        }]
+      },
+      options: {
+        indexAxis: 'y',
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: {
+          legend: { display: false }
+        },
+        scales: {
+          x: {
+            ticks: { color: '#94a3b8' },
+            grid: { color: 'rgba(148, 163, 184, 0.15)' }
+          },
+          y: {
+            ticks: { color: '#cbd5e1' },
+            grid: { display: false }
+          }
+        }
+      }
+    });
+  }
+
+  function renderConcentracionChart(summary) {
+    const canvas = document.getElementById('scoring-chart-concentracion');
+    const empty = document.getElementById('scoring-chart-concentracion-empty');
+    destroyChart('concentracion');
+    if (!canvas || typeof Chart === 'undefined') {
+      if (empty) empty.textContent = 'Chart.js no disponible.';
+      return;
+    }
+
+    const c = summary.concentracion || {};
+    const labels = [10, 20, 50, 100, 200].map(n => `Top ${n}`);
+    const values = [10, 20, 50, 100, 200].map(n => {
+      const raw = Number(c[`top${n}`]);
+      return Number.isFinite(raw) ? Number((raw * 100).toFixed(1)) : 0;
+    });
+
+    if (!values.some(v => v > 0)) {
+      if (empty) empty.textContent = 'Sin datos para graficar.';
+      return;
+    }
+
+    if (empty) empty.textContent = '';
+    scoringState.charts.concentracion = new Chart(canvas.getContext('2d'), {
+      type: 'line',
+      data: {
+        labels,
+        datasets: [{
+          label: '% de ventas acumulado',
+          data: values,
+          tension: 0.25,
+          fill: true,
+          borderColor: '#22d3ee',
+          backgroundColor: 'rgba(34, 211, 238, 0.16)',
+          pointBackgroundColor: '#06b6d4',
+          pointRadius: 4
+        }]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: {
+          legend: {
+            display: true,
+            labels: { color: '#cbd5e1' }
+          }
+        },
+        scales: {
+          y: {
+            beginAtZero: true,
+            max: 100,
+            ticks: { color: '#94a3b8', callback: value => `${value}%` },
+            grid: { color: 'rgba(148, 163, 184, 0.15)' }
+          },
+          x: {
+            ticks: { color: '#cbd5e1' },
+            grid: { display: false }
+          }
+        }
+      }
+    });
   }
 
   function populateCategoryFilter() {

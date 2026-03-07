@@ -54,16 +54,16 @@ async function apiRequest(endpoint, options = {}) {
     ...options
   };
 
-  const timeoutMs = options.timeout || 30000;
+  const timeoutMs = Number.isFinite(options.timeout) ? options.timeout : 30000;
   delete config.timeout;
   const controller = new AbortController();
-  const id = setTimeout(() => controller.abort(), timeoutMs);
+  const id = timeoutMs > 0 ? setTimeout(() => controller.abort(), timeoutMs) : null;
   config.signal = controller.signal;
 
   try {
     console.log(`[SIMBA] Solicitud API: ${url}`, options.body ? JSON.parse(options.body) : '');
     const response = await fetch(url, config);
-    clearTimeout(id);
+    if (id) clearTimeout(id);
 
     const contentType = response.headers.get("content-type");
     let data;
@@ -84,7 +84,7 @@ async function apiRequest(endpoint, options = {}) {
 
     return data;
   } catch (error) {
-    clearTimeout(id);
+    if (id) clearTimeout(id);
     if (error.name === 'AbortError') throw new Error('Tiempo de espera agotado.');
     const msg = String(error?.message || '').toLowerCase();
     if (error?.name === 'TypeError' || msg.includes('failed to fetch') || msg.includes('networkerror') || msg.includes('load failed')) {
@@ -396,11 +396,11 @@ const agenciasAPI = {
 const scoringAPI = {
   obtenerResumen: (params = {}) => {
     const query = new URLSearchParams(params).toString();
-    return apiRequest(`/scoring-agencias/resumen${query ? `?${query}` : ''}`, { timeout: 90000 });
+    return apiRequest(`/scoring-agencias/resumen${query ? `?${query}` : ''}`, { timeout: 0 });
   },
   obtenerRanking: (params = {}) => {
     const query = new URLSearchParams(params).toString();
-    return apiRequest(`/scoring-agencias/ranking${query ? `?${query}` : ''}`, { timeout: 90000 });
+    return apiRequest(`/scoring-agencias/ranking${query ? `?${query}` : ''}`, { timeout: 0 });
   },
   obtenerAgencia: (ctaCte, params = {}) => {
     const query = new URLSearchParams(params).toString();

@@ -376,7 +376,10 @@
               <div class="scoring-pulse-grid">
                 <div class="scoring-distribution-card">
                   <div class="scoring-block-title">Distribución por categoría</div>
-                  <div id="scoring-distribution-bars" class="scoring-distribution-bars"></div>
+                  <div class="scoring-chart-wrap">
+                    <canvas id="scoring-chart-categorias" class="scoring-chart-canvas"></canvas>
+                    <div id="scoring-chart-categorias-empty" class="scoring-chart-empty"></div>
+                  </div>
                 </div>
                 <div class="scoring-priority-card">
                   <div class="scoring-block-title">Radar de prioridades</div>
@@ -384,11 +387,17 @@
                 </div>
                 <div class="scoring-distribution-card">
                   <div class="scoring-block-title">Eje de impacto (agencias por eje)</div>
-                  <div id="scoring-eje-impacto" class="scoring-distribution-bars"></div>
+                  <div class="scoring-chart-wrap">
+                    <canvas id="scoring-chart-eje-impacto" class="scoring-chart-canvas"></canvas>
+                    <div id="scoring-chart-eje-impacto-empty" class="scoring-chart-empty"></div>
+                  </div>
                 </div>
                 <div class="scoring-priority-card">
                   <div class="scoring-block-title">Concentración de ventas</div>
-                  <div id="scoring-concentracion" class="scoring-concentracion-grid"></div>
+                  <div class="scoring-chart-wrap">
+                    <canvas id="scoring-chart-concentracion" class="scoring-chart-canvas"></canvas>
+                    <div id="scoring-chart-concentracion-empty" class="scoring-chart-empty"></div>
+                  </div>
                 </div>
               </div>
             </div>
@@ -4072,7 +4081,8 @@
   <script src="js/api.js?v=20260307a"></script>
   <script src="js/ocr-extractos.js?v=20260304b"></script>
   <script src="js/app.js?v=20260306d"></script>
-  <script src="js/scoring-agencias.js?v=20260307c"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js"></script>
+  <script src="js/scoring-agencias.js?v=20260307d"></script>
 </body>
 
 </html>
