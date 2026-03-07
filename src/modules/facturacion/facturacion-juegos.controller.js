@@ -23,6 +23,10 @@ const TASAS = {
 
 // IVA (se muestra por separado)
 const IVA = 0.21;
+const LA_GRANDE_VALORES_DEFAULT = Object.freeze({
+  '6018': 750,
+  '6019': 1500
+});
 
 const AJUSTE_RECAUDACION_FACTURACION = {
   loto: 0.75,
@@ -485,7 +489,10 @@ const getFacturacionJuegosUTE = async (req, res) => {
       parseFloat(req.query.la_grande_pct_reducido) || (laGrandePctOfertado * (1 - LIMITE_REDUCCION_WEB))
     );
     const laGrandeArrastreImporte = Math.max(0, parseFloat(req.query.la_grande_arrastre_importe) || 0);
-    const laGrandeValoresPorSorteo = parsearValoresBilletesPorSorteo(req.query.la_grande_valores_sorteo);
+    const laGrandeValoresPorSorteoInput = parsearValoresBilletesPorSorteo(req.query.la_grande_valores_sorteo);
+    const laGrandeValoresPorSorteo = Object.keys(laGrandeValoresPorSorteoInput).length > 0
+      ? laGrandeValoresPorSorteoInput
+      : { ...LA_GRANDE_VALORES_DEFAULT };
     const laGrandeIncluirMesAnterior = parseBool(req.query.la_grande_incluir_mes_anterior);
 
     if (!fecha_inicio || !fecha_fin) {

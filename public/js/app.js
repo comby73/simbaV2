@@ -15148,6 +15148,10 @@ function formatCurrency(val) {
 // Datos globales del último cálculo
 let _fjgDatosUTE = null;
 let _fjgCompacto = false;
+const FJG_LA_GRANDE_VALORES_DEFAULT = {
+  '6018': 750,
+  '6019': 1500
+};
 
 function toggleVistaCompactaFacturacionJuegos() {
   _fjgCompacto = !_fjgCompacto;
@@ -15246,7 +15250,10 @@ function actualizarResumenValoresBilletesLaGrande() {
   const valores = window._fjgValoresBilletesPorSorteo || {};
   const entries = Object.entries(valores);
   if (!entries.length) {
-    el.textContent = 'Sin valores por sorteo configurados (usa precio manual o recaudación).';
+    const defaults = Object.entries(FJG_LA_GRANDE_VALORES_DEFAULT)
+      .map(([s, v]) => `${s}: $${Number(v).toLocaleString('es-AR')}`)
+      .join(' | ');
+    el.textContent = `Valores por defecto: ${defaults}`;
     return;
   }
 
@@ -15259,7 +15266,7 @@ function actualizarResumenValoresBilletesLaGrande() {
 }
 
 function abrirModalBilletesLaGrande() {
-  const valoresActuales = window._fjgValoresBilletesPorSorteo || {};
+  const valoresActuales = window._fjgValoresBilletesPorSorteo || FJG_LA_GRANDE_VALORES_DEFAULT;
   const textoInicial = Object.entries(valoresActuales)
     .sort((a, b) => Number(a[0]) - Number(b[0]))
     .map(([s, v]) => `${s}=${v}`)
@@ -15782,7 +15789,7 @@ function initFacturacionJuegos() {
   }
 
   if (!window._fjgValoresBilletesPorSorteo) {
-    window._fjgValoresBilletesPorSorteo = {};
+    window._fjgValoresBilletesPorSorteo = { ...FJG_LA_GRANDE_VALORES_DEFAULT };
   }
   [
     'fjg-billete-precio-wrap',
