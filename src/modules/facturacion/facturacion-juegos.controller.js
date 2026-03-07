@@ -386,8 +386,10 @@ function calcularBillingBilletes(baseFacturacion, topeRatio, porcentajeOfertado,
   const pctOfertado = Math.max(0, Number(porcentajeOfertado) || 0);
   const pctReducido = Math.max(0, Number(porcentajeReducido) || 0);
 
-  const importe_completo = dentroTope * pctOfertado;
-  const importe_reducido = sobreTope * pctReducido;
+  // En el modelo Excel, billetes también aplica descuento combinado (0.798)
+  // sobre ambos tramos (ofertado y reducido).
+  const importe_completo = dentroTope * pctOfertado * FACTOR_DESCUENTO;
+  const importe_reducido = sobreTope * pctReducido * FACTOR_DESCUENTO;
   const total_neto = importe_completo + importe_reducido;
 
   return {
