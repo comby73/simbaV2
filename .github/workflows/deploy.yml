@@ -1,0 +1,24 @@
+name: Deploy a Hostinger
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Deploy via SSH a Hostinger
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.SSH_HOST }}
+          username: ${{ secrets.SSH_USER }}
+          password: ${{ secrets.SSH_PASSWORD }}
+          port: 22
+          script: |
+            cd ${{ secrets.APP_PATH }}
+            git pull origin main
+            npm install --production
+            pm2 restart ${{ secrets.PM2_APP_NAME }} || pm2 start src/app.js --name ${{ secrets.PM2_APP_NAME }}
