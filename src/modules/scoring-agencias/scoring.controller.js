@@ -673,51 +673,40 @@ async function loadAgencySales(period) {
   const lotoPlaceholders = LOTO_GAMES.map(() => '?').join(', ');
   const previousRange = buildPeriodRange(period.previousKey);
 
-  // Evalúa todas las agencias con ventas. LEFT JOIN con scoring_asesores
-  // para que el ranking funcione aunque la tabla de asesores esté vacía.
-  // Ambos lados del JOIN se normalizan a 7 dígitos con LEFT(...,7) para
-  // absorber el dígito verificador que tienen los cta_cte de las tablas
-  // de scoring pero que no existe en control_previo_agencias ni en agencias.
-  const sql = `
-    SELECT
-      current_data.ctaCteNorm AS ctaCte,
-      COALESCE(ag.nombre, CONCAT('Agencia ', current_data.ctaCteNorm)) AS agenciaNombre,
-      current_data.total_actual AS totalActual,
-      current_data.total_loto AS totalLoto,
-      COALESCE(previous_data.total_anterior, 0) AS totalAnterior
-    FROM (
-      SELECT
-        LEFT(cpa.codigo_agencia, 7) AS ctaCteNorm,
-        ROUND(SUM(cpa.total_recaudacion), 2) AS total_actual,
-        ROUND(SUM(CASE WHEN LOWER(cpa.juego) IN (${lotoPlaceholders}) THEN cpa.total_recaudacion ELSE 0 END), 2) AS total_loto
-      FROM control_previo_agencias cpa
-      INNER JOIN agencias agf
-        ON LEFT(agf.numero, 7) = LEFT(cpa.codigo_agencia, 7)
-      WHERE cpa.\`${col}\` BETWEEN ? AND ?
-      GROUP BY LEFT(cpa.codigo_agencia, 7)
-    ) current_data
-    LEFT JOIN (
-      SELECT
-        LEFT(cpa2.codigo_agencia, 7) AS ctaCteNorm,
-        ROUND(SUM(cpa2.total_recaudacion), 2) AS total_anterior
-      FROM control_previo_agencias cpa2
-      INNER JOIN agencias agf2
-        ON LEFT(agf2.numero, 7) = LEFT(cpa2.codigo_agencia, 7)
-      WHERE cpa2.\`${col}\` BETWEEN ? AND ?
-      GROUP BY LEFT(cpa2.codigo_agencia, 7)
-    ) previous_data ON previous_data.ctaCteNorm = current_data.ctaCteNorm
-    LEFT JOIN agencias ag
-      ON LEFT(ag.numero, 7) = current_data.ctaCteNorm
-    ORDER BY current_data.total_actual DESC, current_data.ctaCteNorm ASC
-  `;
-
-  return query(sql, [
-    ...LOTO_GAMES,
-    formatDate(period.start),
-    formatDate(period.end),
-    formatDate(previousRange.start),
-    formatDate(previousRange.end)
+  // Tres queries simples sin JOINs con funciones sobre índices.
+  // El filtro por asesor se aplica en JavaScript en getScoringSnapshot,
+  // evitando full scans por LEFT(x,7) que causaban timeout.
+  const [currentRows, previousRows, agenciaRows] = await Promise.all([
+    query(
+      `SELECT LEFT(codigo_agencia, 7) AS ctaCte,
+              ROUND(SUM(total_recaudacion), 2) AS totalActual,
+              ROUND(SUM(CASE WHEN LOWER(juego) IN (${lotoPlaceholders}) THEN total_recaudacion ELSE 0 END), 2) AS totalLoto
+       FROM control_previo_agencias
+       WHERE \`${col}\` BETWEEN ? AND ?
+       GROUP BY LEFT(codigo_agencia, 7)`,
+      [...LOTO_GAMES, formatDate(period.start), formatDate(period.end)]
+    ),
+    query(
+      `SELECT LEFT(codigo_agencia, 7) AS ctaCte,
+              ROUND(SUM(total_recaudacion), 2) AS totalAnterior
+       FROM control_previo_agencias
+       WHERE \`${col}\` BETWEEN ? AND ?
+       GROUP BY LEFT(codigo_agencia, 7)`,
+      [formatDate(previousRange.start), formatDate(previousRange.end)]
+    ),
+    query('SELECT LEFT(numero, 7) AS ctaCte, nombre FROM agencias')
   ]);
+
+  const prevMap = previousRows.reduce((acc, r) => { acc[r.ctaCte] = r.totalAnterior; return acc; }, {});
+  const nameMap = agenciaRows.reduce((acc, r) => { if (!acc[r.ctaCte]) acc[r.ctaCte] = r.nombre; return acc; }, {});
+
+  return currentRows.map(r => ({
+    ctaCte: r.ctaCte,
+    agenciaNombre: nameMap[r.ctaCte] || `Agencia ${r.ctaCte}`,
+    totalActual: r.totalActual,
+    totalLoto: r.totalLoto,
+    totalAnterior: prevMap[r.ctaCte] || 0
+  }));
 }
 
 async function getLatestAvailablePeriodKey() {
@@ -741,11 +730,17 @@ async function getScoringSnapshot(periodKey) {
   const period = buildPeriodRange(currentKey);
   const previousKey = params.B4 && currentKey === params.B3 ? params.B4 : period.previousKey;
 
-  const [support, salesRows, history] = await Promise.all([
+  const [support, allSalesRows, history] = await Promise.all([
     loadSupportMaps(),
     loadAgencySales(period),
     loadHistoryMaps(currentKey, previousKey, toNumber(params.B44, 4))
   ]);
+
+  // Filtra solo agencias que tienen asesor asignado (JOIN lógico en JS, sin función SQL)
+  const hasAdvisors = Object.keys(support.advisors).length > 0;
+  const salesRows = hasAdvisors
+    ? allSalesRows.filter(r => support.advisors[normalizeCtaCte(r.ctaCte)])
+    : allSalesRows;
 
   const totalActualRed = salesRows.reduce((acc, row) => acc + toNumber(row.totalActual), 0);
   const totalAnteriorRed = salesRows.reduce((acc, row) => acc + toNumber(row.totalAnterior), 0);
