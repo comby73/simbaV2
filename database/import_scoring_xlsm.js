@@ -1,4 +1,8 @@
-require('dotenv').config({ path: require('path').join(__dirname, '../.env.local') });
+// Usa .env.local si existe (desarrollo), sino cae a .env (producción/Hostinger)
+const fs = require('fs');
+const envLocal = require('path').join(__dirname, '../.env.local');
+const envDefault = require('path').join(__dirname, '../.env');
+require('dotenv').config({ path: fs.existsSync(envLocal) ? envLocal : envDefault });
 const path = require('path');
 const mysql = require('mysql2/promise');
 const ExcelJS = require('exceljs');
