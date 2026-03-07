@@ -744,7 +744,10 @@ async function getScoringSnapshot(periodKey) {
 
   const totalActualRed = salesRows.reduce((acc, row) => acc + toNumber(row.totalActual), 0);
   const totalAnteriorRed = salesRows.reduce((acc, row) => acc + toNumber(row.totalAnterior), 0);
-  const crecimientoRed = totalAnteriorRed > 0 ? (totalActualRed / totalAnteriorRed) - 1 : 0;
+  const crecimientoRedCalculado = totalAnteriorRed > 0 ? (totalActualRed / totalAnteriorRed) - 1 : 0;
+  // Excel usa PARAMS_MODELO!B5 (crecimiento de red). Si no esta disponible,
+  // usar crecimiento operativo calculado desde control_previo_agencias.
+  const crecimientoRed = toNumber(params.B5, crecimientoRedCalculado);
   const maxIncremento = Math.max(0, ...salesRows.map(row => Math.max(0, toNumber(row.totalActual) - toNumber(row.totalAnterior))));
 
   const baseRows = salesRows.map(row => {
@@ -783,10 +786,11 @@ async function getScoringSnapshot(periodKey) {
     const categoriaCliente = clienteRow.categoria || 'Regular';
     const coefCliente = toNumber(clienteRow.coeficiente, support.coefficients[categoriaCliente] || 1);
     // Score cliente calculado desde componentes (B32-B35) como fallback si puntaje=0
-    const clienteScoreCalculado = toNumber(clienteRow.qr_pts) +
-      toNumber(clienteRow.tasa_cero_quejas_pts) +
-      toNumber(clienteRow.ponderacion_cliente_incognito) +
-      toNumber(clienteRow.resenias_google_pts);
+    const clienteScoreCalculado =
+      (toNumber(clienteRow.qr_pts) * toNumber(params.B32, 0.25)) +
+      (toNumber(clienteRow.tasa_cero_quejas_pts) * toNumber(params.B33, 0.25)) +
+      (toNumber(clienteRow.ponderacion_cliente_incognito) * toNumber(params.B34, 0.25)) +
+      (toNumber(clienteRow.resenias_google_pts) * toNumber(params.B35, 0.25));
     const clienteScore = toNumber(clienteRow.puntaje) || clienteScoreCalculado;
     const scoreBase = clamp(crecimientoPts + impactoAbsolutoPts + diferencialPts + lotoPts + compliancePts + digitalPts, 0, 100);
     const scoreFinal = clamp(scoreBase * coefCliente, 0, 100);
@@ -832,11 +836,12 @@ async function getScoringSnapshot(periodKey) {
     plata: percentileInc(currentScores, toNumber(params.B53, 0.2))
   };
 
+  // En Excel: corte efectivo = MAX(percentil actual, piso historico B45..B48).
   const thresholds = {
-    diamante: Math.max(currentThresholds.diamante, history.historicalThresholds.diamante),
-    platino: Math.max(currentThresholds.platino, history.historicalThresholds.platino),
-    oro: Math.max(currentThresholds.oro, history.historicalThresholds.oro),
-    plata: Math.max(currentThresholds.plata, history.historicalThresholds.plata)
+    diamante: Math.max(currentThresholds.diamante, toNumber(params.B45, history.historicalThresholds.diamante)),
+    platino: Math.max(currentThresholds.platino, toNumber(params.B46, history.historicalThresholds.platino)),
+    oro: Math.max(currentThresholds.oro, toNumber(params.B47, history.historicalThresholds.oro)),
+    plata: Math.max(currentThresholds.plata, toNumber(params.B48, history.historicalThresholds.plata))
   };
 
   const maxVentasPot = Math.max(0, ...baseRows.map(row => row.crecimientoPts))
@@ -943,9 +948,14 @@ async function getScoringSnapshot(periodKey) {
     return left.ctaCte.localeCompare(right.ctaCte);
   });
 
-  // Segundo pass: asignar rankingActual y movilidadRanking (posiciones ganadas/perdidas)
+  // Segundo pass: ranking estilo RANK.EQ (empates comparten posicion y saltean).
+  let lastScore = null;
+  let lastRank = 0;
   const ranking = rankingUnsorted.map((item, index) => {
-    const rankingActual = index + 1;
+    const isTie = lastScore !== null && item.scoreFinal === lastScore;
+    const rankingActual = isTie ? lastRank : index + 1;
+    lastScore = item.scoreFinal;
+    lastRank = rankingActual;
     const movilidadRanking = item._previousRankingRaw !== null
       ? item._previousRankingRaw - rankingActual
       : null;
@@ -1283,7 +1293,7 @@ const generarSnapshotHistorico = async (req, res) => {
   try {
     const payload = await getScoringSnapshot(req.body?.periodo || req.query?.periodo);
     await transaction(async connection => {
-      for (const [index, item] of payload.ranking.entries()) {
+      for (const item of payload.ranking) {
         await connection.execute(
           `INSERT INTO scoring_hist_score (periodo_key, cta_cte, puntaje_final, categoria, ranking_puntaje, fecha_carga)
            VALUES (?, ?, ?, ?, ?, NOW())
@@ -1292,7 +1302,7 @@ const generarSnapshotHistorico = async (req, res) => {
              categoria = VALUES(categoria),
              ranking_puntaje = VALUES(ranking_puntaje),
              fecha_carga = VALUES(fecha_carga)`,
-          [payload.periodo.clave, item.ctaCte, item.scoreFinal, item.categoria, index + 1]
+          [payload.periodo.clave, item.ctaCte, item.scoreFinal, item.categoria, item.rankingActual || null]
         );
       }
     });

@@ -12,7 +12,9 @@
     charts: {
       categories: null,
       ejeImpacto: null,
-      concentracion: null
+      concentracion: null,
+      riesgo: null,
+      prioridad: null
     },
     admin: {
       canEdit: false,
@@ -507,6 +509,7 @@
       .map(item => `<span class="scoring-chip">${item}</span>`)
       .join('');
     renderCategoryChart(summary);
+    renderRiesgoChart(summary);
 
     document.getElementById('scoring-priority-list').innerHTML = summary.priorities.length
       ? summary.priorities.map(item => `
@@ -521,6 +524,7 @@
 
     renderEjeImpactoChart(summary);
     renderConcentracionChart(summary);
+    renderPrioridadChart(scoringState.agencies);
 
     // Top 20 Alta Prioridad
     const top20El = document.getElementById('scoring-top20-prioridad');
@@ -721,6 +725,103 @@
             beginAtZero: true,
             max: 100,
             ticks: { color: '#94a3b8', callback: value => `${value}%` },
+            grid: { color: 'rgba(148, 163, 184, 0.15)' }
+          },
+          x: {
+            ticks: { color: '#cbd5e1' },
+            grid: { display: false }
+          }
+        }
+      }
+    });
+  }
+
+  function renderRiesgoChart(summary) {
+    const canvas = document.getElementById('scoring-chart-riesgo');
+    const empty = document.getElementById('scoring-chart-riesgo-empty');
+    destroyChart('riesgo');
+    if (!canvas || typeof Chart === 'undefined') {
+      if (empty) empty.textContent = 'Chart.js no disponible.';
+      return;
+    }
+
+    const r = summary.riesgo || {};
+    const labels = ['Ascenso', 'Descenso', 'Neutro'];
+    const values = [Number(r.ascenso || 0), Number(r.descenso || 0), Number(r.neutro || 0)];
+    if (!values.some(v => v > 0)) {
+      if (empty) empty.textContent = 'Sin datos para graficar.';
+      return;
+    }
+
+    if (empty) empty.textContent = '';
+    scoringState.charts.riesgo = new Chart(canvas.getContext('2d'), {
+      type: 'doughnut',
+      data: {
+        labels,
+        datasets: [{
+          data: values,
+          backgroundColor: ['#10b981', '#f97316', '#64748b'],
+          borderColor: '#0f172a',
+          borderWidth: 2
+        }]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: {
+          legend: {
+            position: 'bottom',
+            labels: { color: '#cbd5e1', boxWidth: 12, padding: 12 }
+          }
+        }
+      }
+    });
+  }
+
+  function renderPrioridadChart(agencies) {
+    const canvas = document.getElementById('scoring-chart-prioridad');
+    const empty = document.getElementById('scoring-chart-prioridad-empty');
+    destroyChart('prioridad');
+    if (!canvas || typeof Chart === 'undefined') {
+      if (empty) empty.textContent = 'Chart.js no disponible.';
+      return;
+    }
+
+    const counts = {
+      ALTA: agencies.filter(item => item.priority === 'ALTA').length,
+      MEDIA: agencies.filter(item => item.priority === 'MEDIA').length,
+      BAJA: agencies.filter(item => item.priority === 'BAJA').length
+    };
+    const values = [counts.ALTA, counts.MEDIA, counts.BAJA];
+    if (!values.some(v => v > 0)) {
+      if (empty) empty.textContent = 'Sin datos para graficar.';
+      return;
+    }
+
+    if (empty) empty.textContent = '';
+    scoringState.charts.prioridad = new Chart(canvas.getContext('2d'), {
+      type: 'bar',
+      data: {
+        labels: ['Alta', 'Media', 'Baja'],
+        datasets: [{
+          label: 'Agencias',
+          data: values,
+          backgroundColor: ['rgba(248, 113, 113, 0.75)', 'rgba(250, 204, 21, 0.75)', 'rgba(52, 211, 153, 0.75)'],
+          borderColor: ['#ef4444', '#eab308', '#10b981'],
+          borderWidth: 1.5,
+          borderRadius: 6
+        }]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: {
+          legend: { display: false }
+        },
+        scales: {
+          y: {
+            beginAtZero: true,
+            ticks: { color: '#94a3b8' },
             grid: { color: 'rgba(148, 163, 184, 0.15)' }
           },
           x: {
