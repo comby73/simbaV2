@@ -56,6 +56,17 @@ Está orientado a operación diaria de sorteos y auditoría posterior, con traza
 
 ## 4) Estructura funcional (estado real)
 
+### 4.0 Modulo en diseno: Scoring Regenerativo de Agencias
+
+- Se incorporo el blueprint tecnico-funcional del modulo de negocio:
+  - Documento: `SCORING_REGENERATIVO.md`
+- Objetivo:
+  - convertir recaudacion por agencia/juego en un scoring accionable y explicable
+- Estado:
+  - diseno listo para implementacion integrada (backend + frontend + configuracion)
+- Principio de negocio:
+  - la venta es un eje del desempeno, no un castigo; el enfoque es regenerativo y de mejora
+
 ### 4.1 Módulos backend registrados en `src/app.js`
 
 - `/api/auth` → login, verify, profile, cambio de contraseña
@@ -238,6 +249,16 @@ npm run db:seed
 - Se incorporó acción de “volver a empezar” en Control Previo para reiniciar estado sin recargar.
 - Se reforzó resolución de fecha de sorteo con fallback `programacion_sorteos.tipo_juego` / `programacion_sorteos.juego`.
 - Se documentó normalización de `cta_cte` a 7 dígitos sin guiones en scripts de migración.
+
+### Marzo 2026 (06/03)
+- Se definio el diseno funcional y tecnico del modulo `Modelo Regenerativo de Scoring de Agencias`.
+- Se agrego documento de referencia `SCORING_REGENERATIVO.md` con:
+  - arquitectura integrada al stack actual,
+  - modelo de datos,
+  - formulas de scoring,
+  - flujo UX y pantallas,
+  - adaptador a recaudacion real,
+  - estrategia de salida a produccion.
 
 ---
 

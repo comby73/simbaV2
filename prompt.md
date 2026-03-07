@@ -151,3 +151,15 @@ No busca reemplazar el `git log`, sino servir como contexto rápido de continuid
 2. Centralizar validaciones compartidas de sorteo/modalidad/provincia.
 3. Agregar checklist automático de consistencia post-proceso (CP + extracto + CPST).
 4. Mantener esta bitácora actualizada en cada bloque de cambios productivos.
+
+---
+
+## 9) Nuevo frente en diseno (06/03/2026)
+
+- Se definio y documento el modulo `Modelo Regenerativo de Scoring de Agencias`.
+- Documento base agregado: `SCORING_REGENERATIVO.md`.
+- Alcance del diseno:
+	- integracion sobre stack actual (Express + Vanilla JS + MySQL),
+	- calculo de score base y score final con coeficiente cliente,
+	- categorias, movilidad, prioridad y recomendaciones operativas,
+	- adaptador de datos a recaudacion real por agencia/juego.
