@@ -691,6 +691,8 @@ async function loadAgencySales(period) {
         ROUND(SUM(cpa.total_recaudacion), 2) AS total_actual,
         ROUND(SUM(CASE WHEN LOWER(cpa.juego) IN (${lotoPlaceholders}) THEN cpa.total_recaudacion ELSE 0 END), 2) AS total_loto
       FROM control_previo_agencias cpa
+      INNER JOIN agencias agf
+        ON LEFT(agf.numero, 7) = LEFT(cpa.codigo_agencia, 7)
       WHERE cpa.\`${col}\` BETWEEN ? AND ?
       GROUP BY LEFT(cpa.codigo_agencia, 7)
     ) current_data
@@ -699,6 +701,8 @@ async function loadAgencySales(period) {
         LEFT(cpa2.codigo_agencia, 7) AS ctaCteNorm,
         ROUND(SUM(cpa2.total_recaudacion), 2) AS total_anterior
       FROM control_previo_agencias cpa2
+      INNER JOIN agencias agf2
+        ON LEFT(agf2.numero, 7) = LEFT(cpa2.codigo_agencia, 7)
       WHERE cpa2.\`${col}\` BETWEEN ? AND ?
       GROUP BY LEFT(cpa2.codigo_agencia, 7)
     ) previous_data ON previous_data.ctaCteNorm = current_data.ctaCteNorm
