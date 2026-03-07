@@ -671,6 +671,9 @@ async function loadAgencySales(period) {
   const lotoPlaceholders = LOTO_GAMES.map(() => '?').join(', ');
   const previousRange = buildPeriodRange(period.previousKey);
 
+  // Solo evalúa agencias con asesor asignado en scoring_asesores.
+  // Esto filtra la tabla control_previo_agencias (que contiene toda la red)
+  // y restringe el scoring al universo comercial gestionado.
   const sql = `
     SELECT
       current_data.codigo_agencia AS ctaCte,
@@ -680,22 +683,30 @@ async function loadAgencySales(period) {
       COALESCE(previous_data.total_anterior, 0) AS totalAnterior
     FROM (
       SELECT
-        codigo_agencia,
-        ROUND(SUM(total_recaudacion), 2) AS total_actual,
-        ROUND(SUM(CASE WHEN LOWER(juego) IN (${lotoPlaceholders}) THEN total_recaudacion ELSE 0 END), 2) AS total_loto
-      FROM control_previo_agencias
-      WHERE \`${col}\` BETWEEN ? AND ?
-      GROUP BY codigo_agencia
+        cpa.codigo_agencia,
+        ROUND(SUM(cpa.total_recaudacion), 2) AS total_actual,
+        ROUND(SUM(CASE WHEN LOWER(cpa.juego) IN (${lotoPlaceholders}) THEN cpa.total_recaudacion ELSE 0 END), 2) AS total_loto
+      FROM control_previo_agencias cpa
+      INNER JOIN scoring_asesores sa
+        ON sa.cta_cte = cpa.codigo_agencia
+        OR sa.cta_cte = LEFT(cpa.codigo_agencia, 7)
+      WHERE cpa.\`${col}\` BETWEEN ? AND ?
+      GROUP BY cpa.codigo_agencia
     ) current_data
     LEFT JOIN (
       SELECT
-        codigo_agencia,
-        ROUND(SUM(total_recaudacion), 2) AS total_anterior
-      FROM control_previo_agencias
-      WHERE \`${col}\` BETWEEN ? AND ?
-      GROUP BY codigo_agencia
+        cpa2.codigo_agencia,
+        ROUND(SUM(cpa2.total_recaudacion), 2) AS total_anterior
+      FROM control_previo_agencias cpa2
+      INNER JOIN scoring_asesores sa2
+        ON sa2.cta_cte = cpa2.codigo_agencia
+        OR sa2.cta_cte = LEFT(cpa2.codigo_agencia, 7)
+      WHERE cpa2.\`${col}\` BETWEEN ? AND ?
+      GROUP BY cpa2.codigo_agencia
     ) previous_data ON previous_data.codigo_agencia = current_data.codigo_agencia
-    LEFT JOIN agencias ag ON ag.numero = current_data.codigo_agencia OR LEFT(ag.numero, 7) = current_data.codigo_agencia
+    LEFT JOIN agencias ag
+      ON ag.numero = current_data.codigo_agencia
+      OR LEFT(ag.numero, 7) = current_data.codigo_agencia
     ORDER BY current_data.total_actual DESC, current_data.codigo_agencia ASC
   `;
 
