@@ -259,9 +259,160 @@ En SIMBA hay actualmente **6 visualizaciones equivalentes**:
   - Distribucion de prioridad
 - 1 sparkline historico en Ficha de agencia.
 
+## 14. Carga de historico por partes (CSV)
+
+Esta guia es para cuando el historico llega en varios archivos (por ejemplo, 2024/2025 en partes).
+
+### 14.1 Donde subir los archivos
+
+- Guardar cada parte en la raiz del repo o en una carpeta dedicada (recomendado: `uploads/temp/scoring-hist/`).
+- Mantener siempre separador `;` y columnas consistentes entre archivos.
+- Si hay acentos rotos, usar codificacion `latin1` al importar.
+
+Ejemplos de nombres recomendados:
+- `hist_2024_q1_parte1.csv`
+- `hist_2024_q1_parte2.csv`
+- `hist_2025_q3_parte1.csv`
+
+### 14.2 Script de import disponible
+
+Archivo:
+- `database/import_scoring_hist_csv.js`
+
+Uso base:
+```bash
+node database/import_scoring_hist_csv.js --file "C:\ruta\archivo.csv" --period 2025-Q3 --dry-run
+node database/import_scoring_hist_csv.js --file "C:\ruta\archivo.csv" --period 2025-Q3
+```
+
+Opciones utiles:
+- `--delimiter ";"` fuerza separador.
+- `--encoding latin1` si el archivo no esta en UTF-8.
+- `--dry-run` valida sin escribir en BD.
+
+### 14.3 Regla para archivos en partes
+
+- Importar solo cuando el archivo final del periodo ya este consolidado.
+- Si un periodo llega en varias partes, primero unirlas en un unico CSV del periodo y luego ejecutar el import.
+- El script borra y recarga solo el periodo indicado (`periodo_key`), por lo que se puede reintentar sin afectar otros trimestres.
+
+### 14.4 Orden recomendado de carga
+
+1. `2024-Q1`
+2. `2024-Q2`
+3. `2024-Q3`
+4. `2024-Q4`
+5. `2025-Q1`
+6. `2025-Q2`
+7. `2025-Q3`
+8. `2025-Q4`
+
+Luego continuar operacion normal con snapshots de 2026+.
+
+### 14.5 Validacion post-carga
+
+```sql
+SELECT periodo_key, COUNT(*) AS agencias, MIN(puntaje_final) AS min_p, MAX(puntaje_final) AS max_p
+FROM scoring_hist_score
+WHERE periodo_key BETWEEN '2024-Q1' AND '2025-Q4'
+GROUP BY periodo_key
+ORDER BY periodo_key;
+```
+
+Resultado esperado:
+- cada periodo con volumen de agencias razonable,
+- sin periodos vacios,
+- y con `puntaje_final` en rango `0..100`.
+
+### 14.6 Nota sobre CSV operativo tipo `quClaudio`
+
+El formato operativo detallado por sorteo (ejemplo: columnas `Juego`, `Sorteo`, `Fecha Sorteo`, `Recaudacion`) no es un historico de scoring directo.
+
+Para ese formato, el flujo correcto es:
+1. consolidar todas las partes del periodo,
+2. transformar a dataset de scoring por agencia/periodo,
+3. recien entonces importar a `scoring_hist_score`.
+
 Conclusion operativa:
 - **Completitud por cantidad de graficos: 6/6.**
 - **Completitud de formula de scoring: alta (paridad funcional).**
+
+## 15. Que se calcula automatico vs que hay que subir manualmente
+
+Esta seccion deja el flujo operativo claro para continuar en otra PC sin ambiguedades.
+
+### 15.1 Datos que el motor toma automaticamente
+
+Fuente principal automatica:
+- `control_previo_agencias`
+
+Desde esa tabla se calculan automaticamente por periodo:
+- `totalActual` (ventas trimestre actual)
+- `totalAnterior` (ventas trimestre anterior inmediato)
+- `totalLoto` (subconjunto LOTO)
+
+Con eso el backend calcula (sin archivo adicional):
+- crecimiento,
+- impacto absoluto,
+- diferencial vs red,
+- mix LOTO,
+- score base,
+- score final,
+- categoria por percentiles y pisos historicos.
+
+Referencia tecnica:
+- `src/modules/scoring-agencias/scoring.controller.js` (funcion `loadAgencySales` y bloque de calculo del snapshot).
+
+### 15.2 Datos que SI deben cargarse manualmente (para paridad completa con Excel)
+
+Tablas de insumo manual:
+- `scoring_asesores` (campos minimos: `cta_cte`, `asesor`)
+- `scoring_compliance` (campo clave: `puntaje`, resto opcional)
+- `scoring_digital` (campo clave: `puntaje`, resto opcional)
+- `scoring_cliente` (categoria/coeficiente/puntaje o componentes)
+- `scoring_hist_score` (historico para movilidad y umbrales historicos)
+
+Notas de comportamiento por default si faltan datos:
+- compliance faltante -> puntaje 100
+- digital faltante -> puntaje 100
+- cliente faltante -> coeficiente por defaults del modelo
+
+### 15.3 Scripts de import disponibles
+
+1) CSV operativo (tipo `quClaudio`) -> `control_previo_agencias`
+
+Archivo:
+- `database/import_control_previo_agencias_csv.js`
+
+Uso:
+```bash
+node database/import_control_previo_agencias_csv.js --file "C:\ruta\quClaudio(1).csv" --dry-run
+node database/import_control_previo_agencias_csv.js --file "C:\ruta\quClaudio(1).csv"
+```
+
+Opcionales:
+- `--encoding latin1` (default del script)
+- `--delimiter ";"`
+- `--controlPrevioId 0`
+
+2) Historico de scoring ya calculado -> `scoring_hist_score`
+
+Archivo:
+- `database/import_scoring_hist_csv.js`
+
+Uso:
+```bash
+node database/import_scoring_hist_csv.js --file "C:\ruta\hist_2025_q3.csv" --period 2025-Q3 --dry-run
+node database/import_scoring_hist_csv.js --file "C:\ruta\hist_2025_q3.csv" --period 2025-Q3
+```
+
+### 15.4 Checklist minimo antes de calcular un periodo
+
+1. Cargar ventas del periodo en `control_previo_agencias`.
+2. Verificar `scoring_asesores` con agencias activas.
+3. Cargar/validar `scoring_compliance`, `scoring_digital`, `scoring_cliente`.
+4. Confirmar que exista un periodo historico previo en `scoring_hist_score`.
+5. Ejecutar `GET /api/scoring-agencias/resumen?periodo=YYYY-QN` y revisar KPIs/ranking.
 - Puede haber diferencias menores de presentacion visual (estilo/layout) respecto a Excel, sin afectar calculo.
 
 ### 13.5 Fuente de verdad para IA y auditoria

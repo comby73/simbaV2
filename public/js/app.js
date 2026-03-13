@@ -3652,6 +3652,7 @@ function seleccionarJuegoPosterior(juego) {
 
   // Limpiar resultados anteriores
   document.getElementById('cpst-resultados')?.classList.add('hidden');
+  actualizarEstadoBotonEjecutarCPST();
 
   console.log(`Control Posterior: Juego seleccionado = ${juego}`);
 }
@@ -3874,30 +3875,29 @@ async function procesarExtractoPoceadaOCR(file) {
     
     if (progress) progress.querySelector('div').style.width = '20%';
     
-    let base64, mimeType;
-    
-    // Detectar si es PDF y convertir
-    if (file.type === 'application/pdf' || file.name.toLowerCase().endsWith('.pdf')) {
-      if (mensaje) mensaje.textContent = 'Convirtiendo PDF a imagen...';
-      const pdfResult = await OCRExtractos.pdfToImage(file);
-      base64 = pdfResult.base64;
-      mimeType = pdfResult.mimeType;
+    let result;
+    const esPdf = file.type === 'application/pdf' || file.name.toLowerCase().endsWith('.pdf');
+
+    if (esPdf) {
+      if (mensaje) mensaje.textContent = 'Analizando PDF (múltiples páginas)...';
+      if (progress) progress.querySelector('div').style.width = '45%';
+
+      if (cpstJuegoSeleccionado === 'Tombolina') {
+        result = await OCRExtractos.procesarPdfTombolina(file);
+      } else {
+        result = await OCRExtractos.procesarPdfPoceada(file);
+      }
     } else {
       if (mensaje) mensaje.textContent = 'Procesando imagen...';
       const imgResult = await OCRExtractos.imageToBase64(file);
-      base64 = imgResult.base64;
-      mimeType = imgResult.mimeType;
-    }
-    
-    if (progress) progress.querySelector('div').style.width = '50%';
-    if (mensaje) mensaje.textContent = `Extrayendo datos con IA${getSufijoProveedorOCR()}...`;
-    
-    // Procesar con OCR específico según el juego seleccionado
-    let result;
-    if (cpstJuegoSeleccionado === 'Tombolina') {
-      result = await OCRExtractos.procesarImagenTombolina(base64, mimeType);
-    } else {
-      result = await OCRExtractos.procesarImagenPoceada(base64, mimeType);
+      if (progress) progress.querySelector('div').style.width = '50%';
+      if (mensaje) mensaje.textContent = `Extrayendo datos con IA${getSufijoProveedorOCR()}...`;
+
+      if (cpstJuegoSeleccionado === 'Tombolina') {
+        result = await OCRExtractos.procesarImagenTombolina(imgResult.base64, imgResult.mimeType);
+      } else {
+        result = await OCRExtractos.procesarImagenPoceada(imgResult.base64, imgResult.mimeType);
+      }
     }
     
     if (progress) progress.querySelector('div').style.width = '90%';
@@ -3905,6 +3905,7 @@ async function procesarExtractoPoceadaOCR(file) {
     if (result.success && result.data) {
       // Cargar los datos extraídos
       if (cargarExtractoPoceadaDesdeJSON(result.data)) {
+        notificarConfianzaOCRBaja(result.data, cpstJuegoSeleccionado === 'Tombolina' ? 'TOMBOLINA OCR' : 'POCEADA OCR');
         if (progress) progress.querySelector('div').style.width = '100%';
         
         // Llenar también los inputs manuales
@@ -5372,6 +5373,7 @@ async function procesarMultiplesXML(files) {
   cpstExtractos.sort((a, b) => a.index - b.index);
 
   renderExtractosList();
+  sugerirCargaManualExtractosFaltantesQuiniela();
 
     if (procesados > 0) {
       showToast(`✓ ${procesados} extractos cargados de ${MODALIDADES_XML[modalidad]}${errores > 0 ? ` (${errores} errores)` : ''}`, 'success');
@@ -5630,6 +5632,7 @@ async function cargarExtractoImagen(input) {
 
       if (result.success && result.data) {
         const data = result.data;
+        notificarConfianzaOCRBaja(data, 'PDF OCR');
 
         // Llenar números
         if (data.numeros && data.numeros.length > 0) {
@@ -5939,6 +5942,27 @@ async function extraerDatosDesdePdfTexto(archivo) {
   };
 }
 
+async function extraerTextoPlanoDesdePdf(archivo, maxPaginas = 3) {
+  if (!window.pdfjsLib) {
+    await loadScript('https://cdn.jsdelivr.net/npm/pdfjs-dist@3/build/pdf.min.js');
+    pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdn.jsdelivr.net/npm/pdfjs-dist@3/build/pdf.worker.min.js';
+  }
+
+  const arrayBuffer = await archivo.arrayBuffer();
+  const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+  const paginas = Math.min(pdf.numPages, Math.max(1, maxPaginas));
+  const bloques = [];
+
+  for (let i = 1; i <= paginas; i++) {
+    const page = await pdf.getPage(i);
+    const textContent = await page.getTextContent();
+    const pageText = textContent.items.map(item => item.str).join(' ');
+    bloques.push(pageText);
+  }
+
+  return bloques.join('\n');
+}
+
 // Palabras a ignorar en la búsqueda de letras del sorteo
 const PALABRAS_IGNORAR_LETRAS = new Set([
   'CABA','BUEN','AIRE','SORT','NOCT','MATR','VEST','PRIM','SEGU','HORA','FECH','LOTE',
@@ -6002,13 +6026,9 @@ async function cargarExtractoPDF(input) {
     if (window.OCRExtractos && OCRExtractos.hasApiKey()) {
       showToast(`Procesando PDF con IA${getSufijoProveedorOCR()}...`, 'info');
 
-      // Convertir PDF a imagen
-      const { base64, mimeType } = await OCRExtractos.pdfToImage(file);
-
       const provinciaSelect = document.getElementById('cpst-extracto-provincia');
       const provinciaHint = provinciaSelect?.options[provinciaSelect.selectedIndex]?.text || '';
-
-      const result = await OCRExtractos.procesarImagenQuiniela(base64, mimeType, provinciaHint);
+      const result = await OCRExtractos.procesarPdfQuiniela(file, provinciaHint);
 
       if (result.success && result.data) {
         const data = result.data;
@@ -6126,31 +6146,79 @@ async function agregarExtracto() {
     6: '59'  // Entre Ríos
   };
 
+  const codigoProvincia = indexToCodigoProvincia[provinciaIdx] || null;
+  if (!codigoProvincia) {
+    showToast('Provincia inválida. Seleccione una provincia antes de guardar.', 'warning');
+    return;
+  }
+
+  if (!cpstModalidadSorteo) {
+    showToast('No hay modalidad de sorteo activa. Cargue primero el Control Previo.', 'warning');
+    return;
+  }
+
+  const digitosProvincia = codigoProvincia === '00' ? 3 : 4;
+
   // Recoger números
   const numeros = [];
+  const posicionesInvalidas = [];
   for (let i = 1; i <= 20; i++) {
     const input = document.getElementById(`cpst-num-${i}`);
-    numeros.push(input ? input.value.padStart(4, '0') : '0000');
+    const raw = (input?.value || '').toString().trim();
+    if (!raw) {
+      posicionesInvalidas.push(i);
+      continue;
+    }
+
+    const limpio = raw.replace(/\D/g, '');
+    if (!limpio) {
+      posicionesInvalidas.push(i);
+      continue;
+    }
+
+    if (limpio.length > digitosProvincia) {
+      posicionesInvalidas.push(i);
+      continue;
+    }
+
+    numeros.push(limpio.padStart(digitosProvincia, '0'));
+  }
+
+  if (posicionesInvalidas.length > 0 || numeros.length !== 20) {
+    const detalle = posicionesInvalidas.length > 0
+      ? ` Posiciones incompletas/invalidas: ${posicionesInvalidas.join(', ')}.`
+      : '';
+    showToast(`Debe completar los 20 números válidos antes de guardar.${detalle}`, 'warning');
+    return;
   }
 
   // Recoger letras
   const letras = [];
+  const letrasInvalidas = [];
   for (let i = 1; i <= 4; i++) {
     const input = document.getElementById(`cpst-letra-${i}`);
-    letras.push(input ? input.value.toUpperCase() : '');
+    const letra = (input?.value || '').toString().trim().toUpperCase();
+    if (!letra) {
+      letras.push('');
+      continue;
+    }
+    if (!/^[A-Z]$/.test(letra)) {
+      letrasInvalidas.push(i);
+      continue;
+    }
+    letras.push(letra);
   }
 
-  // Validar que haya al menos algunos números
-  const tieneNumeros = numeros.some(n => n !== '0000' && n !== '');
-  if (!tieneNumeros) {
-    showToast('Ingrese al menos algunos números del extracto', 'warning');
+  if (letrasInvalidas.length > 0) {
+    showToast(`Letras inválidas en posiciones: ${letrasInvalidas.join(', ')}. Use solo A-Z.`, 'warning');
     return;
   }
 
   // Obtener datos del sorteo actual
   const fecha = cpResultadosActuales?.sorteo?.fecha || cpResultadosActuales?.fecha || new Date().toISOString().split('T')[0];
-  const modalidad = cpstModalidadSorteo || 'M';
-  const codigoProvincia = indexToCodigoProvincia[provinciaIdx] || '51';
+  const modalidad = cpstModalidadSorteo;
+  const existenteAntesDeGuardar = cpstExtractos.findIndex(e => e.index === provinciaIdx);
+  const eraFaltanteEsperado = existenteAntesDeGuardar >= 0 && cpstExtractos[existenteAntesDeGuardar]?.faltanteEsperado === true;
 
   // Guardar en la BD (misma tabla que Extractos)
   try {
@@ -6173,6 +6241,7 @@ async function agregarExtracto() {
         nombre: provinciaNombre,
         numeros: numeros,
         letras: letras,
+        pendienteRevision: false,
         fromDB: true,
         dbId: response.data?.id
       };
@@ -6195,7 +6264,8 @@ async function agregarExtracto() {
       index: provinciaIdx,
       nombre: provinciaNombre,
       numeros: numeros,
-      letras: letras
+      letras: letras,
+      pendienteRevision: false
     };
 
     if (existente >= 0) {
@@ -6208,6 +6278,10 @@ async function agregarExtracto() {
 
   renderExtractosList();
   limpiarExtractoPosterior();
+
+  if (cpstJuegoSeleccionado === 'Quiniela' && eraFaltanteEsperado) {
+    setTimeout(() => sugerirCargaManualExtractosFaltantesQuiniela({ autoAbrirPrimero: true }), 80);
+  }
 }
 
 // Agregar extracto sin limpiar los campos (para carga automática desde XML/JSON)
@@ -6660,6 +6734,7 @@ async function procesarArchivosInteligente(files) {
     }
 
     renderExtractosListInteligente();
+    sugerirCargaManualExtractosFaltantesQuiniela();
     stopProcessClock();
   }, 500);
 
@@ -6812,6 +6887,129 @@ async function procesarArchivoXMLInteligente(archivo) {
   });
 }
 
+function obtenerMotivosRevisionOCRQuiniela({ data, numeros = [], codigoProvinciaFinal, modalidadFinal, umbralMinimo = 18 }) {
+  const motivos = [];
+  const ocrMeta = data?._ocr;
+
+  if (!codigoProvinciaFinal) motivos.push('provincia no detectada');
+  if (!modalidadFinal) motivos.push('modalidad no detectada');
+  if (!Array.isArray(numeros) || numeros.length === 0) motivos.push('sin números detectados');
+  if (Array.isArray(numeros) && numeros.length < 20) motivos.push(`números incompletos (${numeros.length}/20)`);
+  if (Array.isArray(numeros) && numeros.length < umbralMinimo) motivos.push(`debajo del mínimo requerido (${numeros.length}/${umbralMinimo})`);
+
+  if (ocrMeta?.lowConfidence && Array.isArray(ocrMeta.lowConfidenceFields) && ocrMeta.lowConfidenceFields.length > 0) {
+    const etiquetas = {
+      provincia: 'provincia',
+      modalidad: 'modalidad',
+      fecha: 'fecha',
+      hora: 'hora',
+      sorteo: 'sorteo',
+      numeros: 'números',
+      letras: 'letras'
+    };
+    const campos = ocrMeta.lowConfidenceFields.map(f => etiquetas[f] || f).join(', ');
+    motivos.push(`baja confianza OCR (${campos})`);
+  }
+
+  return motivos;
+}
+
+function upsertExtractoQuinielaLocalRevision({ provinciaIdx, provinciaNombres, numeros, letras, archivoNombre, fuente = 'ocr-revision' }) {
+  let idxFinal = provinciaIdx;
+  if (idxFinal === null || idxFinal === undefined || Number.isNaN(idxFinal)) {
+    const selectProvincia = document.getElementById('cpst-extracto-provincia');
+    const valorSelect = Number(selectProvincia?.value);
+    idxFinal = Number.isNaN(valorSelect) ? 0 : valorSelect;
+  }
+
+  const nombreFinal = provinciaNombres[idxFinal] || 'Pendiente de validar';
+  const extracto = {
+    index: idxFinal,
+    nombre: nombreFinal,
+    numeros: Array.isArray(numeros) ? numeros : [],
+    letras: Array.isArray(letras) ? letras : [],
+    fuente,
+    archivo: archivoNombre,
+    pendienteRevision: true
+  };
+
+  const existente = cpstExtractos.findIndex(e => e.index === idxFinal);
+  if (existente >= 0) {
+    cpstExtractos[existente] = extracto;
+    return existente;
+  }
+
+  cpstExtractos.push(extracto);
+  return cpstExtractos.length - 1;
+}
+
+async function abrirModalRevisionOCRQuiniela({ archivoNombre, data, codigoProvinciaFinal, modalidadFinal, fecha, numeros, letras, provinciaIdx, provinciaNombres, motivos = [] }) {
+  return new Promise((resolve) => {
+    const modal = document.createElement('div');
+    modal.className = 'modal-overlay';
+
+    const motivosHtml = (motivos.length > 0 ? motivos : ['lectura incompleta']).map(m => `<li>${m}</li>`).join('');
+    const previewNumeros = Array.isArray(numeros) ? numeros.slice(0, 20).join(' - ') : '';
+    const previewLetras = Array.isArray(letras) ? letras.join(' ') : '';
+
+    modal.innerHTML = `
+      <div class="modal-content" style="max-width: 780px;">
+        <div class="modal-header">
+          <h3><i class="fas fa-exclamation-triangle text-warning"></i> Revisión manual requerida</h3>
+          <button class="btn-close" id="modal-revision-cerrar">&times;</button>
+        </div>
+        <div class="modal-body">
+          <p><strong>Archivo:</strong> ${archivoNombre}</p>
+          <p>La detección OCR no es confiable para guardar automáticamente en base de datos.</p>
+          <ul>${motivosHtml}</ul>
+          <div class="card" style="padding: 12px; margin-top: 8px;">
+            <p><strong>Provincia detectada:</strong> ${codigoProvinciaFinal || 'No detectada'}</p>
+            <p><strong>Modalidad detectada:</strong> ${modalidadFinal || 'No detectada'}</p>
+            <p><strong>Fecha detectada:</strong> ${fecha || 'No detectada'}</p>
+            <p><strong>Hora detectada:</strong> ${data?.hora || 'No detectada'}</p>
+            <p><strong>Números detectados:</strong> ${Array.isArray(numeros) ? numeros.length : 0}/20</p>
+            <p><strong>Vista rápida números:</strong> ${previewNumeros || '-'}</p>
+            <p><strong>Letras:</strong> ${previewLetras || '-'}</p>
+          </div>
+        </div>
+        <div class="modal-footer" style="display:flex; gap:8px; justify-content:flex-end;">
+          <button class="btn btn-secondary" id="modal-revision-descartar">Descartar</button>
+          <button class="btn btn-primary" id="modal-revision-manual"><i class="fas fa-edit"></i> Continuar con carga manual</button>
+        </div>
+      </div>
+    `;
+
+    const cerrar = (valor) => {
+      modal.remove();
+      resolve(valor);
+    };
+
+    modal.querySelector('#modal-revision-cerrar')?.addEventListener('click', () => cerrar(false));
+    modal.querySelector('#modal-revision-descartar')?.addEventListener('click', () => {
+      showToast(`Extracto descartado: ${archivoNombre}`, 'warning');
+      cerrar(false);
+    });
+
+    modal.querySelector('#modal-revision-manual')?.addEventListener('click', () => {
+      const idx = upsertExtractoQuinielaLocalRevision({
+        provinciaIdx,
+        provinciaNombres,
+        numeros,
+        letras,
+        archivoNombre,
+        fuente: 'ocr-revision'
+      });
+
+      renderExtractosListInteligente();
+      setTimeout(() => editarExtractoQuiniela(idx), 60);
+      showToast(`Extracto en revisión manual: ${archivoNombre}`, 'info');
+      cerrar(true);
+    });
+
+    document.body.appendChild(modal);
+  });
+}
+
 // Procesar imagen con OCR inteligente
 async function procesarArchivoImagenInteligente(archivo) {
   let data = null;
@@ -6897,6 +7095,30 @@ async function procesarArchivoImagenInteligente(archivo) {
   if (umbralMinimo < 18) {
     console.warn(`[CPST] ${archivo.name}: aceptando con ${numerosNormalizados.length} números (provincia confirmada por nombre de archivo: ${codigoProvinciaFinal})`);
     showToast(`⚠️ ${archivo.name}: solo ${numerosNormalizados.length}/20 números detectados. Verificar manualmente.`, 'warning');
+  }
+
+  const motivosRevisionImagen = obtenerMotivosRevisionOCRQuiniela({
+    data,
+    numeros: numerosNormalizados,
+    codigoProvinciaFinal,
+    modalidadFinal,
+    umbralMinimo
+  });
+
+  if (motivosRevisionImagen.length > 0) {
+    await abrirModalRevisionOCRQuiniela({
+      archivoNombre: archivo.name,
+      data,
+      codigoProvinciaFinal,
+      modalidadFinal,
+      fecha,
+      numeros: numerosNormalizados,
+      letras: data.letras || [],
+      provinciaIdx,
+      provinciaNombres,
+      motivos: motivosRevisionImagen
+    });
+    return;
   }
 
   if (provinciaIdx !== null && provinciaIdx !== undefined && numerosNormalizados && numerosNormalizados.length >= umbralMinimo) {
@@ -6996,14 +7218,14 @@ async function procesarArchivoPDFInteligente(archivo) {
   if (!data && window.OCRExtractos && OCRExtractos.hasApiKey()) {
     try {
       console.log(`[OCR] Procesando PDF ${archivo.name} con ${getProveedorOCRActivo() || 'proveedor no identificado'}`);
-      const { base64, mimeType } = await OCRExtractos.pdfToImage(archivo);
       const provinciaHint = obtenerProvinciaHintDesdeCodigo(metadataArchivo.codigoProvincia);
-      const resultado = await OCRExtractos.procesarImagenQuiniela(base64, mimeType, provinciaHint);
+      const resultado = await OCRExtractos.procesarPdfQuiniela(archivo, provinciaHint);
 
       if (resultado.success && resultado.data) {
         const cantNums = (resultado.data.numeros || []).length;
         if (cantNums >= 18) {
           data = resultado.data;
+          notificarConfianzaOCRBaja(data, `PDF OCR ${archivo.name}`);
           console.log(`[CPST] ${archivo.name}: lectura OCR API OK (${cantNums} números, provincia=${data.provincia || '-'})`);
         } else {
           console.warn(`[CPST] ${archivo.name}: OCR API insuficiente (${cantNums} números), continúa con Tesseract`);
@@ -7052,6 +7274,30 @@ async function procesarArchivoPDFInteligente(archivo) {
   if (umbralMinimoPDF < 18) {
     console.warn(`[CPST] ${archivo.name}: aceptando con ${numerosNormalizados.length} números (provincia confirmada por nombre: ${codigoProvinciaFinal})`);
     showToast(`⚠️ ${archivo.name}: solo ${numerosNormalizados.length}/20 números detectados. Verificar manualmente.`, 'warning');
+  }
+
+  const motivosRevisionPdf = obtenerMotivosRevisionOCRQuiniela({
+    data,
+    numeros: numerosNormalizados,
+    codigoProvinciaFinal,
+    modalidadFinal,
+    umbralMinimo: umbralMinimoPDF
+  });
+
+  if (motivosRevisionPdf.length > 0) {
+    await abrirModalRevisionOCRQuiniela({
+      archivoNombre: archivo.name,
+      data,
+      codigoProvinciaFinal,
+      modalidadFinal,
+      fecha,
+      numeros: numerosNormalizados,
+      letras: data.letras || [],
+      provinciaIdx,
+      provinciaNombres,
+      motivos: motivosRevisionPdf
+    });
+    return;
   }
 
   if (provinciaIdx !== null && provinciaIdx !== undefined && numerosNormalizados && numerosNormalizados.length >= umbralMinimoPDF) {
@@ -7202,10 +7448,232 @@ async function extraerDatosQuinielaFallback(archivo, esPDF = false, usarProvinci
   };
 }
 
+function obtenerCodigoProvinciaDesdeIndex(indexProvincia) {
+  const map = {
+    0: '51',
+    1: '53',
+    2: '55',
+    3: '72',
+    4: '00',
+    5: '64',
+    6: '59'
+  };
+  return map[Number(indexProvincia)] || null;
+}
+
+function obtenerDefinicionesProvinciasQuiniela() {
+  return [
+    { index: 0, codigo: '51', clave: 'CABA', nombre: 'CABA' },
+    { index: 1, codigo: '53', clave: 'PBA', nombre: 'Buenos Aires' },
+    { index: 2, codigo: '55', clave: 'CBA', nombre: 'Córdoba' },
+    { index: 3, codigo: '72', clave: 'SFE', nombre: 'Santa Fe' },
+    { index: 4, codigo: '00', clave: 'URU', nombre: 'Montevideo' },
+    { index: 5, codigo: '64', clave: 'MZA', nombre: 'Mendoza' },
+    { index: 6, codigo: '59', clave: 'ENR', nombre: 'Entre Ríos' }
+  ];
+}
+
+function obtenerProvinciasEsperadasQuiniela() {
+  const provinciasControl = cpstDatosControlPrevio?.provincias || cpResultadosActuales?.provincias || null;
+  if (!provinciasControl) return [];
+
+  return obtenerDefinicionesProvinciasQuiniela().filter((prov) => {
+    const datos = provinciasControl[prov.clave] || {};
+    return Number(datos.apuestas || datos.registros || datos.tickets || 0) > 0;
+  });
+}
+
+function obtenerExtractosFaltantesQuiniela() {
+  const esperadas = obtenerProvinciasEsperadasQuiniela();
+  if (esperadas.length === 0) return [];
+
+  const existentes = new Set(
+    (Array.isArray(cpstExtractos) ? cpstExtractos : [])
+      .map(ex => Number(ex?.index))
+      .filter(idx => !Number.isNaN(idx))
+  );
+
+  return esperadas.filter(prov => !existentes.has(prov.index));
+}
+
+function asegurarPlaceholdersExtractosFaltantesQuiniela() {
+  const faltantes = obtenerExtractosFaltantesQuiniela();
+  if (faltantes.length === 0) return [];
+
+  faltantes.forEach((prov) => {
+    cpstExtractos.push({
+      index: prov.index,
+      nombre: prov.nombre,
+      numeros: [],
+      letras: [],
+      fuente: 'manual',
+      pendienteRevision: true,
+      faltanteEsperado: true,
+      archivo: 'Pendiente de carga manual'
+    });
+  });
+
+  return faltantes;
+}
+
+function abrirCargaManualProvinciaQuiniela(indexProvincia) {
+  const idxProvincia = Number(indexProvincia);
+  const definicion = obtenerDefinicionesProvinciasQuiniela().find(prov => prov.index === idxProvincia);
+  if (!definicion) return;
+
+  let existente = cpstExtractos.findIndex(ex => Number(ex?.index) === idxProvincia);
+  if (existente < 0) {
+    cpstExtractos.push({
+      index: definicion.index,
+      nombre: definicion.nombre,
+      numeros: [],
+      letras: [],
+      fuente: 'manual',
+      pendienteRevision: true,
+      faltanteEsperado: true,
+      archivo: 'Pendiente de carga manual'
+    });
+    existente = cpstExtractos.length - 1;
+    renderExtractosListInteligente();
+  }
+
+  document.getElementById('modal-simple')?.remove();
+  editarExtractoQuiniela(existente);
+}
+
+function sugerirCargaManualExtractosFaltantesQuiniela({ autoAbrirPrimero = false } = {}) {
+  if (cpstJuegoSeleccionado !== 'Quiniela') return false;
+
+  const faltantes = asegurarPlaceholdersExtractosFaltantesQuiniela();
+  if (faltantes.length === 0) return false;
+
+  renderExtractosListInteligente();
+
+  if (autoAbrirPrimero && faltantes.length === 1) {
+    showToast(`Falta cargar manualmente ${faltantes[0].nombre}`, 'warning');
+    setTimeout(() => abrirCargaManualProvinciaQuiniela(faltantes[0].index), 80);
+    return true;
+  }
+
+  const botones = faltantes
+    .map(prov => `<button class="btn btn-warning btn-sm" style="margin: 0.25rem;" onclick="abrirCargaManualProvinciaQuiniela(${prov.index})">${prov.nombre}</button>`)
+    .join('');
+
+  const contenido = `
+    <div style="padding: 1rem 1.25rem;">
+      <p style="margin: 0 0 0.75rem 0;">Se detectó que faltan <strong>${faltantes.length}</strong> extracto(s) esperados para este sorteo.</p>
+      <p style="margin: 0 0 1rem 0; color: var(--text-muted); font-size: 0.92rem;">El Control Previo indica qué provincias tienen apuestas. Puede cargar manualmente las que faltan desde acá.</p>
+      <div style="display:flex; flex-wrap: wrap; gap: 0.35rem; margin-bottom: 1rem;">
+        ${botones}
+      </div>
+      <div style="display:flex; justify-content:flex-end; gap:0.5rem;">
+        <button class="btn btn-secondary btn-sm" onclick="document.getElementById('modal-simple')?.remove()">Después</button>
+        <button class="btn btn-primary btn-sm" onclick="abrirCargaManualProvinciaQuiniela(${faltantes[0].index})">Cargar la primera</button>
+      </div>
+    </div>
+  `;
+
+  showModalSimple('Faltan Extractos', contenido);
+  return true;
+}
+
+function validarExtractoQuinielaCompletoLista(extracto) {
+  if (!extracto) return { completo: false, motivos: ['sin datos'] };
+
+  const motivos = [];
+  const provinciaCodigo = obtenerCodigoProvinciaDesdeIndex(extracto.index);
+  if (!provinciaCodigo) motivos.push('provincia');
+
+  const digitos = provinciaCodigo === '00' ? 3 : 4;
+  const numeros = Array.isArray(extracto.numeros) ? extracto.numeros : [];
+  if (numeros.length !== 20) {
+    motivos.push(`numeros (${numeros.length}/20)`);
+  } else {
+    const invalidas = [];
+    numeros.forEach((n, idx) => {
+      const limpio = String(n ?? '').replace(/\D/g, '');
+      if (!limpio || limpio.length > digitos) invalidas.push(idx + 1);
+    });
+    if (invalidas.length > 0) motivos.push('numeros invalidos');
+  }
+
+  if (extracto.pendienteRevision) motivos.push('revision manual');
+
+  return {
+    completo: motivos.length === 0,
+    motivos
+  };
+}
+
+function hayExtractosIncompletosQuiniela() {
+  if (!Array.isArray(cpstExtractos) || cpstExtractos.length === 0) return false;
+  return cpstExtractos.some(ex => !validarExtractoQuinielaCompletoLista(ex).completo);
+}
+
+function irAlPrimerExtractoIncompleto() {
+  if (cpstJuegoSeleccionado !== 'Quiniela') return;
+
+  const extractosOrdenados = [...cpstExtractos].sort((a, b) => a.nombre.localeCompare(b.nombre));
+  const primerIncompleto = extractosOrdenados.find(ex => !validarExtractoQuinielaCompletoLista(ex).completo);
+  if (!primerIncompleto) return;
+
+  const card = document.querySelector(`.extracto-card[data-extracto-index="${primerIncompleto.index}"]`);
+  if (!card) return;
+
+  card.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  card.classList.add('extracto-card-destacada');
+  card.style.outline = '3px solid rgba(220, 38, 38, 0.65)';
+  card.style.boxShadow = '0 0 0 4px rgba(220, 38, 38, 0.18)';
+
+  window.clearTimeout(window.__cpstHighlightTimeout);
+  window.__cpstHighlightTimeout = window.setTimeout(() => {
+    card.classList.remove('extracto-card-destacada');
+    card.style.outline = '';
+    card.style.boxShadow = '';
+  }, 2600);
+}
+
+function actualizarEstadoBotonEjecutarCPST() {
+  const btn = document.getElementById('cpst-btn-ejecutar');
+  const warning = document.getElementById('cpst-ejecutar-warning');
+  if (!btn) return;
+
+  const aplicaBloqueo = cpstJuegoSeleccionado === 'Quiniela';
+  const hayIncompletos = aplicaBloqueo && hayExtractosIncompletosQuiniela();
+  const cantidadIncompletos = aplicaBloqueo
+    ? cpstExtractos.filter(ex => !validarExtractoQuinielaCompletoLista(ex).completo).length
+    : 0;
+
+  btn.disabled = hayIncompletos;
+  if (hayIncompletos) {
+    btn.title = 'Hay extractos incompletos. Corrija antes de ejecutar.';
+    btn.style.opacity = '0.7';
+    btn.style.cursor = 'not-allowed';
+    if (warning) {
+      warning.textContent = `No se puede ejecutar el escrutinio: hay ${cantidadIncompletos} extracto${cantidadIncompletos === 1 ? '' : 's'} incompleto${cantidadIncompletos === 1 ? '' : 's'}. Revisá la lista y corregí los marcados como INCOMPLETO.`;
+      warning.classList.remove('hidden');
+      warning.style.cursor = 'pointer';
+      warning.onclick = irAlPrimerExtractoIncompleto;
+    }
+  } else {
+    btn.title = '';
+    btn.style.opacity = '';
+    btn.style.cursor = '';
+    if (warning) {
+      warning.textContent = '';
+      warning.classList.add('hidden');
+      warning.style.cursor = '';
+      warning.onclick = null;
+    }
+  }
+}
+
 // Render mejorado de la lista de extractos
 function renderExtractosListInteligente() {
   const container = document.getElementById('cpst-extractos-lista');
   if (!container) return;
+
+  actualizarEstadoBotonEjecutarCPST();
 
   if (cpstExtractos.length === 0) {
     container.innerHTML = `
@@ -7239,6 +7707,10 @@ function renderExtractosListInteligente() {
     const nums = ex.numeros || [];
     const letras = ex.letras || [];
     const originalIdx = cpstExtractos.findIndex(e => e.index === ex.index);
+    const estado = validarExtractoQuinielaCompletoLista(ex);
+    const badgeEstado = estado.completo
+      ? '<span class="badge" style="background:#16a34a;color:#fff;">COMPLETO</span>'
+      : `<span class="badge" style="background:#dc2626;color:#fff;" title="${estado.motivos.join(', ')}">INCOMPLETO</span>`;
 
     // Determinar icono según fuente
     let iconClass = 'fa-file-alt';
@@ -7251,7 +7723,7 @@ function renderExtractosListInteligente() {
     const numerosPreview = `${nums.slice(0, 5).join('-')}...${nums.slice(18).join('-')}`;
 
     html += `
-      <div class="extracto-card ${ex.fromDB ? 'desde-bd' : ''}">
+      <div class="extracto-card ${ex.fromDB ? 'desde-bd' : ''}" data-extracto-index="${ex.index}">
         <div class="extracto-icon ${iconType}">
           <i class="fas ${iconClass}"></i>
         </div>
@@ -7259,6 +7731,7 @@ function renderExtractosListInteligente() {
           <div class="extracto-titulo">
             ${ex.nombre}
             <span class="badge-fuente ${ex.fuente || (ex.fromDB ? 'bd' : 'manual')}">${ex.fuente?.toUpperCase() || (ex.fromDB ? 'BD' : 'MANUAL')}</span>
+            ${badgeEstado}
           </div>
           <div class="extracto-numeros" title="${nums.join(' | ')}">
             ${numerosPreview}
@@ -7293,6 +7766,7 @@ function verDetalleExtracto(idx) {
 
   const nums = ex.numeros || [];
   const letras = ex.letras || [];
+  const estado = validarExtractoQuinielaCompletoLista(ex);
 
   let numerosHTML = '<table style="width: 100%; font-family: monospace; border-collapse: collapse;">';
   numerosHTML += '<tr style="color: var(--text-muted); font-size: 0.8rem;">';
@@ -7310,6 +7784,10 @@ function verDetalleExtracto(idx) {
     letrasHTML = `<div style="margin-top: 1rem;"><strong>Letras:</strong> <span style="font-family: monospace; font-size: 1.2rem; background: var(--primary); color: white; padding: 4px 12px; border-radius: 6px;">${letras.join(' ')}</span></div>`;
   }
 
+  const estadoHTML = estado.completo
+    ? `<div style="margin-top: 1rem;"><span class="badge" style="background:#16a34a;color:#fff;">COMPLETO</span></div>`
+    : `<div style="margin-top: 1rem;"><span class="badge" style="background:#dc2626;color:#fff;">INCOMPLETO</span><div style="margin-top: 4px; color: var(--text-muted); font-size: 0.85rem;">${estado.motivos.join(', ')}</div></div>`;
+
   const modalContent = `
     <div style="padding: 1.5rem;">
       <h3 style="margin-bottom: 1rem; display: flex; align-items: center; gap: 0.5rem;">
@@ -7317,6 +7795,7 @@ function verDetalleExtracto(idx) {
         ${ex.fromDB ? '<span class="badge badge-primary" style="font-size: 0.7rem;">Guardado en BD</span>' : ''}
       </h3>
       ${ex.archivo ? `<p class="text-muted" style="margin-bottom: 1rem;"><i class="fas fa-file"></i> ${ex.archivo}</p>` : ''}
+      ${estadoHTML}
       ${numerosHTML}
       ${letrasHTML}
     </div>
@@ -7420,6 +7899,10 @@ async function ejecutarEscrutinio() {
       showToast('Cargue al menos un extracto', 'warning');
       return;
     }
+    if (hayExtractosIncompletosQuiniela()) {
+      showToast('Hay extractos incompletos. Corrija antes de ejecutar.', 'warning');
+      return;
+    }
   } else if (cpstJuegoSeleccionado === 'Poceada' || cpstJuegoSeleccionado === 'Tombolina') {
     // Para Poceada o Tombolina necesitamos el extracto de 20 números
     if (!cpstExtractoPoceada || cpstExtractoPoceada.numeros.length < 20) {
@@ -7452,6 +7935,14 @@ async function ejecutarEscrutinio() {
     if (!cpstExtractoQuini6 || !cpstExtractoQuini6.tradicional || !cpstExtractoQuini6.tradicional.primera || cpstExtractoQuini6.tradicional.primera.length < 6) {
       showToast(`Cargue el extracto de ${cpstJuegoSeleccionado.toUpperCase()} (6 números para Tradicional Primera)`, 'warning');
       return;
+    }
+    if (cpstJuegoSeleccionado === 'Quini 6') {
+      const evaluacionQuini6 = evaluarCompletitudExtractoQuini6(cpstExtractoQuini6);
+      if (!evaluacionQuini6.completo) {
+        showToast(`Quini 6 incompleto. Faltan: ${evaluacionQuini6.faltantesCriticos.join(', ')}`, 'warning');
+        setTimeout(() => abrirRevisionManualQuini6('ejecución'), 100);
+        return;
+      }
     }
   }
 
@@ -10073,6 +10564,53 @@ function mostrarResultadosEscrutinioQuini6(resultado) {
 
 // ============= QUINI 6 EXTRACTO FUNCTIONS =============
 
+function evaluarCompletitudExtractoQuini6(extracto) {
+  if (!extracto) {
+    return {
+      completo: false,
+      faltantesCriticos: ['sin extracto'],
+      faltantesInformativos: []
+    };
+  }
+
+  const faltantesCriticos = [];
+  const faltantesInformativos = [];
+
+  if (!Array.isArray(extracto.tradicional?.primera) || extracto.tradicional.primera.length !== 6) faltantesCriticos.push('Tradicional Primera');
+  if (!Array.isArray(extracto.tradicional?.segunda) || extracto.tradicional.segunda.length !== 6) faltantesCriticos.push('Tradicional Segunda');
+  if (!Array.isArray(extracto.revancha) || extracto.revancha.length !== 6) faltantesCriticos.push('Revancha');
+  if (!Array.isArray(extracto.siempreSale) || extracto.siempreSale.length !== 6) faltantesCriticos.push('Siempre Sale');
+  if (!Array.isArray(extracto.premioExtra) || extracto.premioExtra.length === 0) faltantesInformativos.push('Premio Extra');
+
+  return {
+    completo: faltantesCriticos.length === 0,
+    faltantesCriticos,
+    faltantesInformativos
+  };
+}
+
+function abrirRevisionManualQuini6(origen = 'OCR') {
+  const evaluacion = evaluarCompletitudExtractoQuini6(cpstExtractoQuini6);
+  if (evaluacion.completo) return;
+
+  const criticos = evaluacion.faltantesCriticos.map(item => `<li>${item}</li>`).join('');
+  const informativos = evaluacion.faltantesInformativos.map(item => `<li>${item}</li>`).join('');
+  const contenido = `
+    <div style="padding: 1rem 1.25rem;">
+      <p style="margin: 0 0 0.75rem 0;">La lectura de ${origen} para Quini 6 quedó incompleta. Antes de ejecutar conviene completar manualmente los bloques faltantes.</p>
+      <p style="margin: 0 0 0.5rem 0;"><strong>Faltantes críticos:</strong></p>
+      <ul style="margin: 0 0 0.75rem 1.25rem;">${criticos || '<li>Ninguno</li>'}</ul>
+      ${informativos ? `<p style="margin: 0 0 0.5rem 0;"><strong>Faltantes informativos:</strong></p><ul style="margin: 0 0 1rem 1.25rem;">${informativos}</ul>` : ''}
+      <div style="display:flex; justify-content:flex-end; gap:0.5rem;">
+        <button class="btn btn-secondary btn-sm" onclick="document.getElementById('modal-simple')?.remove()">Después</button>
+        <button class="btn btn-primary btn-sm" onclick="document.getElementById('modal-simple')?.remove(); abrirEditorExtractoActual();">Revisar ahora</button>
+      </div>
+    </div>
+  `;
+
+  showModalSimple('Revisión Manual Quini 6', contenido);
+}
+
 /**
  * Cargar extracto QUINI 6 desde JSON generado por OCR o archivo
  */
@@ -10169,6 +10707,8 @@ function cargarExtractoQuini6DesdeJSON(data) {
     return false;
   }
 
+  extracto._evaluacion = evaluarCompletitudExtractoQuini6(extracto);
+
   cpstExtractoQuini6 = extracto;
   
   // Llenar los inputs de números y premios
@@ -10182,7 +10722,11 @@ function cargarExtractoQuini6DesdeJSON(data) {
   // Mostrar preview
   mostrarPreviewExtractoQuini6();
 
-  showToast('Extracto QUINI 6 cargado correctamente', 'success');
+  if (extracto._evaluacion.completo) {
+    showToast('Extracto QUINI 6 cargado correctamente', 'success');
+  } else {
+    showToast(`Quini 6 cargado con faltantes: ${extracto._evaluacion.faltantesCriticos.join(', ')}`, 'warning');
+  }
   return true;
 }
 
@@ -10553,32 +11097,42 @@ async function procesarExtractoQuini6OCR(file) {
     
     if (progress) progress.querySelector('div').style.width = '20%';
     
-    let base64, mimeType;
-    
-    // Detectar si es PDF y convertir
-    if (file.type === 'application/pdf' || file.name.toLowerCase().endsWith('.pdf')) {
-      if (mensaje) mensaje.textContent = 'Convirtiendo PDF a imagen...';
-      const pdfResult = await OCRExtractos.pdfToImage(file);
-      base64 = pdfResult.base64;
-      mimeType = pdfResult.mimeType;
+    let result;
+    const esPdf = file.type === 'application/pdf' || file.name.toLowerCase().endsWith('.pdf');
+
+    if (esPdf) {
+      if (mensaje) mensaje.textContent = 'Leyendo texto del PDF...';
+      if (progress) progress.querySelector('div').style.width = '35%';
+
+      try {
+        const textoPdf = await extraerTextoPlanoDesdePdf(file, 3);
+        if (textoPdf && textoPdf.trim().length > 80) {
+          if (mensaje) mensaje.textContent = `Interpretando texto del PDF con IA${getSufijoProveedorOCR()}...`;
+          result = await OCRExtractos.procesarTextoQuini6(textoPdf);
+        }
+      } catch (errorTextoPdf) {
+        console.warn('[Quini6 PDF] No se pudo procesar como texto, fallback a OCR visual:', errorTextoPdf.message || errorTextoPdf);
+      }
+
+      if (!result) {
+        if (mensaje) mensaje.textContent = 'Analizando PDF (múltiples páginas)...';
+        if (progress) progress.querySelector('div').style.width = '45%';
+        result = await OCRExtractos.procesarPdfQuini6(file);
+      }
     } else {
       if (mensaje) mensaje.textContent = 'Procesando imagen...';
       const imgResult = await OCRExtractos.imageToBase64(file);
-      base64 = imgResult.base64;
-      mimeType = imgResult.mimeType;
+      if (progress) progress.querySelector('div').style.width = '50%';
+      if (mensaje) mensaje.textContent = `Extrayendo datos con IA${getSufijoProveedorOCR()}...`;
+      result = await OCRExtractos.procesarImagenQuini6(imgResult.base64, imgResult.mimeType);
     }
-    
-    if (progress) progress.querySelector('div').style.width = '50%';
-    if (mensaje) mensaje.textContent = `Extrayendo datos con IA${getSufijoProveedorOCR()}...`;
-    
-    // Procesar con OCR específico de Quini6
-    const result = await OCRExtractos.procesarImagenQuini6(base64, mimeType);
     
     if (progress) progress.querySelector('div').style.width = '90%';
     
     if (result.success && result.data) {
       // Cargar los datos extraídos
       if (cargarExtractoQuini6DesdeJSON(result.data)) {
+        notificarConfianzaOCRBaja(result.data, 'QUINI 6 OCR');
         if (progress) progress.querySelector('div').style.width = '100%';
         
         // Llenar también los inputs manuales
@@ -10589,8 +11143,13 @@ async function procesarExtractoQuini6OCR(file) {
           fileInfo?.classList.remove('hidden');
           if (filename) filename.textContent = file.name;
         }, 500);
-        
-        showToast(`Extracto QUINI 6 procesado correctamente con OCR${getSufijoProveedorOCR()}`, 'success');
+
+        const evaluacion = evaluarCompletitudExtractoQuini6(cpstExtractoQuini6);
+        if (evaluacion.completo) {
+          showToast(`Extracto QUINI 6 procesado correctamente con OCR${getSufijoProveedorOCR()}`, 'success');
+        } else {
+          setTimeout(() => abrirRevisionManualQuini6(`OCR${getSufijoProveedorOCR()}`), 120);
+        }
       }
     } else {
       throw new Error(result.error || 'No se pudieron extraer los datos');
@@ -10870,32 +11429,42 @@ async function procesarExtractoBrincoOCR(file) {
     
     if (progress) progress.querySelector('div').style.width = '20%';
     
-    let base64, mimeType;
-    
-    // Detectar si es PDF y convertir
-    if (file.type === 'application/pdf' || file.name.toLowerCase().endsWith('.pdf')) {
-      if (mensaje) mensaje.textContent = 'Convirtiendo PDF a imagen...';
-      const pdfResult = await OCRExtractos.pdfToImage(file);
-      base64 = pdfResult.base64;
-      mimeType = pdfResult.mimeType;
+    let result;
+    const esPdf = file.type === 'application/pdf' || file.name.toLowerCase().endsWith('.pdf');
+
+    if (esPdf) {
+      if (mensaje) mensaje.textContent = 'Leyendo texto del PDF...';
+      if (progress) progress.querySelector('div').style.width = '35%';
+
+      try {
+        const textoPdf = await extraerTextoPlanoDesdePdf(file, 3);
+        if (textoPdf && textoPdf.trim().length > 80) {
+          if (mensaje) mensaje.textContent = `Interpretando texto del PDF con IA${getSufijoProveedorOCR()}...`;
+          result = await OCRExtractos.procesarTextoBrinco(textoPdf);
+        }
+      } catch (errorTextoPdf) {
+        console.warn('[Brinco PDF] No se pudo procesar como texto, fallback a OCR visual:', errorTextoPdf.message || errorTextoPdf);
+      }
+
+      if (!result) {
+        if (mensaje) mensaje.textContent = 'Analizando PDF (múltiples páginas)...';
+        if (progress) progress.querySelector('div').style.width = '45%';
+        result = await OCRExtractos.procesarPdfBrinco(file);
+      }
     } else {
       if (mensaje) mensaje.textContent = 'Procesando imagen...';
       const imgResult = await OCRExtractos.imageToBase64(file);
-      base64 = imgResult.base64;
-      mimeType = imgResult.mimeType;
+      if (progress) progress.querySelector('div').style.width = '50%';
+      if (mensaje) mensaje.textContent = `Extrayendo datos con IA${getSufijoProveedorOCR()}...`;
+      result = await OCRExtractos.procesarImagenBrinco(imgResult.base64, imgResult.mimeType);
     }
-    
-    if (progress) progress.querySelector('div').style.width = '50%';
-    if (mensaje) mensaje.textContent = `Extrayendo datos con IA${getSufijoProveedorOCR()}...`;
-    
-    // Procesar con OCR específico de Brinco
-    const result = await OCRExtractos.procesarImagenBrinco(base64, mimeType);
     
     if (progress) progress.querySelector('div').style.width = '90%';
     
     if (result.success && result.data) {
       // Cargar los datos extraídos
       if (cargarExtractoBrincoDesdeJSON(result.data)) {
+        notificarConfianzaOCRBaja(result.data, 'BRINCO OCR');
         if (progress) progress.querySelector('div').style.width = '100%';
         
         // Llenar también los inputs manuales
@@ -13205,6 +13774,27 @@ function getSufijoProveedorOCR() {
   return provider ? ` (${provider})` : '';
 }
 
+function notificarConfianzaOCRBaja(data, contexto = 'OCR') {
+  const ocrMeta = data?._ocr;
+  if (!ocrMeta || !ocrMeta.lowConfidence) return;
+
+  const fields = Array.isArray(ocrMeta.lowConfidenceFields) ? ocrMeta.lowConfidenceFields : [];
+  if (fields.length === 0) return;
+
+  const nombres = {
+    provincia: 'provincia',
+    modalidad: 'modalidad',
+    fecha: 'fecha',
+    hora: 'hora',
+    sorteo: 'sorteo',
+    numeros: 'números',
+    letras: 'letras'
+  };
+
+  const detalle = fields.map(f => nombres[f] || f).join(', ');
+  showToast(`⚠️ ${contexto}: detección con baja confianza en ${detalle}. Revisar antes de guardar.`, 'warning');
+}
+
 function actualizarIndicadorProveedorOCR(providerName = null) {
   const indicator = document.getElementById('ocr-provider-indicator');
   if (!indicator) return;
@@ -13851,6 +14441,45 @@ async function guardarExtractosPendientes() {
     return;
   }
 
+  const validarExtractoPendiente = (ext) => {
+    const provincia = String(ext.provincia || '').trim();
+    const modalidad = String(ext.modalidad || '').trim();
+    const fecha = String(ext.fecha || '').trim();
+    const digitos = provincia === '00' ? 3 : 4;
+    const numerosRaw = Array.isArray(ext.numeros) ? ext.numeros : [];
+
+    if (!provincia) return 'provincia faltante';
+    if (!modalidad) return 'modalidad faltante';
+    if (!fecha) return 'fecha faltante';
+    if (numerosRaw.length !== 20) return `números incompletos (${numerosRaw.length}/20)`;
+
+    const invalidas = [];
+    numerosRaw.forEach((n, idx) => {
+      const limpio = String(n ?? '').replace(/\D/g, '');
+      if (!limpio || limpio.length > digitos) invalidas.push(idx + 1);
+    });
+
+    if (invalidas.length > 0) {
+      return `números inválidos en posiciones: ${invalidas.join(', ')}`;
+    }
+
+    return null;
+  };
+
+  const errores = [];
+  extractosPendientes.forEach((ext) => {
+    const err = validarExtractoPendiente(ext);
+    if (err) {
+      errores.push(`${ext.provinciaName || ext.provincia || 'Sin provincia'} ${ext.modalidadName || ext.modalidad || ''}: ${err}`.trim());
+    }
+  });
+
+  if (errores.length > 0) {
+    const detalle = errores.slice(0, 3).join(' | ');
+    showToast(`No se guardó: hay extractos incompletos. ${detalle}`, 'warning');
+    return;
+  }
+
   const btn = document.querySelector('#extractos-pendientes-container .btn-success');
   const originalText = btn.innerHTML;
   btn.disabled = true;
@@ -13864,7 +14493,12 @@ async function guardarExtractosPendientes() {
       fecha: ext.fecha,
       sorteo: ext.sorteo || null,
       juego: 'Quiniela',
-      numeros: ext.numeros,
+      numeros: (Array.isArray(ext.numeros)
+        ? ext.numeros.map(n => {
+            const digitos = String(ext.provincia || '') === '00' ? 3 : 4;
+            return String(n ?? '').replace(/\D/g, '').padStart(digitos, '0');
+          })
+        : []),
       letras: ext.letras || '',
       fuente: 'OCR'
     }));

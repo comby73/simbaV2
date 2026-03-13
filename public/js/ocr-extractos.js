@@ -278,7 +278,7 @@ Responde SOLO con este JSON (INCLUIR SIEMPRE EL CAMPO "letras"):
   },
 
   // Llamar a la API con sistema de fallback (Groq → Mistral → OpenAI)
-  async llamarAPI(imageBase64, mimeType, prompt) {
+  async llamarAPI(imageBase64, mimeType, prompt, opciones = {}) {
     const availableProviders = this.getAvailableProviders();
 
     if (availableProviders.length === 0 && !this.CONFIG.API_KEY) {
@@ -321,7 +321,7 @@ Responde SOLO con este JSON (INCLUIR SIEMPRE EL CAMPO "letras"):
     for (const provider of providers) {
       try {
         console.log(`[OCR] Intentando con ${provider.name}...`);
-        const result = await this.llamarProviderAPI(provider, dataUrl, prompt);
+        const result = await this.llamarProviderAPI(provider, dataUrl, prompt, opciones);
         this.CURRENT_PROVIDER = provider.name;
         this.emitirCambioProveedor();
         console.log(`[OCR] ✓ ${provider.name} respondió correctamente`);
@@ -345,8 +345,39 @@ Responde SOLO con este JSON (INCLUIR SIEMPRE EL CAMPO "letras"):
     throw new Error(`Todos los proveedores OCR fallaron. Último error: ${lastError?.message || 'desconocido'}`);
   },
 
+  async llamarAPITexto(prompt, opciones = {}) {
+    const availableProviders = this.getAvailableProviders();
+    if (availableProviders.length === 0 && !this.CONFIG.API_KEY) {
+      throw new Error('No hay API keys configuradas para procesar texto');
+    }
+
+    const providers = availableProviders.length > 0 ? availableProviders : [{
+      name: 'GROQ',
+      API_KEY: this.CONFIG.API_KEY,
+      API_URL: this.CONFIG.API_URL,
+      MODEL: this.CONFIG.MODEL
+    }];
+
+    let lastError = null;
+    for (const provider of providers) {
+      try {
+        console.log(`[OCR-TEXT] Intentando con ${provider.name}...`);
+        const result = await this.llamarProviderAPITexto(provider, prompt, opciones);
+        this.CURRENT_PROVIDER = provider.name;
+        this.emitirCambioProveedor();
+        console.log(`[OCR-TEXT] ✓ ${provider.name} respondió correctamente`);
+        return result;
+      } catch (error) {
+        console.warn(`[OCR-TEXT] ✗ ${provider.name} falló:`, error.message);
+        lastError = error;
+      }
+    }
+
+    throw new Error(`Todos los proveedores de texto fallaron. Último error: ${lastError?.message || 'desconocido'}`);
+  },
+
   // Llamar a un proveedor específico
-  async llamarProviderAPI(provider, dataUrl, prompt) {
+  async llamarProviderAPI(provider, dataUrl, prompt, opciones = {}) {
     const requestBody = {
       model: provider.MODEL,
       messages: [
@@ -362,7 +393,7 @@ Responde SOLO con este JSON (INCLUIR SIEMPRE EL CAMPO "letras"):
         }
       ],
       temperature: 0.1,
-      max_tokens: 2000,
+      max_tokens: Number(opciones.maxTokens) > 0 ? Number(opciones.maxTokens) : 2000,
       stream: false
     };
 
@@ -394,6 +425,42 @@ Responde SOLO con este JSON (INCLUIR SIEMPRE EL CAMPO "letras"):
     } else {
       throw new Error(`Respuesta inesperada de ${provider.name}`);
     }
+  },
+
+  async llamarProviderAPITexto(provider, prompt, opciones = {}) {
+    const requestBody = {
+      model: provider.MODEL,
+      messages: [
+        {
+          role: 'user',
+          content: prompt
+        }
+      ],
+      temperature: 0.1,
+      max_tokens: Number(opciones.maxTokens) > 0 ? Number(opciones.maxTokens) : 2500,
+      stream: false
+    };
+
+    const response = await fetch(provider.API_URL, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': 'Bearer ' + provider.API_KEY
+      },
+      body: JSON.stringify(requestBody)
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      throw new Error(`${provider.name} error HTTP ${response.status}: ${errorText}`);
+    }
+
+    const data = await response.json();
+    if (data.choices && data.choices[0] && data.choices[0].message) {
+      return this.procesarRespuesta(data.choices[0].message.content);
+    }
+
+    throw new Error(`Respuesta inesperada de ${provider.name}`);
   },
 
   // Procesar respuesta de la API
@@ -635,6 +702,50 @@ Responde ÚNICAMENTE con este JSON:
     return await this.llamarAPI(imageBase64, mimeType, prompt);
   },
 
+  async procesarTextoBrinco(textoPDF) {
+    const prompt = `Actuás como un extractor especializado de resultados de lotería BRINCO de Argentina.
+
+Te paso TEXTO ya extraído desde un PDF oficial. No uses el nombre del archivo. Leé únicamente el contenido y devolvé SOLO un objeto JSON válido.
+
+TEXTO DEL PDF:
+${textoPDF}
+
+Reglas:
+- Extraer sorteo_number y date.
+- BRINCO tradicional: 6 números en brinco.numbers.
+- BRINCO Junior Siempre Sale: 6 números en brinco_junior.numbers.
+- Si Junior no aparece con 6 números claros, devolver igualmente la mejor lectura disponible.
+- Mantener montos como número decimal.
+
+Responder únicamente con:
+{
+  "game": "BRINCO",
+  "sorteo_number": "XXXX",
+  "date": "YYYY-MM-DD",
+  "currency": "ARS",
+  "brinco": {
+    "numbers": ["XX", "XX", "XX", "XX", "XX", "XX"],
+    "prizes": {
+      "1": { "winners": 0, "premio_por_ganador": 0, "vacante": false },
+      "2": { "winners": 0, "premio_por_ganador": 0 },
+      "3": { "winners": 0, "premio_por_ganador": 0 },
+      "4": { "winners": 0, "premio_por_ganador": 0 }
+    },
+    "estimulo": { "monto": 0, "vacante": false }
+  },
+  "brinco_junior": {
+    "numbers": ["XX", "XX", "XX", "XX", "XX", "XX"],
+    "aciertos_requeridos": 5,
+    "prizes": {
+      "1": { "winners": 0, "premio_por_ganador": 0, "pozo_total": 0 }
+    },
+    "estimulo": { "monto": 0, "winners": 0, "pagado_total": 0 }
+  }
+}`;
+
+    return await this.llamarAPITexto(prompt, { maxTokens: 2200 });
+  },
+
   /**
    * PROCESAR IMAGEN DE EXTRACTO QUINI 6
    * Extrae los datos de un extracto de QUINI 6
@@ -723,7 +834,74 @@ JSON de respuesta:
   }
 }`;
 
-    return await this.llamarAPI(imageBase64, mimeType, prompt);
+    return await this.llamarAPI(imageBase64, mimeType, prompt, { maxTokens: 3500 });
+  },
+
+  async procesarTextoQuini6(textoPDF) {
+    const prompt = `Actuás como un extractor especializado de resultados de lotería QUINI 6 de Argentina.
+
+Te paso TEXTO ya extraído desde un PDF oficial. No uses el nombre del archivo. Leé únicamente el contenido y devolvé SOLO un objeto JSON válido.
+
+TEXTO DEL PDF:
+${textoPDF}
+
+Reglas críticas:
+- Extraer drawNumber y date.
+- Extraer 6 números para Tradicional Primer Sorteo, Tradicional Segunda, Revancha y Siempre Sale.
+- Extraer winning_hits para Siempre Sale si aparece.
+- Extraer Premio Extra como pool de números si aparece.
+- Si una sección no está clara, dejarla vacía antes que inventarla.
+- Mantener montos como número decimal.
+
+Responder únicamente con:
+{
+  "game": "QUINI_6",
+  "drawNumber": "XXXX",
+  "date": "YYYY-MM-DD",
+  "tradicional": {
+    "primer": {
+      "numbers": ["XX","XX","XX","XX","XX","XX"],
+      "prizes": {
+        "1": { "pot": 0, "winners": 0, "premio_por_ganador": 0, "vacante": false },
+        "2": { "pot": 0, "winners": 0, "premio_por_ganador": 0 },
+        "3": { "pot": 0, "winners": 0, "premio_por_ganador": 0 },
+        "estimulo": { "monto": 0, "winners": 0 }
+      }
+    },
+    "segunda": {
+      "numbers": ["XX","XX","XX","XX","XX","XX"],
+      "prizes": {
+        "1": { "pot": 0, "winners": 0, "premio_por_ganador": 0 },
+        "2": { "pot": 0, "winners": 0, "premio_por_ganador": 0 },
+        "3": { "pot": 0, "winners": 0, "premio_por_ganador": 0 },
+        "estimulo": { "monto": 0, "winners": 0 }
+      }
+    }
+  },
+  "revancha": {
+    "numbers": ["XX","XX","XX","XX","XX","XX"],
+    "prizes": {
+      "1": { "pot": 0, "winners": 0, "premio_por_ganador": 0, "vacante": false },
+      "estimulo": { "monto": 0 }
+    }
+  },
+  "siempre_sale": {
+    "numbers": ["XX","XX","XX","XX","XX","XX"],
+    "winning_hits": 5,
+    "prizes": {
+      "1": { "pot": 0, "winners": 0, "premio_por_ganador": 0 },
+      "estimulo": { "monto": 0, "winners": 0 }
+    }
+  },
+  "premio_extra": {
+    "numbers": [],
+    "pot": 0,
+    "winners": 0,
+    "premio_por_ganador": 0
+  }
+}`;
+
+    return await this.llamarAPITexto(prompt, { maxTokens: 3500 });
   },
 
   /**
@@ -927,6 +1105,344 @@ Responde SOLO con la palabra del tipo de juego, sin explicaciones.`;
     return nombreArchivo;
   },
 
+  evaluarCalidadResultadoOCR(data = {}) {
+    let score = 0;
+
+    const numeros = Array.isArray(data.numeros) ? data.numeros.filter(Boolean) : [];
+    const letras = Array.isArray(data.letras) ? data.letras.filter(Boolean) : [];
+
+    if (numeros.length >= 20) score += 60;
+    else score += Math.min(40, numeros.length * 2);
+
+    if (data.provincia) score += 10;
+    if (data.modalidad) score += 10;
+    if (data.hora) score += 6;
+    if (data.fecha) score += 6;
+    if (data.sorteo || data.sorteo_number || data.drawNumber) score += 8;
+    if (letras.length > 0) score += Math.min(8, letras.length * 2);
+
+    return score;
+  },
+
+  _normalizarValorComparable(valor) {
+    if (valor === null || valor === undefined) return '';
+    if (Array.isArray(valor)) return valor.join('|').trim();
+    return String(valor).trim().toUpperCase();
+  },
+
+  _calcularConsenso(entries = [], campo, valorFinal) {
+    const finalNorm = this._normalizarValorComparable(valorFinal);
+    if (!finalNorm) return 0;
+
+    let total = 0;
+    let matches = 0;
+
+    for (const entry of entries) {
+      const val = entry?.data?.[campo];
+      const norm = this._normalizarValorComparable(val);
+      if (!norm) continue;
+      total += 1;
+      if (norm === finalNorm) matches += 1;
+    }
+
+    if (total === 0) return 0;
+    return Number((matches / total).toFixed(2));
+  },
+
+  _construirMetaConfianza(entries = [], combinado = {}) {
+    const numeros = Array.isArray(combinado.numeros) ? combinado.numeros.filter(Boolean) : [];
+    const letras = Array.isArray(combinado.letras) ? combinado.letras.filter(Boolean) : [];
+    const confNumeros = Number(Math.min(1, numeros.length / 20).toFixed(2));
+    const confLetras = Number(Math.min(1, letras.length / 4).toFixed(2));
+
+    const confidence = {
+      provincia: this._calcularConsenso(entries, 'provincia', combinado.provincia),
+      modalidad: this._calcularConsenso(entries, 'modalidad', combinado.modalidad),
+      fecha: this._calcularConsenso(entries, 'fecha', combinado.fecha),
+      hora: this._calcularConsenso(entries, 'hora', combinado.hora),
+      sorteo: this._calcularConsenso(entries, 'sorteo', combinado.sorteo) || this._calcularConsenso(entries, 'sorteo_number', combinado.sorteo_number) || this._calcularConsenso(entries, 'drawNumber', combinado.drawNumber),
+      numeros: confNumeros,
+      letras: confLetras
+    };
+
+    const lowFields = [];
+    if (confidence.provincia > 0 && confidence.provincia < 0.6) lowFields.push('provincia');
+    if (confidence.modalidad > 0 && confidence.modalidad < 0.6) lowFields.push('modalidad');
+    if (confidence.fecha > 0 && confidence.fecha < 0.6) lowFields.push('fecha');
+    if (confidence.hora > 0 && confidence.hora < 0.6) lowFields.push('hora');
+    if (confidence.sorteo > 0 && confidence.sorteo < 0.6) lowFields.push('sorteo');
+    if (confidence.numeros < 0.9) lowFields.push('numeros');
+
+    return {
+      pagesProcessed: entries.length,
+      pagesWithData: entries.filter(e => e?.data).length,
+      confidence,
+      lowConfidence: lowFields.length > 0,
+      lowConfidenceFields: lowFields
+    };
+  },
+
+  combinarResultadosOCR(resultados = []) {
+    if (!Array.isArray(resultados) || resultados.length === 0) return null;
+
+    const entries = resultados.map((item) => {
+      if (item && item.data) {
+        return {
+          pageNumber: item.pageNumber || null,
+          data: item.data,
+          score: this.evaluarCalidadResultadoOCR(item.data)
+        };
+      }
+
+      return {
+        pageNumber: null,
+        data: item,
+        score: this.evaluarCalidadResultadoOCR(item || {})
+      };
+    });
+
+    const ordenados = [...entries].sort((a, b) => (b.score || 0) - (a.score || 0));
+    const base = JSON.parse(JSON.stringify(ordenados[0]?.data || {}));
+
+    for (let i = 1; i < ordenados.length; i++) {
+      const cand = ordenados[i]?.data || {};
+
+      if (!base.provincia && cand.provincia) base.provincia = cand.provincia;
+      if (!base.modalidad && cand.modalidad) base.modalidad = cand.modalidad;
+      if (!base.fecha && cand.fecha) base.fecha = cand.fecha;
+      if (!base.hora && cand.hora) base.hora = cand.hora;
+      if (!base.sorteo && cand.sorteo) base.sorteo = cand.sorteo;
+      if (!base.sorteo_number && cand.sorteo_number) base.sorteo_number = cand.sorteo_number;
+      if (!base.drawNumber && cand.drawNumber) base.drawNumber = cand.drawNumber;
+
+      const baseNumeros = Array.isArray(base.numeros) ? base.numeros.filter(Boolean) : [];
+      const candNumeros = Array.isArray(cand.numeros) ? cand.numeros.filter(Boolean) : [];
+      if (candNumeros.length > baseNumeros.length) {
+        base.numeros = cand.numeros;
+      }
+
+      const baseLetras = Array.isArray(base.letras) ? base.letras.filter(Boolean) : [];
+      const candLetras = Array.isArray(cand.letras) ? cand.letras.filter(Boolean) : [];
+      if (candLetras.length > baseLetras.length) {
+        base.letras = cand.letras;
+      }
+    }
+
+    base._ocr = this._construirMetaConfianza(entries, base);
+
+    return base;
+  },
+
+  _deepClone(valor) {
+    return valor == null ? valor : JSON.parse(JSON.stringify(valor));
+  },
+
+  _scorePrizeMap(prizes = {}) {
+    if (!prizes || typeof prizes !== 'object') return 0;
+    return Object.keys(prizes).length * 5;
+  },
+
+  _scoreNumericArray(values = []) {
+    return Array.isArray(values) ? values.filter(v => v !== null && v !== undefined && v !== '').length * 10 : 0;
+  },
+
+  _scoreQuiniSection(section = {}, tipo = '') {
+    if (!section || typeof section !== 'object') return 0;
+
+    if (tipo === 'premio_extra') {
+      return this._scoreNumericArray(section.numbers) + (Number(section.winners) > 0 ? 4 : 0) + (Number(section.pot) > 0 ? 4 : 0);
+    }
+
+    return this._scoreNumericArray(section.numbers)
+      + this._scorePrizeMap(section.prizes)
+      + (Number(section.winning_hits) > 0 ? 3 : 0);
+  },
+
+  _scoreBrincoSection(section = {}) {
+    if (!section || typeof section !== 'object') return 0;
+    return this._scoreNumericArray(section.numbers) + this._scorePrizeMap(section.prizes) + (section.estimulo ? 2 : 0);
+  },
+
+  _pickBestSection(entries = [], selector, scoreFn) {
+    let best = null;
+    let bestScore = -1;
+
+    for (const entry of entries) {
+      const section = selector(entry?.data || {});
+      const score = scoreFn.call(this, section);
+      if (score > bestScore) {
+        bestScore = score;
+        best = section;
+      }
+    }
+
+    return this._deepClone(best);
+  },
+
+  combinarResultadosQuini6(resultados = []) {
+    if (!Array.isArray(resultados) || resultados.length === 0) return null;
+
+    const entries = resultados.map((item) => ({
+      pageNumber: item?.pageNumber || null,
+      data: item?.data || item || {}
+    }));
+
+    const combinado = {
+      game: 'QUINI_6',
+      drawNumber: '',
+      date: '',
+      tradicional: {
+        primer: this._pickBestSection(entries, data => data.tradicional?.primer, this._scoreQuiniSection),
+        segunda: this._pickBestSection(entries, data => data.tradicional?.segunda, this._scoreQuiniSection)
+      },
+      revancha: this._pickBestSection(entries, data => data.revancha, this._scoreQuiniSection),
+      siempre_sale: this._pickBestSection(entries, data => data.siempre_sale, this._scoreQuiniSection),
+      premio_extra: this._pickBestSection(entries, data => data.premio_extra, function (section) {
+        return this._scoreQuiniSection(section, 'premio_extra');
+      })
+    };
+
+    for (const entry of entries) {
+      const data = entry.data || {};
+      if (!combinado.drawNumber && data.drawNumber) combinado.drawNumber = data.drawNumber;
+      if (!combinado.date && data.date) combinado.date = data.date;
+    }
+
+    const seccionesCriticas = [
+      combinado.tradicional?.primer,
+      combinado.tradicional?.segunda,
+      combinado.revancha,
+      combinado.siempre_sale
+    ];
+    const completas = seccionesCriticas.filter(sec => Array.isArray(sec?.numbers) && sec.numbers.length === 6).length;
+
+    combinado._ocr = {
+      pagesProcessed: entries.length,
+      pagesWithData: entries.filter(e => e?.data).length,
+      mergeStrategy: 'quini6-secciones',
+      confidence: {
+        secciones: Number((completas / seccionesCriticas.length).toFixed(2))
+      },
+      lowConfidence: completas < seccionesCriticas.length,
+      lowConfidenceFields: completas < seccionesCriticas.length ? ['numeros'] : []
+    };
+
+    return combinado;
+  },
+
+  combinarResultadosBrinco(resultados = []) {
+    if (!Array.isArray(resultados) || resultados.length === 0) return null;
+
+    const entries = resultados.map((item) => ({
+      pageNumber: item?.pageNumber || null,
+      data: item?.data || item || {}
+    }));
+
+    const combinado = {
+      game: 'BRINCO',
+      sorteo_number: '',
+      date: '',
+      currency: 'ARS',
+      brinco: this._pickBestSection(entries, data => data.brinco, this._scoreBrincoSection),
+      brinco_junior: this._pickBestSection(entries, data => data.brinco_junior, this._scoreBrincoSection)
+    };
+
+    for (const entry of entries) {
+      const data = entry.data || {};
+      if (!combinado.sorteo_number && data.sorteo_number) combinado.sorteo_number = data.sorteo_number;
+      if (!combinado.date && data.date) combinado.date = data.date;
+      if (!combinado.currency && data.currency) combinado.currency = data.currency;
+    }
+
+    const completas = [combinado.brinco, combinado.brinco_junior]
+      .filter(sec => Array.isArray(sec?.numbers) && sec.numbers.length === 6).length;
+
+    combinado._ocr = {
+      pagesProcessed: entries.length,
+      pagesWithData: entries.filter(e => e?.data).length,
+      mergeStrategy: 'brinco-secciones',
+      confidence: {
+        secciones: Number((completas / 2).toFixed(2))
+      },
+      lowConfidence: completas < 2,
+      lowConfidenceFields: completas < 2 ? ['numeros'] : []
+    };
+
+    return combinado;
+  },
+
+  async procesarPDFMultipagina(file, procesadorPagina, opciones = {}) {
+    const maxPages = Number(opciones.maxPages) > 0 ? Number(opciones.maxPages) : 3;
+    const pages = await this.pdfToImages(file, maxPages);
+
+    if (!Array.isArray(pages) || pages.length === 0) {
+      throw new Error('No se pudieron renderizar páginas del PDF');
+    }
+
+    const resultados = [];
+    let ultimoError = null;
+
+    for (const page of pages) {
+      try {
+        const result = await procesadorPagina(page);
+        if (result?.success && result?.data) {
+          resultados.push({
+            pageNumber: page.pageNumber,
+            data: result.data
+          });
+        }
+      } catch (error) {
+        ultimoError = error;
+        console.warn(`[OCR] Página ${page.pageNumber} falló:`, error.message || error);
+      }
+    }
+
+    if (resultados.length === 0) {
+      throw new Error(ultimoError?.message || 'No se pudieron extraer datos del PDF');
+    }
+
+    const combiner = typeof opciones.combiner === 'function'
+      ? opciones.combiner
+      : (items) => this.combinarResultadosOCR(items);
+
+    const combinado = combiner(resultados);
+    if (!combinado) {
+      throw new Error('No se pudo combinar resultados OCR del PDF');
+    }
+
+    return { success: true, data: combinado };
+  },
+
+  async procesarPdfQuiniela(file, provinciaHint = '') {
+    return this.procesarPDFMultipagina(file, async (page) => {
+      return this.procesarImagenQuiniela(page.base64, page.mimeType, provinciaHint);
+    }, { maxPages: 3 });
+  },
+
+  async procesarPdfPoceada(file) {
+    return this.procesarPDFMultipagina(file, async (page) => {
+      return this.procesarImagenPoceada(page.base64, page.mimeType);
+    }, { maxPages: 3 });
+  },
+
+  async procesarPdfTombolina(file) {
+    return this.procesarPDFMultipagina(file, async (page) => {
+      return this.procesarImagenTombolina(page.base64, page.mimeType);
+    }, { maxPages: 3 });
+  },
+
+  async procesarPdfQuini6(file) {
+    return this.procesarPDFMultipagina(file, async (page) => {
+      return this.procesarImagenQuini6(page.base64, page.mimeType);
+    }, { maxPages: 3, combiner: (items) => this.combinarResultadosQuini6(items) });
+  },
+
+  async procesarPdfBrinco(file) {
+    return this.procesarPDFMultipagina(file, async (page) => {
+      return this.procesarImagenBrinco(page.base64, page.mimeType);
+    }, { maxPages: 3, combiner: (items) => this.combinarResultadosBrinco(items) });
+  },
+
   // Limpiar y validar letras
   limpiarLetras(letras) {
     const letrasValidas = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
@@ -982,33 +1498,52 @@ Responde SOLO con la palabra del tipo de juego, sin explicaciones.`;
     });
   },
 
-  // Convertir PDF a imagen (primera página)
-  async pdfToImage(file) {
+  async pdfToImages(file, maxPages = 3) {
     if (!window.pdfjsLib) {
       await this.cargarPdfJs();
     }
 
     const arrayBuffer = await file.arrayBuffer();
     const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
-    const page = await pdf.getPage(1);
+    const totalPages = Math.min(pdf.numPages, Math.max(1, maxPages));
+    const pages = [];
 
-    const scale = 3;
-    const viewport = page.getViewport({ scale });
+    for (let pageNumber = 1; pageNumber <= totalPages; pageNumber++) {
+      const page = await pdf.getPage(pageNumber);
+      const scale = 3;
+      const viewport = page.getViewport({ scale });
 
-    const canvas = document.createElement('canvas');
-    const context = canvas.getContext('2d');
-    canvas.height = viewport.height;
-    canvas.width = viewport.width;
+      const canvas = document.createElement('canvas');
+      const context = canvas.getContext('2d');
+      canvas.height = viewport.height;
+      canvas.width = viewport.width;
 
-    await page.render({
-      canvasContext: context,
-      viewport: viewport
-    }).promise;
+      await page.render({
+        canvasContext: context,
+        viewport: viewport
+      }).promise;
 
-    const dataUrl = canvas.toDataURL('image/png', 1.0);
-    const base64 = dataUrl.split(',')[1];
+      const dataUrl = canvas.toDataURL('image/png', 1.0);
+      const base64 = dataUrl.split(',')[1];
 
-    return { base64, mimeType: 'image/png' };
+      pages.push({
+        pageNumber,
+        base64,
+        mimeType: 'image/png'
+      });
+    }
+
+    return pages;
+  },
+
+  // Convertir PDF a imagen (primera página)
+  async pdfToImage(file) {
+    const pages = await this.pdfToImages(file, 1);
+    const first = pages[0];
+    if (!first) {
+      throw new Error('No se pudo convertir PDF a imagen');
+    }
+    return { base64: first.base64, mimeType: first.mimeType };
   },
 
   // Cargar PDF.js dinámicamente
