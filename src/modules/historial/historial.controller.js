@@ -31,6 +31,22 @@ async function resolverColumnaFechaTabla(tableName) {
   return null;
 }
 
+function construirExprFechaSorteo(alias, fechaCol, juegoWhereSql) {
+  const baseFecha = fechaCol ? `${alias}.${fechaCol}` : 'NULL';
+  return `COALESCE(
+    ${baseFecha},
+    (
+      SELECT ps.fecha_sorteo
+      FROM programacion_sorteos ps
+      WHERE ps.numero_sorteo = CAST(${alias}.numero_sorteo AS UNSIGNED)
+        AND (${juegoWhereSql})
+      ORDER BY ps.fecha_sorteo DESC
+      LIMIT 1
+    ),
+    DATE(${alias}.created_at)
+  )`;
+}
+
 /**
  * GET /api/historial/control-previo/:juego
  * Lista el historial de control previo
@@ -623,7 +639,7 @@ const listarControlPrevioGeneral = async (req, res) => {
     if (!juego || juego === 'loto') {
       try {
         const colFechaLoto = await resolverColumnaFechaTabla('control_previo_loto');
-        const exprFechaLoto = colFechaLoto ? `cp.${colFechaLoto}` : 'DATE(cp.created_at)';
+        const exprFechaLoto = construirExprFechaSorteo('cp', colFechaLoto, "LOWER(ps.juego) LIKE 'loto%'");
 
         let sqlL = `
           SELECT
@@ -662,7 +678,7 @@ const listarControlPrevioGeneral = async (req, res) => {
 
           // Compatibilidad con esquema legacy
           const colFechaLotoLegacy = await resolverColumnaFechaTabla('control_previo_loto');
-          const exprFechaLotoLegacy = colFechaLotoLegacy ? `cp.${colFechaLotoLegacy}` : 'DATE(cp.created_at)';
+          const exprFechaLotoLegacy = construirExprFechaSorteo('cp', colFechaLotoLegacy, "LOWER(ps.juego) LIKE 'loto%'");
 
           let sqlLLegacy = `
             SELECT
@@ -737,7 +753,7 @@ const listarControlPrevioGeneral = async (req, res) => {
     if (!juego || juego === 'loto5') {
       try {
         const colFechaL5 = await resolverColumnaFechaTabla('control_previo_loto5');
-        const exprFechaL5 = colFechaL5 ? `cp.${colFechaL5}` : 'DATE(cp.created_at)';
+        const exprFechaL5 = construirExprFechaSorteo('cp', colFechaL5, "LOWER(ps.juego) LIKE 'loto 5%' OR LOWER(ps.juego) LIKE 'loto5%'");
 
         let sqlL5 = `
           SELECT cp.id, cp.numero_sorteo, ${exprFechaL5} as fecha, cp.archivo,
@@ -805,7 +821,7 @@ const listarControlPrevioGeneral = async (req, res) => {
     if (!juego || juego === 'brinco') {
       try {
         const colFechaB = await resolverColumnaFechaTabla('control_previo_brinco');
-        const exprFechaB = colFechaB ? `cp.${colFechaB}` : 'DATE(cp.created_at)';
+        const exprFechaB = construirExprFechaSorteo('cp', colFechaB, "LOWER(ps.juego) LIKE 'brinco%'");
 
         let sqlB = `
           SELECT cp.id, cp.numero_sorteo, ${exprFechaB} as fecha, cp.archivo,
@@ -836,7 +852,7 @@ const listarControlPrevioGeneral = async (req, res) => {
           }
 
           const colFechaBLegacy = await resolverColumnaFechaTabla('control_previo_brinco');
-          const exprFechaBLegacy = colFechaBLegacy ? `cp.${colFechaBLegacy}` : 'DATE(cp.created_at)';
+          const exprFechaBLegacy = construirExprFechaSorteo('cp', colFechaBLegacy, "LOWER(ps.juego) LIKE 'brinco%'");
 
           let sqlBLegacy = `
             SELECT
@@ -876,7 +892,7 @@ const listarControlPrevioGeneral = async (req, res) => {
     if (!juego || juego === 'quini6') {
       try {
         const colFechaQ6 = await resolverColumnaFechaTabla('control_previo_quini6');
-        const exprFechaQ6 = colFechaQ6 ? `cp.${colFechaQ6}` : 'DATE(cp.created_at)';
+        const exprFechaQ6 = construirExprFechaSorteo('cp', colFechaQ6, "LOWER(ps.juego) LIKE 'quini 6%' OR LOWER(ps.juego) LIKE 'quini6%'");
 
         let sqlQ6 = `
           SELECT cp.id, cp.numero_sorteo, ${exprFechaQ6} as fecha, cp.archivo,
@@ -907,7 +923,7 @@ const listarControlPrevioGeneral = async (req, res) => {
           }
 
           const colFechaQ6Legacy = await resolverColumnaFechaTabla('control_previo_quini6');
-          const exprFechaQ6Legacy = colFechaQ6Legacy ? `cp.${colFechaQ6Legacy}` : 'DATE(cp.created_at)';
+          const exprFechaQ6Legacy = construirExprFechaSorteo('cp', colFechaQ6Legacy, "LOWER(ps.juego) LIKE 'quini 6%' OR LOWER(ps.juego) LIKE 'quini6%'");
 
           let sqlQ6Legacy = `
             SELECT
@@ -947,7 +963,7 @@ const listarControlPrevioGeneral = async (req, res) => {
     if (!juego || juego === 'la_grande') {
       try {
         const colFechaLG = await resolverColumnaFechaTabla('control_previo_la_grande');
-        const exprFechaLG = colFechaLG ? `cp.${colFechaLG}` : 'DATE(cp.created_at)';
+        const exprFechaLG = construirExprFechaSorteo('cp', colFechaLG, "LOWER(ps.juego) LIKE 'la grande%'");
 
         let sqlLG = `
           SELECT cp.id, cp.numero_sorteo, ${exprFechaLG} as fecha, cp.archivo,

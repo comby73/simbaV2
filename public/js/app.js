@@ -878,7 +878,20 @@ function showToast(message, type = 'info') {
 
 function formatDate(dateStr) {
   if (!dateStr) return '-';
-  return new Date(dateStr).toLocaleDateString('es-AR');
+  const raw = String(dateStr).trim();
+  const matchFecha = raw.match(/^(\d{4})-(\d{2})-(\d{2})/);
+
+  if (matchFecha) {
+    const year = Number(matchFecha[1]);
+    const month = Number(matchFecha[2]);
+    const day = Number(matchFecha[3]);
+    const fechaLocal = new Date(year, month - 1, day, 12, 0, 0);
+    return fechaLocal.toLocaleDateString('es-AR');
+  }
+
+  const d = new Date(raw);
+  if (Number.isNaN(d.getTime())) return raw;
+  return d.toLocaleDateString('es-AR');
 }
 
 function formatFileSize(bytes) {
@@ -12219,7 +12232,19 @@ function renderHistorialProgramacion(cargas) {
 
 function formatDate(dateStr) {
   if (!dateStr) return '-';
-  const d = new Date(dateStr);
+  const raw = String(dateStr).trim();
+  const matchFecha = raw.match(/^(\d{4})-(\d{2})-(\d{2})/);
+
+  if (matchFecha) {
+    const year = Number(matchFecha[1]);
+    const month = Number(matchFecha[2]);
+    const day = Number(matchFecha[3]);
+    const fechaLocal = new Date(year, month - 1, day, 12, 0, 0);
+    return fechaLocal.toLocaleDateString('es-AR');
+  }
+
+  const d = new Date(raw);
+  if (Number.isNaN(d.getTime())) return raw;
   return d.toLocaleDateString('es-AR');
 }
 
