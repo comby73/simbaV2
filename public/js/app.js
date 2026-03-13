@@ -12397,6 +12397,17 @@ let dashboardSelectedGames = ['todos'];
 let dashboardFiltrosInfo = null;
 let controlPrevioData = [];
 let escrutiniosData = [];
+const REPORTES_VISUAL_LIMIT = 500;
+const REPORTES_EXPORT_LIMIT = 10000;
+
+function buildHistorialParams({ fechaDesde, fechaHasta, juego, limit }) {
+  const params = new URLSearchParams();
+  if (fechaDesde) params.set('fechaDesde', fechaDesde);
+  if (fechaHasta) params.set('fechaHasta', fechaHasta);
+  if (juego) params.set('juego', juego);
+  if (limit) params.set('limit', String(limit));
+  return params.toString();
+}
 
 function esErrorConexionAPI(error) {
   const msg = String(error?.message || '').toLowerCase();
@@ -13965,10 +13976,13 @@ async function buscarControlPrevio() {
     tbody.innerHTML = '<tr><td colspan="10" class="text-center"><i class="fas fa-spinner fa-spin"></i> Cargando...</td></tr>';
     emptyMsg.classList.add('hidden');
 
-    let url = `${API_BASE}/historial/control-previo?`;
-    if (fechaDesde) url += `fechaDesde=${fechaDesde}&`;
-    if (fechaHasta) url += `fechaHasta=${fechaHasta}&`;
-    if (juego) url += `juego=${juego}&`;
+    const query = buildHistorialParams({
+      fechaDesde,
+      fechaHasta,
+      juego,
+      limit: REPORTES_VISUAL_LIMIT
+    });
+    const url = `${API_BASE}/historial/control-previo?${query}`;
 
     const response = await fetch(url, {
       headers: { 'Authorization': `Bearer ${getToken()}` }
@@ -14101,36 +14115,61 @@ async function verDetalleControlPrevio(id, juego) {
 }
 
 // Exportar Control Previo a CSV
-function exportarControlPrevioCSV() {
-  if (controlPrevioData.length === 0) {
-    showToast('No hay datos para exportar', 'warning');
-    return;
+async function exportarControlPrevioCSV() {
+  try {
+    const fechaDesde = document.getElementById('cp-fecha-desde').value;
+    const fechaHasta = document.getElementById('cp-fecha-hasta').value;
+    const juego = document.getElementById('cp-juego').value;
+
+    const query = buildHistorialParams({
+      fechaDesde,
+      fechaHasta,
+      juego,
+      limit: REPORTES_EXPORT_LIMIT
+    });
+    const response = await fetch(`${API_BASE}/historial/control-previo?${query}`, {
+      headers: { 'Authorization': `Bearer ${getToken()}` }
+    });
+    const data = await response.json();
+
+    const dataExport = data?.success ? (data.data || []) : [];
+    if (!dataExport.length) {
+      showToast('No hay datos para exportar', 'warning');
+      return;
+    }
+
+    const headers = ['Fecha', 'Sorteo', 'Modalidad', 'Juego', 'Registros', 'Apuestas', 'Anulados', 'Recaudación', 'Usuario'];
+    const rows = dataExport.map(item => [
+      item.fecha,
+      item.numero_sorteo,
+      item.modalidad || 'N',
+      item.juego,
+      item.total_registros || 0,
+      item.total_apuestas || 0,
+      item.total_anulados || 0,
+      item.total_recaudacion || 0,
+      item.usuario_nombre || ''
+    ]);
+
+    const csvContent = [headers.join(','), ...rows.map(r => r.join(','))].join('\n');
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `control_previo_${new Date().toISOString().split('T')[0]}.csv`;
+    a.click();
+
+    URL.revokeObjectURL(url);
+    if (dataExport.length >= REPORTES_EXPORT_LIMIT) {
+      showToast(`CSV exportado (tope ${REPORTES_EXPORT_LIMIT} registros)`, 'warning');
+      return;
+    }
+    showToast('Archivo CSV descargado', 'success');
+  } catch (error) {
+    console.error('Error exportando control previo:', error);
+    showToast('Error exportando CSV', 'error');
   }
-
-  const headers = ['Fecha', 'Sorteo', 'Modalidad', 'Juego', 'Registros', 'Apuestas', 'Anulados', 'Recaudación', 'Usuario'];
-  const rows = controlPrevioData.map(item => [
-    item.fecha,
-    item.numero_sorteo,
-    item.modalidad || 'N',
-    item.juego,
-    item.total_registros || 0,
-    item.total_apuestas || 0,
-    item.total_anulados || 0,
-    item.total_recaudacion || 0,
-    item.usuario_nombre || ''
-  ]);
-
-  const csvContent = [headers.join(','), ...rows.map(r => r.join(','))].join('\n');
-  const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-  const url = URL.createObjectURL(blob);
-
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = `control_previo_${new Date().toISOString().split('T')[0]}.csv`;
-  a.click();
-
-  URL.revokeObjectURL(url);
-  showToast('Archivo CSV descargado', 'success');
 }
 
 // =============================================
@@ -14246,10 +14285,13 @@ async function buscarEscrutinios() {
     tbody.innerHTML = '<tr><td colspan="9" class="text-center"><i class="fas fa-spinner fa-spin"></i> Cargando...</td></tr>';
     emptyMsg.classList.add('hidden');
 
-    let url = `${API_BASE}/historial/escrutinios?`;
-    if (fechaDesde) url += `fechaDesde=${fechaDesde}&`;
-    if (fechaHasta) url += `fechaHasta=${fechaHasta}&`;
-    if (juego) url += `juego=${juego}&`;
+    const query = buildHistorialParams({
+      fechaDesde,
+      fechaHasta,
+      juego,
+      limit: REPORTES_VISUAL_LIMIT
+    });
+    const url = `${API_BASE}/historial/escrutinios?${query}`;
 
     const response = await fetch(url, {
       headers: { 'Authorization': `Bearer ${getToken()}` }
@@ -14525,34 +14567,59 @@ async function verPremiosPorAgencia(escrutinioId, juego) {
 }
 
 // Exportar Escrutinios a CSV
-function exportarEscrutiniosCSV() {
-  if (escrutiniosData.length === 0) {
-    showToast('No hay datos para exportar', 'warning');
-    return;
+async function exportarEscrutiniosCSV() {
+  try {
+    const fechaDesde = document.getElementById('esc-fecha-desde').value;
+    const fechaHasta = document.getElementById('esc-fecha-hasta').value;
+    const juego = document.getElementById('esc-juego').value;
+
+    const query = buildHistorialParams({
+      fechaDesde,
+      fechaHasta,
+      juego,
+      limit: REPORTES_EXPORT_LIMIT
+    });
+    const response = await fetch(`${API_BASE}/historial/escrutinios?${query}`, {
+      headers: { 'Authorization': `Bearer ${getToken()}` }
+    });
+    const data = await response.json();
+
+    const dataExport = data?.success ? (data.data || []) : [];
+    if (!dataExport.length) {
+      showToast('No hay datos para exportar', 'warning');
+      return;
+    }
+
+    const headers = ['Fecha', 'Sorteo', 'Modalidad', 'Juego', 'Ganadores', 'Premios', 'Recaudacion'];
+    const rows = dataExport.map(item => [
+      item.fecha,
+      item.numero_sorteo,
+      item.modalidad || 'N',
+      item.juego,
+      item.total_ganadores || 0,
+      item.total_premios || 0,
+      obtenerTotalRecaudacionEscrutinio(item)
+    ]);
+
+    const csvContent = [headers.join(','), ...rows.map(r => r.join(','))].join('\n');
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `escrutinios_${new Date().toISOString().split('T')[0]}.csv`;
+    a.click();
+
+    URL.revokeObjectURL(url);
+    if (dataExport.length >= REPORTES_EXPORT_LIMIT) {
+      showToast(`CSV exportado (tope ${REPORTES_EXPORT_LIMIT} registros)`, 'warning');
+      return;
+    }
+    showToast('Archivo CSV descargado', 'success');
+  } catch (error) {
+    console.error('Error exportando escrutinios:', error);
+    showToast('Error exportando CSV', 'error');
   }
-
-  const headers = ['Fecha', 'Sorteo', 'Modalidad', 'Juego', 'Ganadores', 'Premios', 'Recaudacion'];
-  const rows = escrutiniosData.map(item => [
-    item.fecha,
-    item.numero_sorteo,
-    item.modalidad || 'N',
-    item.juego,
-    item.total_ganadores || 0,
-    item.total_premios || 0,
-    obtenerTotalRecaudacionEscrutinio(item)
-  ]);
-
-  const csvContent = [headers.join(','), ...rows.map(r => r.join(','))].join('\n');
-  const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-  const url = URL.createObjectURL(blob);
-
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = `escrutinios_${new Date().toISOString().split('T')[0]}.csv`;
-  a.click();
-
-  URL.revokeObjectURL(url);
-  showToast('Archivo CSV descargado', 'success');
 }
 
 // Cerrar modal genérico

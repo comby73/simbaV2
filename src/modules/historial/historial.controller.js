@@ -47,6 +47,12 @@ function construirExprFechaSorteo(alias, fechaCol, juegoWhereSql) {
   )`;
 }
 
+function obtenerLimiteSeguro(limit, defaultLimit = 500, maxLimit = 10000) {
+  const parsed = Number.parseInt(limit, 10);
+  if (!Number.isFinite(parsed) || parsed <= 0) return defaultLimit;
+  return Math.min(parsed, maxLimit);
+}
+
 /**
  * GET /api/historial/control-previo/:juego
  * Lista el historial de control previo
@@ -62,7 +68,11 @@ const listarControlPrevio = async (req, res) => {
     }
 
     const historial = await obtenerHistorialControlPrevio(juego, {
-      fecha, desde, hasta, numeroSorteo, limit: parseInt(limit) || 50
+      fecha,
+      desde,
+      hasta,
+      numeroSorteo,
+      limit: obtenerLimiteSeguro(limit)
     });
 
     // Parsear JSON fields
@@ -101,7 +111,11 @@ const listarEscrutinios = async (req, res) => {
     }
 
     const historial = await obtenerHistorialEscrutinio(juego, {
-      fecha, desde, hasta, numeroSorteo, limit: parseInt(limit) || 50
+      fecha,
+      desde,
+      hasta,
+      numeroSorteo,
+      limit: obtenerLimiteSeguro(limit)
     });
 
     // Parsear JSON fields
@@ -569,7 +583,7 @@ const buscarSorteo = async (req, res) => {
 const listarControlPrevioGeneral = async (req, res) => {
   try {
     const { fechaDesde, fechaHasta, juego, limit } = req.query;
-    const maxLimit = parseInt(limit) || 50;
+    const maxLimit = obtenerLimiteSeguro(limit);
 
     let resultados = [];
 
@@ -1197,7 +1211,7 @@ const obtenerDetalleControlPrevio = async (req, res) => {
 const listarEscrutiniosGeneral = async (req, res) => {
   try {
     const { fechaDesde, fechaHasta, juego, limit } = req.query;
-    const maxLimit = parseInt(limit) || 50;
+    const maxLimit = obtenerLimiteSeguro(limit);
 
     let resultados = [];
 
