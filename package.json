@@ -4,6 +4,7 @@
   "description": "Sistema de Control y Análisis de Loterías - Quiniela, Poceada y más",
   "main": "src/app.js",
   "scripts": {
+    "build": "node -e \"console.log('Build OK - no compile step required')\"",
     "start": "node src/app.js",
     "dev": "nodemon src/app.js",
     "db:init": "node database/init.js",
