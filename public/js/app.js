@@ -7457,8 +7457,20 @@ async function procesarArchivoPDFInteligente(archivo) {
 
   // Fallback: OCR local con Tesseract
   if (!data) {
-    data = await extraerDatosQuinielaFallback(archivo, true, false);
-    console.log(`[CPST] ${archivo.name}: lectura por fallback OCR local (${(data.numeros || []).length} números, provincia=${data.provincia || '-'})`);
+    try {
+      data = await extraerDatosQuinielaFallback(archivo, true, false);
+      console.log(`[CPST] ${archivo.name}: lectura por fallback OCR local (${(data.numeros || []).length} números, provincia=${data.provincia || '-'})`);
+    } catch (errorFallback) {
+      console.warn(`[CPST] ${archivo.name}: fallback OCR local sin lectura confiable (${errorFallback.message || errorFallback}). Se deriva a revisión manual.`);
+      data = {
+        provincia: metadataArchivo.codigoProvincia || detectarProvinciaCodigoDesdeNombreArchivo(archivo?.name || '') || '',
+        modalidad: metadataArchivo.modalidad || cpstModalidadSorteo || '',
+        fecha: metadataArchivo.fecha || fechaSorteoActual || new Date().toISOString().split('T')[0],
+        numeros: [],
+        letras: [],
+        _fallbackError: errorFallback.message || 'OCR fallback sin lectura confiable'
+      };
+    }
   }
 
   const codigoToIndex = {
