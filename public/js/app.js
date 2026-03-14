@@ -5801,11 +5801,201 @@ function loadScript(src) {
   });
 }
 
+function extraerNumerosQuinielaPorPremios(texto, digitosEsperados = 4) {
+  const txt = String(texto || '')
+    .toUpperCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/\s+/g, ' ');
+
+  const normalizarNumero = (valor) => {
+    let num = String(valor || '').replace(/[^0-9]/g, '');
+    if (!num) return '';
+    if (num.length > digitosEsperados) num = num.slice(-digitosEsperados);
+    if (num.length < digitosEsperados) num = num.padStart(digitosEsperados, '0');
+    return num;
+  };
+
+  const encontrados = new Map();
+
+  // Formato Mendoza típico: "1° Premio N° 8.858" ... "20° Premio N° 2.198"
+  // Priorizar este patrón cuando existe porque mantiene el orden correlativo 1..20.
+  const reNumerado = /\b(0?[1-9]|1\d|20)\s*[°º]\s*PREMIO\s*N\s*[°º]?\s*([0-9][0-9.\s]{2,8})\b/gi;
+  let mNum;
+  while ((mNum = reNumerado.exec(txt)) !== null) {
+    const pos = parseInt(mNum[1], 10);
+    const numero = normalizarNumero(mNum[2]);
+    if (pos >= 1 && pos <= 20 && numero && !encontrados.has(pos)) {
+      encontrados.set(pos, numero);
+    }
+  }
+
+  if (encontrados.size >= 18) {
+    const ordenados = [];
+    for (let i = 1; i <= 20; i++) {
+      if (encontrados.has(i)) ordenados.push(encontrados.get(i));
+    }
+    if (ordenados.length >= 18) return ordenados.slice(0, 20);
+  }
+
+  const ordinales = [
+    { pos: 1, keys: ['PRIMER'] },
+    { pos: 2, keys: ['SEGUNDO'] },
+    { pos: 3, keys: ['TERCER', 'TERCERO'] },
+    { pos: 4, keys: ['CUARTO'] },
+    { pos: 5, keys: ['QUINTO'] },
+    { pos: 6, keys: ['SEXTO'] },
+    { pos: 7, keys: ['SEPTIMO'] },
+    { pos: 8, keys: ['OCTAVO'] },
+    { pos: 9, keys: ['NOVENO'] },
+    { pos: 10, keys: ['DECIMO'] },
+    { pos: 11, keys: ['DECIMO PRIMER', 'DECIMO PRIMERO'] },
+    { pos: 12, keys: ['DECIMO SEGUNDO'] },
+    { pos: 13, keys: ['DECIMO TERCER', 'DECIMO TERCERO'] },
+    { pos: 14, keys: ['DECIMO CUARTO'] },
+    { pos: 15, keys: ['DECIMO QUINTO'] },
+    { pos: 16, keys: ['DECIMO SEXTO'] },
+    { pos: 17, keys: ['DECIMO SEPTIMO'] },
+    { pos: 18, keys: ['DECIMO OCTAVO'] },
+    { pos: 19, keys: ['DECIMO NOVENO'] },
+    { pos: 20, keys: ['VIGESIMO'] }
+  ];
+
+  for (const item of ordinales) {
+    for (const key of item.keys) {
+      const re = new RegExp(`(?:\\b${key}\\s+PREMIO\\b|\\bPREMIO\\s+${key}\\b)\\D{0,24}(\\d{3,5})`, 'i');
+      const m = txt.match(re);
+      if (m && m[1]) {
+        const numero = normalizarNumero(m[1]);
+        if (numero) {
+          encontrados.set(item.pos, numero);
+          break;
+        }
+      }
+    }
+  }
+
+  if (encontrados.size >= 18) {
+    const ordenados = [];
+    for (let i = 1; i <= 20; i++) {
+      if (encontrados.has(i)) ordenados.push(encontrados.get(i));
+    }
+    if (ordenados.length >= 18) return ordenados.slice(0, 20);
+  }
+
+  return [];
+}
+
+function extraerNumerosQuinielaPorUbicacion(texto, digitosEsperados = 4) {
+  const txt = String(texto || '')
+    .toUpperCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/\r/g, '\n')
+    .replace(/\t/g, ' ');
+
+  const normalizarNumero = (valor) => {
+    let num = String(valor || '').replace(/[^0-9]/g, '');
+    if (!num) return '';
+    if (num.length > digitosEsperados) num = num.slice(-digitosEsperados);
+    if (num.length < digitosEsperados) num = num.padStart(digitosEsperados, '0');
+    return num;
+  };
+
+  const inicio = txt.search(/\b(UBICACION|UBICACIONES|POSICION|POSICIONES|PRIMER\s+PREMIO|PREMIOS?\s+POR\s+EXTRACCION)\b/i);
+  const textoTrabajo = inicio >= 0 ? txt.slice(inicio, inicio + 6000) : txt;
+
+  const fin = textoTrabajo.search(/\b(CLAVE\s+DE\s+LETRAS|LETRAS\s+GANADORAS|FIRMA|SELLO|OBSERVACIONES?)\b/i);
+  const bloque = fin > 0 ? textoTrabajo.slice(0, fin) : textoTrabajo;
+
+  const porPosicion = new Map();
+  const regexPar = /\b(0?[1-9]|1\d|20)\s*(?:[°ºO]?|[.)-])?\s*(\d{3,5})\b/g;
+  let match;
+  while ((match = regexPar.exec(bloque)) !== null) {
+    const pos = parseInt(match[1], 10);
+    const numero = normalizarNumero(match[2]);
+    if (pos >= 1 && pos <= 20 && numero && !porPosicion.has(pos)) {
+      porPosicion.set(pos, numero);
+    }
+  }
+
+  if (porPosicion.size >= 18) {
+    const ordenados = [];
+    for (let i = 1; i <= 20; i++) {
+      if (porPosicion.has(i)) ordenados.push(porPosicion.get(i));
+    }
+    if (ordenados.length >= 18) return ordenados.slice(0, 20);
+  }
+
+  return [];
+}
+
+function extraerNumerosQuinielaEntreRiosColumnas(texto, digitosEsperados = 4) {
+  const txt = String(texto || '')
+    .toUpperCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/\r/g, '\n')
+    .replace(/\t/g, ' ');
+
+  const normalizarNumero = (valor) => {
+    let num = String(valor || '').replace(/[^0-9]/g, '');
+    if (!num) return '';
+    if (num.length > digitosEsperados) num = num.slice(-digitosEsperados);
+    if (num.length < digitosEsperados) num = num.padStart(digitosEsperados, '0');
+    return num;
+  };
+
+  const inicio = txt.search(/\b(EXTRACTO\s+DE\s+SORTEO|TOMBOLA|UBICACION)\b/i);
+  const textoTrabajo = inicio >= 0 ? txt.slice(inicio, inicio + 7000) : txt;
+  const fin = textoTrabajo.search(/\b(HORA\s+DE\s+FINALIZACION|CLAVE\s+DE\s+LETRAS|LETRAS\s+GANADORAS|FIRMA|SELLO)\b/i);
+  const bloque = fin > 0 ? textoTrabajo.slice(0, fin) : textoTrabajo;
+
+  const porPosicion = new Map();
+
+  // Formato esperado en Entre Ríos: "1° 0519" (la columna Orden no tiene ° y se ignora)
+  const regexUbicacion = /\b(0?[1-9]|1\d|20)\s*[°º]\s*(\d{3,5})\b/g;
+  let m;
+  while ((m = regexUbicacion.exec(bloque)) !== null) {
+    const pos = parseInt(m[1], 10);
+    const numero = normalizarNumero(m[2]);
+    if (pos >= 1 && pos <= 20 && numero && !porPosicion.has(pos)) {
+      porPosicion.set(pos, numero);
+    }
+  }
+
+  if (porPosicion.size >= 18) {
+    const ordenados = [];
+    for (let i = 1; i <= 20; i++) {
+      if (porPosicion.has(i)) ordenados.push(porPosicion.get(i));
+    }
+    if (ordenados.length >= 18) return ordenados.slice(0, 20);
+  }
+
+  return [];
+}
+
 // Extraer números de 4 dígitos del texto OCR
 // opciones.digitosEsperados: 3 para Montevideo, 4 para resto
 // opciones.normalizarOCR: true solo para texto proveniente de imagen/Tesseract (no PDF digital)
 function extraerNumerosDeTexto(texto, opciones = {}) {
   const digitosEsperados = Number(opciones?.digitosEsperados) || 4;
+  const provinciaCodigo = String(opciones?.provinciaCodigo || '').trim();
+
+  // PRIORIDAD 0 (Entre Ríos): dos columnas (1..10 y 11..20) por UBICACIÓN.
+  const porEntreRios = provinciaCodigo === '59'
+    ? extraerNumerosQuinielaEntreRiosColumnas(texto, digitosEsperados)
+    : [];
+  if (porEntreRios.length >= 18) return porEntreRios;
+
+  // PRIORIDAD 0: patrón posicional de Ubicación 1..20 (más confiable en actas BA)
+  const porUbicacion = extraerNumerosQuinielaPorUbicacion(texto, digitosEsperados);
+  if (porUbicacion.length >= 18) return porUbicacion;
+
+  // PRIORIDAD 1: patrones explícitos de acta Quiniela por premio ordinal (1..20)
+  const porPremio = extraerNumerosQuinielaPorPremios(texto, digitosEsperados);
+  if (porPremio.length >= 18) return porPremio;
+
   let txt = String(texto || '')
     .replace(/\r/g, '\n')
     .replace(/\t/g, ' ');
@@ -5838,7 +6028,7 @@ function extraerNumerosDeTexto(texto, opciones = {}) {
     .map(linea => REGEX_LINEA_METADATA.test(linea) ? '' : linea)
     .join('\n');
 
-  // PRIORIDAD 1: detectar patrón posicional (1..20 + número)
+  // PRIORIDAD 2: detectar patrón posicional (1..20 + número)
   // Separador: solo espacio, punto o paréntesis. NO dos puntos (para evitar HH:MM:SS)
   const porPosicion = new Map();
   const regexPos = /\b(0?[1-9]|1\d|20)\s*[.)]?\s*(\d{3,5})\b(?!\s*:\d{2})/g;
@@ -5859,7 +6049,7 @@ function extraerNumerosDeTexto(texto, opciones = {}) {
     if (ordenados.length >= 18) return ordenados.slice(0, 20);
   }
 
-  // PRIORIDAD 2: detectar filas tipo "1 1234 2 5678 ..."
+  // PRIORIDAD 3: detectar filas tipo "1 1234 2 5678 ..."
   const porFilas = new Map();
   const lineas = txt
     .split('\n')
@@ -5892,7 +6082,13 @@ function extraerNumerosDeTexto(texto, opciones = {}) {
     if (ordenados.length >= 18) return ordenados.slice(0, 20);
   }
 
-  // PRIORIDAD 3: fallback simple — usa txtFiltrado para evitar capturar años/fechas/horas
+  // Para CABA, Buenos Aires y Santa Fe, evitar fallback ciego para no contaminar
+  // con nro sorteo/fecha/hora cuando la lectura de tabla no es confiable.
+  if (provinciaCodigo === '51' || provinciaCodigo === '53' || provinciaCodigo === '72') {
+    return [];
+  }
+
+  // PRIORIDAD 4: fallback simple — usa txtFiltrado para evitar capturar años/fechas/horas
   const numeros = [];
   const matches = txtFiltrado.match(/\b\d{3,5}\b/g) || [];
   for (const m of matches) {
@@ -5908,7 +6104,7 @@ function extraerNumerosDeTexto(texto, opciones = {}) {
   return numeros;
 }
 
-async function extraerDatosDesdePdfTexto(archivo) {
+async function extraerDatosDesdePdfTexto(archivo, provinciaHint = '') {
   if (!window.pdfjsLib) {
     await loadScript('https://cdn.jsdelivr.net/npm/pdfjs-dist@3/build/pdf.min.js');
     pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdn.jsdelivr.net/npm/pdfjs-dist@3/build/pdf.worker.min.js';
@@ -5926,10 +6122,10 @@ async function extraerDatosDesdePdfTexto(archivo) {
     texto += `${pageText}\n`;
   }
 
-  const provinciaDetectada = detectarProvinciaCodigoDesdeTextoOCR(texto) || '';
+  const provinciaDetectada = String(provinciaHint || detectarProvinciaCodigoDesdeTextoOCR(texto) || '');
   const digitosEsperados = String(provinciaDetectada) === '00' ? 3 : 4;
   // normalizarOCR: false porque el texto de PDF digital ya es correcto (no hay confusión O/0, I/1, S/5)
-  const numeros = extraerNumerosDeTexto(texto, { digitosEsperados, normalizarOCR: false });
+  const numeros = extraerNumerosDeTexto(texto, { digitosEsperados, normalizarOCR: false, provinciaCodigo: provinciaDetectada });
   const letras = extraerLetrasDeTexto(texto);
 
   return {
@@ -7089,9 +7285,14 @@ async function procesarArchivoImagenInteligente(archivo) {
   const modalidad = modalidadFinal;
   const numerosNormalizados = data.numeros || [];
 
-  // Umbral de 18 para tolerar hasta 2 posiciones no parseadas en PDFs/imágenes con ruido
-  // Umbral normal: 18. Si la provincia viene confirmada del nombre de archivo y tenemos >=10, acepta con advertencia
-  const umbralMinimo = (metadataArchivo.codigoProvincia && numerosNormalizados.length >= 10) ? 10 : 18;
+  const codigoProvinciaEvaluado = String(codigoProvinciaFinal || metadataArchivo.codigoProvincia || '');
+  const esProvinciaEstructuradaEstricto = codigoProvinciaEvaluado === '51' || codigoProvinciaEvaluado === '53' || codigoProvinciaEvaluado === '72';
+
+  // Provincias con formato estructurado (CABA/BA/Santa Fe): exigir 20/20 para autoguardar.
+  // Resto: umbral normal 18, o 10 si provincia confirmada por nombre de archivo.
+  const umbralMinimo = esProvinciaEstructuradaEstricto
+    ? 20
+    : ((metadataArchivo.codigoProvincia && numerosNormalizados.length >= 10) ? 10 : 18);
   if (umbralMinimo < 18) {
     console.warn(`[CPST] ${archivo.name}: aceptando con ${numerosNormalizados.length} números (provincia confirmada por nombre de archivo: ${codigoProvinciaFinal})`);
     showToast(`⚠️ ${archivo.name}: solo ${numerosNormalizados.length}/20 números detectados. Verificar manualmente.`, 'warning');
@@ -7181,7 +7382,10 @@ async function procesarArchivoImagenInteligente(archivo) {
 // Procesar PDF con OCR
 async function procesarArchivoPDFInteligente(archivo) {
   let data = null;
+  let parsedPdf = null;
   const metadataArchivo = obtenerMetadataArchivoExtracto(archivo.name || '');
+  const provinciaCodigoArchivo = String(metadataArchivo.codigoProvincia || '');
+  const esProvinciaUbicacionEstricto = provinciaCodigoArchivo === '51' || provinciaCodigoArchivo === '53' || provinciaCodigoArchivo === '72';
 
   const metaSorteoActual = resolverMetaSorteo(cpResultadosActuales || {}, {
     datosControlPrevio: cpstDatosControlPrevio
@@ -7203,7 +7407,7 @@ async function procesarArchivoPDFInteligente(archivo) {
 
   // Intento 1: extraer texto interno del PDF (más confiable que OCR cuando el PDF es digital)
   try {
-    const parsedPdf = await extraerDatosDesdePdfTexto(archivo);
+    parsedPdf = await extraerDatosDesdePdfTexto(archivo, metadataArchivo.codigoProvincia || '');
     if (Array.isArray(parsedPdf?.numeros) && parsedPdf.numeros.length >= 20) {
       data = parsedPdf;
       console.log(`[PDF-TEXT] ${archivo.name}: extracción por texto exitoso (${parsedPdf.numeros.length} números)`);
@@ -7212,6 +7416,21 @@ async function procesarArchivoPDFInteligente(archivo) {
     }
   } catch (errorPdfText) {
     console.warn(`[PDF-TEXT] No se pudo extraer texto de ${archivo.name}:`, errorPdfText.message);
+  }
+
+  // Modo estricto para BA/Santa Fe: si el parser por texto no logra extracción confiable,
+  // no intentar autoguardado con OCR generativo (evita números de encabezado/sorteo).
+  if (!data && esProvinciaUbicacionEstricto) {
+    data = parsedPdf || {
+      provincia: provinciaCodigoArchivo || '',
+      modalidad: '',
+      fecha: '',
+      numeros: [],
+      letras: [],
+      fuente: 'PDF-TEXT'
+    };
+    const nombreProvinciaEstricto = provinciaCodigoArchivo === '53' ? 'Buenos Aires' : (provinciaCodigoArchivo === '72' ? 'Santa Fe' : 'esta provincia');
+    showToast(`⚠️ ${archivo.name}: lectura automática no confiable para ${nombreProvinciaEstricto}. Revise manualmente ubicación 1-20.`, 'warning');
   }
 
   // Intento 2: OCR con proveedores API
@@ -7269,8 +7488,11 @@ async function procesarArchivoPDFInteligente(archivo) {
   const modalidad = modalidadFinal;
   const numerosNormalizados = data.numeros || [];
 
-  // Umbral normal: 18. Si la provincia viene confirmada del nombre de archivo y tenemos >=10, acepta con advertencia
-  const umbralMinimoPDF = (metadataArchivo.codigoProvincia && numerosNormalizados.length >= 10) ? 10 : 18;
+  // Provincias con formato estructurado (CABA/BA/Santa Fe): exigir 20/20 para autoguardar.
+  // Resto: umbral normal 18, o 10 si provincia confirmada por nombre de archivo.
+  const umbralMinimoPDF = esProvinciaUbicacionEstricto
+    ? 20
+    : ((metadataArchivo.codigoProvincia && numerosNormalizados.length >= 10) ? 10 : 18);
   if (umbralMinimoPDF < 18) {
     console.warn(`[CPST] ${archivo.name}: aceptando con ${numerosNormalizados.length} números (provincia confirmada por nombre: ${codigoProvinciaFinal})`);
     showToast(`⚠️ ${archivo.name}: solo ${numerosNormalizados.length}/20 números detectados. Verificar manualmente.`, 'warning');
@@ -7396,10 +7618,11 @@ async function extraerDatosQuinielaFallback(archivo, esPDF = false, usarProvinci
   const metadataArchivo = obtenerMetadataArchivoExtracto(archivo?.name || '');
   const provinciaDesdeNombre = metadataArchivo.codigoProvincia;
   const provinciaDesdeTexto = detectarProvinciaCodigoDesdeTextoOCR(texto);
+  const provinciaParaParser = String(provinciaDesdeNombre || provinciaDesdeTexto || '');
   const digitosEsperados = String(provinciaDesdeNombre || provinciaDesdeTexto || '') === '00' ? 3 : 4;
 
   // normalizarOCR: true porque viene de Tesseract (imagen con posibles confusiones de caracteres)
-  let numeros = extraerNumerosDeTexto(texto, { digitosEsperados, normalizarOCR: true });
+  let numeros = extraerNumerosDeTexto(texto, { digitosEsperados, normalizarOCR: true, provinciaCodigo: provinciaParaParser });
   let letras = extraerLetrasDeTexto(texto);
 
   // Segunda pasada más agresiva para PDFs escaneados con baja calidad
@@ -7412,7 +7635,9 @@ async function extraerDatosQuinielaFallback(archivo, esPDF = false, usarProvinci
       });
 
       const texto2 = resultado2?.data?.text || '';
-      const numeros2 = extraerNumerosDeTexto(texto2, { digitosEsperados, normalizarOCR: true });
+      const provinciaDesdeTexto2 = detectarProvinciaCodigoDesdeTextoOCR(texto2);
+      const provinciaParaParser2 = String(provinciaDesdeNombre || provinciaDesdeTexto2 || provinciaDesdeTexto || '');
+      const numeros2 = extraerNumerosDeTexto(texto2, { digitosEsperados, normalizarOCR: true, provinciaCodigo: provinciaParaParser2 });
       const letras2 = extraerLetrasDeTexto(texto2);
 
       if (numeros2.length > numeros.length) {
@@ -8659,6 +8884,173 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   }
 });
+
+/**
+ * Carga inteligente de extracto LOTO desde XML, imagen, PDF o JSON
+ */
+async function cargarArchivoExtractoLoto(file) {
+  if (!file) return;
+
+  const nombre = (file.name || '').toLowerCase();
+
+  if (nombre.endsWith('.xml')) {
+    cargarXMLExtractoLoto(file);
+    return;
+  }
+
+  if (nombre.endsWith('.json')) {
+    try {
+      const text = await file.text();
+      const data = JSON.parse(text);
+
+      if (cargarExtractoLotoDesdeJSON(data)) {
+        const dropzone = document.getElementById('cpst-loto-xml-dropzone');
+        const info = document.getElementById('cpst-loto-xml-info');
+        const filename = document.getElementById('cpst-loto-xml-filename');
+
+        dropzone?.classList.add('hidden');
+        info?.classList.remove('hidden');
+        if (filename) filename.textContent = `${file.name} (JSON)`;
+
+        showToast('Extracto Loto cargado desde JSON', 'success');
+      }
+    } catch (error) {
+      console.error('Error cargando JSON de Loto:', error);
+      showToast('JSON inválido para extracto Loto', 'error');
+    }
+    return;
+  }
+
+  await procesarExtractoLotoOCR(file);
+}
+
+function normalizarNumerosLotoDesdeOCR(valor) {
+  const arr = Array.isArray(valor) ? valor : [];
+  const nums = arr
+    .map((item) => {
+      const n = parseInt(String(item ?? '').trim(), 10);
+      return Number.isFinite(n) ? n : null;
+    })
+    .filter((n) => n !== null && n >= 0 && n <= 45)
+    .slice(0, 6);
+
+  if (nums.length !== 6) return null;
+  if (new Set(nums).size !== 6) return null;
+  return nums;
+}
+
+function cargarExtractoLotoDesdeJSON(data) {
+  if (!data || typeof data !== 'object') {
+    showToast('Formato JSON de Loto inválido', 'warning');
+    return false;
+  }
+
+  resetearExtractosPosteriorParaNuevaCarga();
+
+  const tradicional = normalizarNumerosLotoDesdeOCR(
+    data.tradicional?.numbers || data.tradicional
+  );
+  const match = normalizarNumerosLotoDesdeOCR(
+    data.match?.numbers || data.match
+  );
+  const desquite = normalizarNumerosLotoDesdeOCR(
+    data.desquite?.numbers || data.desquite
+  );
+  const saleOSale = normalizarNumerosLotoDesdeOCR(
+    data.sale_o_sale?.numbers || data.saleOSale?.numbers || data.sale_o_sale || data.saleOSale
+  );
+
+  if (!tradicional || !match || !desquite || !saleOSale) {
+    showToast('No se encontraron correctamente las 4 modalidades de Loto (6 números cada una)', 'warning');
+    return false;
+  }
+
+  const setModalidad = (prefijo, numeros) => {
+    for (let i = 0; i < 6; i++) {
+      const input = document.getElementById(`${prefijo}-${i + 1}`);
+      if (input) input.value = numeros[i];
+    }
+  };
+
+  setModalidad('cpst-loto-trad', tradicional);
+  setModalidad('cpst-loto-match', match);
+  setModalidad('cpst-loto-desq', desquite);
+  setModalidad('cpst-loto-sos', saleOSale);
+
+  const plusCrudo = data.plus ?? data.multiplicador ?? data.numero_plus ?? data.numeroPlus;
+  const plusInput = document.getElementById('cpst-loto-plus');
+  if (plusInput) {
+    if (plusCrudo === null || plusCrudo === undefined || plusCrudo === '') {
+      plusInput.value = '';
+    } else {
+      const plus = parseInt(String(plusCrudo), 10);
+      plusInput.value = Number.isFinite(plus) && plus >= 0 && plus <= 9 ? plus : '';
+    }
+  }
+
+  cargarExtractoLoto();
+  return true;
+}
+
+async function procesarExtractoLotoOCR(file) {
+  try {
+    if (!window.OCRExtractos) {
+      throw new Error('Módulo OCR no cargado. Recargue la página.');
+    }
+
+    if (!OCRExtractos.hasApiKey()) {
+      OCRExtractos.init();
+    }
+
+    if (!OCRExtractos.hasApiKey()) {
+      throw new Error('OCR no configurado. Configure una API Key de OCR (Groq/OpenAI) en Configuración.');
+    }
+
+    let result = null;
+    const esPdf = file.type === 'application/pdf' || (file.name || '').toLowerCase().endsWith('.pdf');
+
+    if (esPdf) {
+      try {
+        const textoPdf = await extraerTextoPlanoDesdePdf(file, 4);
+        if (textoPdf && textoPdf.trim().length > 100) {
+          result = await OCRExtractos.procesarTextoLoto(textoPdf);
+        }
+      } catch (errorTextoPdf) {
+        console.warn('[Loto PDF] No se pudo procesar como texto, fallback OCR visual:', errorTextoPdf.message || errorTextoPdf);
+      }
+
+      if (!result) {
+        result = await OCRExtractos.procesarPdfLoto(file);
+      }
+    } else {
+      const imgResult = await OCRExtractos.imageToBase64(file);
+      result = await OCRExtractos.procesarImagenLoto(imgResult.base64, imgResult.mimeType);
+    }
+
+    if (!result?.success || !result?.data) {
+      throw new Error(result?.error || 'No se pudieron extraer los números del extracto Loto');
+    }
+
+    if (!cargarExtractoLotoDesdeJSON(result.data)) {
+      throw new Error('Los datos OCR no contienen las 4 modalidades completas de Loto');
+    }
+
+    notificarConfianzaOCRBaja(result.data, 'LOTO OCR');
+
+    const dropzone = document.getElementById('cpst-loto-xml-dropzone');
+    const info = document.getElementById('cpst-loto-xml-info');
+    const filename = document.getElementById('cpst-loto-xml-filename');
+
+    dropzone?.classList.add('hidden');
+    info?.classList.remove('hidden');
+    if (filename) filename.textContent = `${file.name} (OCR)`;
+
+    showToast(`Extracto Loto procesado con OCR${getSufijoProveedorOCR()}`, 'success');
+  } catch (error) {
+    console.error('Error OCR Loto:', error);
+    showToast(`Error OCR Loto: ${error.message}`, 'error');
+  }
+}
 
 /**
  * Carga y parsea el XML del extracto LOTO (formato DatosSorteo)

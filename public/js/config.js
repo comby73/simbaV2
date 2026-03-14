@@ -8,6 +8,13 @@ const CONFIG = {
     // Las API keys se cargan desde config.local.js
     OCR_PROVIDERS: [
         {
+            name: 'GEMINI',
+            enabled: true,
+            API_KEY: '', // Se carga desde config.local.js
+            API_URL: 'https://generativelanguage.googleapis.com/v1beta/openai/chat/completions',
+            MODEL: 'gemini-2.0-flash'
+        },
+        {
             name: 'GROQ',
             enabled: true,
             API_KEY: '', // Se carga desde config.local.js

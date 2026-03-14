@@ -1705,16 +1705,16 @@
             <h3>2. Extracto Loto (4 Modalidades x 6 Números + PLUS)</h3>
           </div>
 
-          <!-- Zona de Drop para XML -->
+          <!-- Zona de Drop para XML/Imagen/PDF -->
           <div id="cpst-loto-xml-dropzone" class="file-drop-zone" 
                style="margin-bottom: 1rem; padding: 1.5rem; border: 2px dashed var(--warning); border-radius: 8px; text-align: center; cursor: pointer; background: rgba(245, 158, 11, 0.05);"
                ondragover="event.preventDefault(); this.classList.add('drag-over');"
                ondragleave="this.classList.remove('drag-over');"
-               ondrop="event.preventDefault(); this.classList.remove('drag-over'); cargarXMLExtractoLoto(event.dataTransfer.files[0]);">
+               ondrop="event.preventDefault(); this.classList.remove('drag-over'); cargarArchivoExtractoLoto(event.dataTransfer.files[0]);">
             <i class="fas fa-file-code fa-2x text-warning mb-2"></i>
-            <p style="margin: 0.5rem 0;"><strong>Arrastrá el XML del extracto aquí</strong></p>
-            <p class="text-muted" style="font-size: 0.85rem; margin: 0;">o hacé click para seleccionar</p>
-            <input type="file" id="cpst-loto-xml-input" accept=".xml" style="display: none;" onchange="cargarXMLExtractoLoto(this.files[0]);">
+            <p style="margin: 0.5rem 0;"><strong>Arrastrá el extracto aquí</strong></p>
+            <p class="text-muted" style="font-size: 0.85rem; margin: 0;">XML, imagen, PDF o JSON (solo números por modalidad)</p>
+            <input type="file" id="cpst-loto-xml-input" accept=".xml,.jpg,.jpeg,.png,.webp,.pdf,.json" style="display: none;" onchange="cargarArchivoExtractoLoto(this.files[0]);">
           </div>
           <div id="cpst-loto-xml-info" class="hidden" style="margin-bottom: 1rem; padding: 0.75rem; background: var(--success-bg); border-radius: 8px; border-left: 4px solid var(--success);">
             <div style="display: flex; justify-content: space-between; align-items: center;">

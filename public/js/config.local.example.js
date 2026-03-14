@@ -7,6 +7,13 @@
 const CONFIG_LOCAL = {
     OCR_PROVIDERS: [
         {
+            name: 'GEMINI',
+            enabled: true,
+            API_KEY: 'PEGAR_AQUI_GEMINI_API_KEY',
+            API_URL: 'https://generativelanguage.googleapis.com/v1beta/openai/chat/completions',
+            MODEL: 'gemini-2.0-flash'
+        },
+        {
             name: 'GROQ',
             enabled: true,
             API_KEY: 'PEGAR_AQUI_GROQ_API_KEY',

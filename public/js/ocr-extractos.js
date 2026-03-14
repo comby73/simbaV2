@@ -1,11 +1,12 @@
 // ============================================
 // MÓDULO OCR EXTRACTOS - SIMBA V2
-// Extracción de datos de extractos con IA (Groq/Mistral/OpenAI)
+// Extracción de datos de extractos con IA (Gemini/Groq/Mistral/OpenAI)
 // Sistema de fallback automático entre proveedores
 // ============================================
 
 const OCRExtractos = {
   STORAGE_KEYS: {
+    GEMINI: 'gemini_api_key',
     GROQ: 'groq_api_key',
     OPENAI: 'openai_api_key',
     MISTRAL: 'mistral_api_key'
@@ -171,6 +172,7 @@ const OCRExtractos = {
 
   detectarProveedorPorKey(key) {
     const normalized = (key || '').trim();
+    if (normalized.startsWith('AIza')) return 'GEMINI';
     if (normalized.startsWith('gsk_')) return 'GROQ';
     if (normalized.startsWith('sk-')) return 'OPENAI';
     return 'GROQ';
@@ -254,9 +256,26 @@ REGLAS CRÍTICAS DE EXTRACCIÓN:
 
 3. EXTRACCIÓN DE TABLA: Busca las 20 posiciones (puestos 1 al 20) y extrae el número ganador asociado.
   - IMPORTANTE: Devuelve el array "numeros" SIEMPRE en orden de UBICACIÓN (1°, 2°, 3° ... 20°), nunca por orden visual de lectura.
+  - BUENOS AIRES (53): cuando el acta tenga columnas "UBICACIÓN" y "PREMIO", usar EXCLUSIVAMENTE esa tabla.
+    * Para cada ubicación 1..20, tomar el número grande de 4 cifras de la fila correspondiente.
+    * Ignorar explícitamente números de "SORTEO NRO", fecha, hora, domicilio, direcciones o texto narrativo.
+    * Si faltan filas/lectura, devolver menos de 20 elementos (NO inventar ni completar con números al azar).
+  - CABA / LOTBA (51): cuando haya dos columnas con posiciones 1..10 y 11..20, leer por posición correlativa.
+    * Columna izquierda: posiciones 1 a 10.
+    * Columna derecha: posiciones 11 a 20.
+    * Tomar solo los números de 4 cifras asociados a cada posición.
+  - SANTA FE (72): cuando aparezcan "Ubicación en Extracto" y "Orden de Salida", usar EXCLUSIVAMENTE "Ubicación en Extracto".
+    * Ignorar la columna/tabla de "Orden de Salida" y la "Hora Salida" para armar el array final.
+    * El array "numeros" debe representar ubicación 1..20 (4 cifras), no el orden cronológico de salida.
+  - MENDOZA (64): cuando aparezca "Planilla de Premios" en 2 columnas, leer por premio correlativo.
+    * Columna izquierda: 1° Premio N° a 10° Premio N°.
+    * Columna derecha: 11° Premio N° a 20° Premio N°.
+    * Tomar solo los números de premio (4 cifras, aunque vengan con punto: 8.858 -> 8858).
    - CASO ENTRE RÍOS (IAFAS / TÓMBOLA): suele venir en 2 columnas.
      * Columna izquierda: ubicaciones 1° a 10°
      * Columna derecha: ubicaciones 11° a 20°
+     * Ignorar la columna "Orden" (18, 8, 16, etc.): NO es la posición final.
+     * Tomar solo "Ubicación" + el número de 4 cifras asociado (0000..9999).
      * El JSON final debe quedar en orden 1°..20° (primero 1-10 y luego 11-20).
 
 4. MODALIDAD: Detecta si es LA PREVIA, LA PRIMERA, MATUTINA, VESPERTINA o NOCTURNA.
@@ -277,7 +296,7 @@ Responde SOLO con este JSON (INCLUIR SIEMPRE EL CAMPO "letras"):
     return await this.llamarAPI(imageBase64, mimeType, prompt);
   },
 
-  // Llamar a la API con sistema de fallback (Groq → Mistral → OpenAI)
+  // Llamar a la API con sistema de fallback (Gemini → Groq → Mistral → OpenAI)
   async llamarAPI(imageBase64, mimeType, prompt, opciones = {}) {
     const availableProviders = this.getAvailableProviders();
 
@@ -322,6 +341,14 @@ Responde SOLO con este JSON (INCLUIR SIEMPRE EL CAMPO "letras"):
       try {
         console.log(`[OCR] Intentando con ${provider.name}...`);
         const result = await this.llamarProviderAPI(provider, dataUrl, prompt, opciones);
+
+        if (typeof opciones.validateData === 'function') {
+          const valido = !!opciones.validateData(result?.data);
+          if (!valido) {
+            throw new Error(opciones.validationMessage || `Respuesta inválida de ${provider.name}`);
+          }
+        }
+
         this.CURRENT_PROVIDER = provider.name;
         this.emitirCambioProveedor();
         console.log(`[OCR] ✓ ${provider.name} respondió correctamente`);
@@ -363,6 +390,14 @@ Responde SOLO con este JSON (INCLUIR SIEMPRE EL CAMPO "letras"):
       try {
         console.log(`[OCR-TEXT] Intentando con ${provider.name}...`);
         const result = await this.llamarProviderAPITexto(provider, prompt, opciones);
+
+        if (typeof opciones.validateData === 'function') {
+          const valido = !!opciones.validateData(result?.data);
+          if (!valido) {
+            throw new Error(opciones.validationMessage || `Respuesta inválida de ${provider.name}`);
+          }
+        }
+
         this.CURRENT_PROVIDER = provider.name;
         this.emitirCambioProveedor();
         console.log(`[OCR-TEXT] ✓ ${provider.name} respondió correctamente`);
@@ -904,6 +939,99 @@ Responder únicamente con:
     return await this.llamarAPITexto(prompt, { maxTokens: 3500 });
   },
 
+  async procesarImagenLoto(imageBase64, mimeType) {
+    const prompt = `Actuás como un extractor especializado de resultados de lotería LOTO de Argentina.
+
+Analizá esta imagen de extracto oficial y devolvé SOLO un objeto JSON válido.
+
+OBJETIVO (CRÍTICO): extraer únicamente los 6 números de cada modalidad y el PLUS/multiplicador si aparece.
+
+MODALIDADES OBLIGATORIAS:
+1) Tradicional
+2) Match
+3) Desquite
+4) Sale o Sale
+
+REGLAS:
+- Para cada modalidad, devolver exactamente 6 números (rango 00-45).
+- Ignorar tablas de premios, ganadores, pozos, montos, porcentajes y textos comerciales.
+- No tomar números de fecha, sorteo, hora o montos como números sorteados.
+- Si una modalidad no se ve clara, devolver [] para esa modalidad (no inventar).
+- PLUS/MULTIPLICADOR es opcional (0-9).
+
+Responder únicamente con este JSON:
+{
+  "game": "LOTO",
+  "drawNumber": "XXXX",
+  "date": "YYYY-MM-DD",
+  "tradicional": { "numbers": [0,0,0,0,0,0] },
+  "match": { "numbers": [0,0,0,0,0,0] },
+  "desquite": { "numbers": [0,0,0,0,0,0] },
+  "sale_o_sale": { "numbers": [0,0,0,0,0,0] },
+  "plus": 0
+}`;
+
+    return await this.llamarAPI(imageBase64, mimeType, prompt, {
+      maxTokens: 2200,
+      validateData: (data) => this.tieneModalidadesLotoMinimas(data),
+      validationMessage: 'Respuesta LOTO sin modalidades válidas'
+    });
+  },
+
+  async procesarTextoLoto(textoPDF) {
+    const prompt = `Actuás como un extractor especializado de resultados de lotería LOTO de Argentina.
+
+Te paso TEXTO ya extraído desde un PDF oficial. No uses el nombre del archivo. Leé únicamente el contenido y devolvé SOLO un objeto JSON válido.
+
+TEXTO DEL PDF:
+${textoPDF}
+
+Reglas críticas:
+- Extraer SOLO números sorteados por modalidad (no premios ni montos).
+- Modalidades: Tradicional, Match, Desquite, Sale o Sale.
+- Cada modalidad debe tener 6 números (0-45) cuando se encuentren claramente.
+- Si no hay evidencia clara de una modalidad, devolver [] para esa modalidad.
+- Extraer plus/multiplicador si existe (0-9).
+
+Responder únicamente con:
+{
+  "game": "LOTO",
+  "drawNumber": "XXXX",
+  "date": "YYYY-MM-DD",
+  "tradicional": { "numbers": [] },
+  "match": { "numbers": [] },
+  "desquite": { "numbers": [] },
+  "sale_o_sale": { "numbers": [] },
+  "plus": null
+}`;
+
+    return await this.llamarAPITexto(prompt, {
+      maxTokens: 2200,
+      validateData: (data) => this.tieneModalidadesLotoMinimas(data),
+      validationMessage: 'Respuesta LOTO texto sin modalidades válidas'
+    });
+  },
+
+  tieneModalidadesLotoMinimas(data = {}) {
+    if (!data || typeof data !== 'object') return false;
+
+    const normalizar = (valor) => {
+      const src = Array.isArray(valor) ? valor : (Array.isArray(valor?.numbers) ? valor.numbers : []);
+      return src
+        .map(v => parseInt(String(v ?? '').trim(), 10))
+        .filter(n => Number.isFinite(n) && n >= 0 && n <= 45);
+    };
+
+    const modalidades = [
+      normalizar(data.tradicional),
+      normalizar(data.match),
+      normalizar(data.desquite),
+      normalizar(data.sale_o_sale ?? data.saleOSale)
+    ];
+
+    return modalidades.some(arr => arr.length >= 6);
+  },
+
   /**
    * PROCESAR IMAGEN DE EXTRACTO POCEADA
    * Extrae los datos de un extracto de POCEADA (20 números + 4 letras)
@@ -918,7 +1046,19 @@ REGLAS DE EXTRACCIÓN CRÍTICAS:
 
 1. POCEADA sortea 20 NÚMEROS del 00 al 99 (dos dígitos cada uno: 00, 01, 02... 99)
 
+1.1 FORMATO LOTBA CABA (MUY IMPORTANTE):
+  - Suele venir en 2 columnas de posiciones:
+    * Izquierda: 1..10
+    * Derecha: 11..20
+  - Debes construir "numeros" en orden correlativo 1..20.
+  - Cada posición tiene un número de 2 dígitos (00..99).
+  - NO usar para "numeros" valores de sorteo, fecha, hora ni otros textos del encabezado.
+
 2. POCEADA sortea 4 LETRAS válidas (de la A a la Z, sin repetidas)
+
+2.1 DIFERENCIACIÓN DE JUEGO:
+  - Si el encabezado dice "POCEADA", este extractor es correcto.
+  - Si dice "TOMBOLINA", NO confundas el juego (aunque la tabla se vea parecida).
 
 3. BUSCAR EN EL EXTRACTO:
    - Los 20 números sorteados (pueden estar en una tabla o lista)
@@ -971,6 +1111,13 @@ REGLAS DE EXTRACCIÓN CRÍTICAS:
 
 1. TOMBOLINA es similar a Quiniela: sortea 20 NÚMEROS en posiciones del 1° al 20°
 
+1.1 FORMATO LOTBA CABA (MUY IMPORTANTE):
+   - Suele venir en 2 columnas de posiciones:
+     * Izquierda: 1..10
+     * Derecha: 11..20
+   - Debes construir "numeros" en orden correlativo 1..20.
+   - NO usar para "numeros" valores de sorteo, fecha, hora ni otros textos del encabezado.
+
 2. Cada número tiene 2 dígitos (00-99) o 4 dígitos según el extracto
 
 3. También sortea 4 LETRAS válidas (de la A a la Z, sin repetidas)
@@ -1007,14 +1154,16 @@ REGLAS DE EXTRACCIÓN CRÍTICAS:
   "provincia": "51"
 }
 
-IMPORTANTE: Detectar si el extracto dice "TOMBOLINA", "TOMBOLA" o similar en el encabezado.`;
+IMPORTANTE:
+- Detectar si el extracto dice "TOMBOLINA", "TOMBOLA" o similar en el encabezado.
+- Si el encabezado dice "POCEADA", NO clasificar como Tombolina (aunque el formato visual sea parecido).`;
 
     return await this.llamarAPI(imageBase64, mimeType, prompt);
   },
 
   /**
-   * DETECTAR TIPO DE EXTRACTO Y PROCESAR
-   * Detecta automáticamente si es BRINCO, QUINI 6, POCEADA, TOMBOLINA o Quiniela y procesa
+  * DETECTAR TIPO DE EXTRACTO Y PROCESAR
+  * Detecta automáticamente si es BRINCO, QUINI 6, LOTO, POCEADA, TOMBOLINA o Quiniela y procesa
    */
   async procesarExtractoAuto(imageBase64, mimeType) {
     // Primero detectar el tipo de extracto
@@ -1022,6 +1171,7 @@ IMPORTANTE: Detectar si el extracto dice "TOMBOLINA", "TOMBOLA" o similar en el 
 Responde SOLO con uno de estos valores exactos:
 - "BRINCO" si ves textos como "BRINCO EXTRACCIONES", "BRINCO JUNIOR"
 - "QUINI_6" si ves textos como "TRADICIONAL PRIMER SORTEO", "REVANCHA", "SIEMPRE SALE"
+- "LOTO" si ves textos como "LOTO", "MATCH", "DESQUITE", "SALE O SALE", "MULTIPLICADOR"
 - "POCEADA" si ves textos como "POCEADA", "LA POCEADA" o menciona 8 aciertos/7 aciertos como premios
 - "TOMBOLINA" si ves textos como "TOMBOLINA", "TOMBOLA" o similar
 - "QUINIELA" si ves una tabla de 20 números con posiciones del 1 al 20 y menciona CABA/Buenos Aires/etc.
@@ -1049,6 +1199,8 @@ Responde SOLO con la palabra del tipo de juego, sin explicaciones.`;
         return await this.procesarImagenBrinco(imageBase64, mimeType);
       } else if (tipoDetectado.includes('QUINI') || tipoDetectado.includes('Q6')) {
         return await this.procesarImagenQuini6(imageBase64, mimeType);
+      } else if (tipoDetectado.includes('LOTO')) {
+        return await this.procesarImagenLoto(imageBase64, mimeType);
       } else if (tipoDetectado.includes('POCEADA')) {
         return await this.procesarImagenPoceada(imageBase64, mimeType);
       } else if (tipoDetectado.includes('TOMBOLINA') || tipoDetectado.includes('TOMBOLA')) {
@@ -1074,6 +1226,8 @@ Responde SOLO con la palabra del tipo de juego, sin explicaciones.`;
       return `extracto_brinco_${data.sorteo_number}.json`;
     } else if (data.game === 'QUINI_6' && data.drawNumber) {
       return `extracto_quini6_${data.drawNumber}.json`;
+    } else if (data.game === 'LOTO' && data.drawNumber) {
+      return `extracto_loto_${data.drawNumber}.json`;
     } else if (data.game === 'POCEADA' && data.sorteo_number) {
       return `extracto_poceada_${data.sorteo_number}.json`;
     } else if (data.game === 'TOMBOLINA' && data.sorteo) {
@@ -1371,6 +1525,68 @@ Responde SOLO con la palabra del tipo de juego, sin explicaciones.`;
     return combinado;
   },
 
+  combinarResultadosLoto(resultados = []) {
+    if (!Array.isArray(resultados) || resultados.length === 0) return null;
+
+    const entries = resultados.map((item) => ({
+      pageNumber: item?.pageNumber || null,
+      data: item?.data || item || {}
+    }));
+
+    const pickNumbers = (selector) => {
+      let best = [];
+      for (const entry of entries) {
+        const values = selector(entry?.data || {});
+        const arr = Array.isArray(values) ? values.filter(v => v !== null && v !== undefined && v !== '') : [];
+        if (arr.length > best.length) best = arr;
+      }
+      return best;
+    };
+
+    const combinado = {
+      game: 'LOTO',
+      drawNumber: '',
+      date: '',
+      tradicional: { numbers: pickNumbers(data => data.tradicional?.numbers || data.tradicional) },
+      match: { numbers: pickNumbers(data => data.match?.numbers || data.match) },
+      desquite: { numbers: pickNumbers(data => data.desquite?.numbers || data.desquite) },
+      sale_o_sale: { numbers: pickNumbers(data => data.sale_o_sale?.numbers || data.saleOSale?.numbers || data.sale_o_sale || data.saleOSale) },
+      plus: null
+    };
+
+    for (const entry of entries) {
+      const data = entry.data || {};
+      if (!combinado.drawNumber && data.drawNumber) combinado.drawNumber = data.drawNumber;
+      if (!combinado.date && data.date) combinado.date = data.date;
+      if (combinado.plus == null) {
+        const plus = data.plus ?? data.multiplicador ?? data.numero_plus ?? data.numeroPlus;
+        if (plus !== null && plus !== undefined && plus !== '') {
+          combinado.plus = plus;
+        }
+      }
+    }
+
+    const completas = [
+      combinado.tradicional?.numbers,
+      combinado.match?.numbers,
+      combinado.desquite?.numbers,
+      combinado.sale_o_sale?.numbers
+    ].filter(arr => Array.isArray(arr) && arr.length === 6).length;
+
+    combinado._ocr = {
+      pagesProcessed: entries.length,
+      pagesWithData: entries.filter(e => e?.data).length,
+      mergeStrategy: 'loto-modalidades',
+      confidence: {
+        modalidades: Number((completas / 4).toFixed(2))
+      },
+      lowConfidence: completas < 4,
+      lowConfidenceFields: completas < 4 ? ['numeros'] : []
+    };
+
+    return combinado;
+  },
+
   async procesarPDFMultipagina(file, procesadorPagina, opciones = {}) {
     const maxPages = Number(opciones.maxPages) > 0 ? Number(opciones.maxPages) : 3;
     const pages = await this.pdfToImages(file, maxPages);
@@ -1441,6 +1657,12 @@ Responde SOLO con la palabra del tipo de juego, sin explicaciones.`;
     return this.procesarPDFMultipagina(file, async (page) => {
       return this.procesarImagenBrinco(page.base64, page.mimeType);
     }, { maxPages: 3, combiner: (items) => this.combinarResultadosBrinco(items) });
+  },
+
+  async procesarPdfLoto(file) {
+    return this.procesarPDFMultipagina(file, async (page) => {
+      return this.procesarImagenLoto(page.base64, page.mimeType);
+    }, { maxPages: 4, combiner: (items) => this.combinarResultadosLoto(items) });
   },
 
   // Limpiar y validar letras
