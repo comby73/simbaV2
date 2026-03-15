@@ -1,19 +1,40 @@
 const path = require('path');
 const fs = require('fs');
+const dotenv = require('dotenv');
 
-// Cargar .env.local primero si existe (para desarrollo), sino .env
-// En producción (Hostinger), las variables vienen del panel, no de archivos
-const envLocalPath = path.join(__dirname, '../.env.local');
-const envPath = path.join(__dirname, '../.env');
+// Carga de entorno (prioridad): .env.local > .env > config.env > config.env.txt
+// En producción se prioriza el entorno del hosting, pero si faltan variables críticas
+// se permite fallback a archivo para evitar arranques sin configuración.
+const envCandidates = [
+  { file: '.env.local', label: '.env.local (LOCAL)' },
+  { file: '.env', label: '.env' },
+  { file: 'config.env', label: 'config.env' },
+  { file: 'config.env.txt', label: 'config.env.txt' }
+].map(e => ({ ...e, path: path.join(__dirname, '..', e.file) }));
 
-if (process.env.NODE_ENV !== 'production') {
-  // Solo cargar dotenv en desarrollo
-  if (fs.existsSync(envLocalPath)) {
-    require('dotenv').config({ path: envLocalPath });
-    console.log('📁 Usando configuración: .env.local (LOCAL)');
-  } else if (fs.existsSync(envPath)) {
-    require('dotenv').config({ path: envPath });
-    console.log('📁 Usando configuración: .env');
+const missingCriticalEnv = () => {
+  const required = ['DB_HOST', 'DB_USER', 'DB_NAME', 'JWT_SECRET', 'GROQ_API_KEY'];
+  return required.some(k => !process.env[k] || !String(process.env[k]).trim());
+};
+
+const shouldLoadFromFile =
+  process.env.NODE_ENV !== 'production' ||
+  missingCriticalEnv();
+
+if (shouldLoadFromFile) {
+  const existentes = envCandidates.filter(e => fs.existsSync(e.path));
+  if (existentes.length > 0) {
+    existentes.forEach((item, idx) => {
+      dotenv.config({ path: item.path, override: false });
+      const esPrimario = idx === 0;
+      const prefijo = esPrimario ? '📁 Usando configuración' : '📁 Cargando configuración complementaria';
+      const suffix = process.env.NODE_ENV === 'production' && esPrimario
+        ? ' (fallback por variables faltantes)'
+        : '';
+      console.log(`${prefijo}: ${item.label}${suffix}`);
+    });
+  } else {
+    console.log('⚠️ No se encontró archivo de entorno (.env.local/.env/config.env/config.env.txt)');
   }
 } else {
   console.log('📁 Modo PRODUCCIÓN: usando variables de entorno del servidor');
