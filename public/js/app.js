@@ -5930,6 +5930,51 @@ function extraerNumerosQuinielaPorUbicacion(texto, digitosEsperados = 4) {
   return [];
 }
 
+function extraerNumerosQuinielaPorNumeroUbicacion(texto, digitosEsperados = 4) {
+  const txt = String(texto || '')
+    .toUpperCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/\r/g, '\n')
+    .replace(/\t/g, ' ');
+
+  const normalizarNumero = (valor) => {
+    let num = String(valor || '').replace(/[^0-9]/g, '');
+    if (!num) return '';
+    if (num.length > digitosEsperados) num = num.slice(-digitosEsperados);
+    if (num.length < digitosEsperados) num = num.padStart(digitosEsperados, '0');
+    return num;
+  };
+
+  const inicio = txt.search(/\b(PROVINCIA|UBICACION|POR\s+ORDEN|SALIDA)\b/i);
+  const textoTrabajo = inicio >= 0 ? txt.slice(inicio, inicio + 10000) : txt;
+  const fin = textoTrabajo.search(/\b(CLAVE\s+DE\s+LETRAS|LETRAS\s+GANADORAS|FIRMA|SELLO|OBSERVACIONES?)\b/i);
+  const bloque = fin > 0 ? textoTrabajo.slice(0, fin) : textoTrabajo;
+
+  const porPosicion = new Map();
+
+  // Formato típico BA: "N° 1971 ubicacion 1°" (y variantes con "NRO", "Nº", etc.)
+  const regexNumeroUbicacion = /\b(?:N[RO°º.]*)?\s*(\d{3,5})\s+UBICACION\s*(0?[1-9]|1\d|20)\s*[°º]?\b/g;
+  let m;
+  while ((m = regexNumeroUbicacion.exec(bloque)) !== null) {
+    const numero = normalizarNumero(m[1]);
+    const pos = parseInt(m[2], 10);
+    if (pos >= 1 && pos <= 20 && numero && !porPosicion.has(pos)) {
+      porPosicion.set(pos, numero);
+    }
+  }
+
+  if (porPosicion.size >= 18) {
+    const ordenados = [];
+    for (let i = 1; i <= 20; i++) {
+      if (porPosicion.has(i)) ordenados.push(porPosicion.get(i));
+    }
+    if (ordenados.length >= 18) return ordenados.slice(0, 20);
+  }
+
+  return [];
+}
+
 function extraerNumerosQuinielaEntreRiosColumnas(texto, digitosEsperados = 4) {
   const txt = String(texto || '')
     .toUpperCase()
@@ -5981,6 +6026,10 @@ function extraerNumerosQuinielaEntreRiosColumnas(texto, digitosEsperados = 4) {
 function extraerNumerosDeTexto(texto, opciones = {}) {
   const digitosEsperados = Number(opciones?.digitosEsperados) || 4;
   const provinciaCodigo = String(opciones?.provinciaCodigo || '').trim();
+
+  // PRIORIDAD 0 (BA/CABA/Santa Fe y formatos similares): "numero + ubicacion"
+  const porNumeroUbicacion = extraerNumerosQuinielaPorNumeroUbicacion(texto, digitosEsperados);
+  if (porNumeroUbicacion.length >= 18) return porNumeroUbicacion;
 
   // PRIORIDAD 0 (Entre Ríos): dos columnas (1..10 y 11..20) por UBICACIÓN.
   const porEntreRios = provinciaCodigo === '59'
