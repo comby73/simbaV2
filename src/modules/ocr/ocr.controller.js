@@ -1,16 +1,16 @@
 // ============================================
 // OCR CONTROLLER - SIMBA V2
-// Proxy servidor para llamadas a Groq API (OCR)
-// Usa GROQ_API_KEY del servidor (.env) en lugar de exponer la key al browser
+// Proxy servidor para llamadas a OpenAI API (OCR)
+// Usa OPENAI_API_KEY del servidor (.env) en lugar de exponer la key al browser
 // ============================================
 
-const OCR_API_URL = process.env.GROQ_API_URL || 'https://api.groq.com/openai/v1/chat/completions';
-const OCR_MODEL   = process.env.GROQ_MODEL   || 'meta-llama/llama-4-maverick-17b-128e-instruct';
+const OCR_API_URL = process.env.OPENAI_API_URL || 'https://api.openai.com/v1/chat/completions';
+const OCR_MODEL   = process.env.OPENAI_MODEL   || 'gpt-4o-mini';
 
 /**
  * POST /api/ocr/procesar-imagen
  * Body: { imageBase64: string, mimeType: string, prompt: string }
- * Proxy que llama a Groq API desde el servidor usando la API key del .env
+ * Proxy que llama a OpenAI API desde el servidor usando la API key del .env
  */
 const procesarImagen = async (req, res) => {
   try {
@@ -20,9 +20,9 @@ const procesarImagen = async (req, res) => {
       return res.status(400).json({ success: false, error: 'Faltan imageBase64 y/o prompt' });
     }
 
-    const apiKey = process.env.GROQ_API_KEY;
+    const apiKey = process.env.OPENAI_API_KEY;
     if (!apiKey) {
-      return res.status(503).json({ success: false, error: 'OCR no configurado en servidor (falta GROQ_API_KEY)' });
+      return res.status(503).json({ success: false, error: 'OCR no configurado en servidor (falta OPENAI_API_KEY)' });
     }
 
     const dataUrlPrefix = mimeType === 'image/png'
@@ -47,7 +47,7 @@ const procesarImagen = async (req, res) => {
 
     console.log(`[OCR Server] Procesando imagen (${mimeType}, ${Math.round(imageBase64.length / 1024)}KB) con modelo ${OCR_MODEL}`);
 
-    const groqResponse = await fetch(OCR_API_URL, {
+    const openaiResponse = await fetch(OCR_API_URL, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -56,20 +56,20 @@ const procesarImagen = async (req, res) => {
       body: JSON.stringify(requestBody)
     });
 
-    if (!groqResponse.ok) {
-      const errorText = await groqResponse.text();
-      console.error(`[OCR Server] Error Groq API: ${groqResponse.status} - ${errorText}`);
-      if (groqResponse.status === 401) {
-        return res.status(502).json({ success: false, error: 'API key de Groq inválida en servidor' });
+    if (!openaiResponse.ok) {
+      const errorText = await openaiResponse.text();
+      console.error(`[OCR Server] Error OpenAI API: ${openaiResponse.status} - ${errorText}`);
+      if (openaiResponse.status === 401) {
+        return res.status(502).json({ success: false, error: 'API key de OpenAI inválida en servidor' });
       }
-      return res.status(502).json({ success: false, error: `Error Groq API: ${groqResponse.status}` });
+      return res.status(502).json({ success: false, error: `Error OpenAI API: ${openaiResponse.status}` });
     }
 
-    const data = await groqResponse.json();
+    const data = await openaiResponse.json();
     const content = data.choices?.[0]?.message?.content;
 
     if (!content) {
-      return res.status(502).json({ success: false, error: 'Respuesta vacía de Groq API' });
+      return res.status(502).json({ success: false, error: 'Respuesta vacía de OpenAI API' });
     }
 
     console.log(`[OCR Server] Respuesta OK (${content.length} chars)`);
@@ -86,7 +86,7 @@ const procesarImagen = async (req, res) => {
  * Indica si el servidor tiene OCR configurado (sin exponer la key)
  */
 const estadoOCR = async (req, res) => {
-  const tieneKey = !!(process.env.GROQ_API_KEY && process.env.GROQ_API_KEY.trim());
+  const tieneKey = !!(process.env.OPENAI_API_KEY && process.env.OPENAI_API_KEY.trim());
   return res.json({
     success: true,
     disponible: tieneKey,

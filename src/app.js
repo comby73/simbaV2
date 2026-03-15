@@ -13,7 +13,7 @@ const envCandidates = [
 ].map(e => ({ ...e, path: path.join(__dirname, '..', e.file) }));
 
 const missingCriticalEnv = () => {
-  const required = ['DB_HOST', 'DB_USER', 'DB_NAME', 'JWT_SECRET', 'GROQ_API_KEY'];
+  const required = ['DB_HOST', 'DB_USER', 'DB_NAME', 'JWT_SECRET', 'OPENAI_API_KEY'];
   return required.some(k => !process.env[k] || !String(process.env[k]).trim());
 };
 
