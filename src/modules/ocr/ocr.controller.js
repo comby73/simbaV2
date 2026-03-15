@@ -62,7 +62,11 @@ const procesarImagen = async (req, res) => {
       if (openaiResponse.status === 401) {
         return res.status(502).json({ success: false, error: 'API key de OpenAI inválida en servidor' });
       }
-      return res.status(502).json({ success: false, error: `Error OpenAI API: ${openaiResponse.status}` });
+      const resumen = String(errorText || '').replace(/\s+/g, ' ').trim().slice(0, 240);
+      return res.status(502).json({
+        success: false,
+        error: `Error OpenAI API: ${openaiResponse.status}${resumen ? ` - ${resumen}` : ''}`
+      });
     }
 
     const data = await openaiResponse.json();
@@ -77,7 +81,13 @@ const procesarImagen = async (req, res) => {
 
   } catch (error) {
     console.error('[OCR Server] Error procesarImagen:', error);
-    return res.status(500).json({ success: false, error: error.message });
+    const causeCode = error?.cause?.code || error?.code || null;
+    const causeMessage = error?.cause?.message || null;
+    const detalle = [causeCode, causeMessage].filter(Boolean).join(' - ');
+    return res.status(502).json({
+      success: false,
+      error: `No se pudo conectar a OpenAI desde el servidor${detalle ? ` (${detalle})` : ''}`
+    });
   }
 };
 

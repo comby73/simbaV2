@@ -306,7 +306,7 @@ Responde SOLO con este JSON (INCLUIR SIEMPRE EL CAMPO "letras"):
         console.log('[OCR] Sin providers en browser, intentando proxy servidor...');
         return await this.llamarAPIServidor(imageBase64, mimeType, prompt);
       } catch (serverErr) {
-        throw new Error('No hay API keys configuradas y el servidor no tiene OCR. ' + serverErr.message);
+        throw new Error('OCR del servidor no disponible: ' + serverErr.message);
       }
     }
 
