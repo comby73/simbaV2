@@ -436,7 +436,7 @@ const guardarExtractosBulk = async (req, res, next) => {
 const listarExtractos = async (req, res) => {
   const conn = await pool.getConnection();
   try {
-    const { fecha, provincia, modalidad, juego } = req.query;
+    const { fecha, provincia, modalidad, juego, sorteo } = req.query;
 
     let sql = `
       SELECT
@@ -447,7 +447,7 @@ const listarExtractos = async (req, res) => {
         ps.numero_sorteo as numero_sorteo_programado
       FROM extractos e
       JOIN juegos j ON e.juego_id = j.id
-      JOIN sorteos s ON e.sorteo_id = s.id
+      LEFT JOIN sorteos s ON e.sorteo_id = s.id
       LEFT JOIN provincias p ON e.provincia_id = p.id
       LEFT JOIN programacion_sorteos ps ON ps.fecha_sorteo = e.fecha
         AND ps.activo = 1
@@ -480,8 +480,16 @@ const listarExtractos = async (req, res) => {
         'R': 'Previa', 'P': 'Primera', 'M': 'Matutina',
         'V': 'Vespertina', 'N': 'Nocturna'
       }[modalidad] || modalidad;
-      sql += ' AND s.nombre LIKE ?';
+      sql += ' AND (s.nombre LIKE ? OR s.id IS NULL)';
       params.push(`%${modalidadNombre}%`);
+    }
+
+    if (sorteo !== undefined && sorteo !== null && String(sorteo).trim() !== '') {
+      const numeroSorteo = parseInt(String(sorteo), 10);
+      if (!Number.isNaN(numeroSorteo)) {
+        sql += ' AND e.numero_sorteo = ?';
+        params.push(numeroSorteo);
+      }
     }
 
     if (juego) {

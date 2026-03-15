@@ -4299,11 +4299,15 @@ function notificarExtractoDescartadoPorModalidad(archivoNombre, modalidadDetecta
 // =============================================
 // CARGAR EXTRACTOS EXISTENTES DE LA BD
 // =============================================
-async function cargarExtractosExistentesBD(fecha, modalidad) {
+async function cargarExtractosExistentesBD(fecha, modalidad, sorteoNumero = null) {
   try {
     const modalidadCodigo = normalizarModalidadASigla(modalidad) || modalidad;
+    const filtros = { fecha, modalidad: modalidadCodigo };
+    if (sorteoNumero !== undefined && sorteoNumero !== null && String(sorteoNumero).trim() !== '') {
+      filtros.sorteo = sorteoNumero;
+    }
 
-    const response = await extractosAPI.listar({ fecha, modalidad: modalidadCodigo });
+    const response = await extractosAPI.listar(filtros);
 
     if (response.success && response.data && response.data.length > 0) {
       console.log(`[CPST] Encontrados ${response.data.length} extractos en BD para ${fecha} - ${modalidad}`);
@@ -4328,7 +4332,7 @@ async function verificarExtractosExistentes() {
 
   console.log(`[CPST] Verificando extractos existentes para fecha: ${fecha}, modalidad: ${modalidad}`);
 
-  const extractosExistentes = await cargarExtractosExistentesBD(fecha, modalidad);
+  const extractosExistentes = await cargarExtractosExistentesBD(fecha, modalidad, cpstNumeroSorteo);
 
   if (extractosExistentes.length > 0) {
     // Limpiar extractos locales y cargar los de la BD (deduplicando por provincia)
