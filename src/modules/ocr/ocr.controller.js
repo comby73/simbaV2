@@ -4,7 +4,25 @@
 // Usa OPENAI_API_KEY del servidor (.env) en lugar de exponer la key al browser
 // ============================================
 
-const OCR_API_URL = process.env.OPENAI_API_URL || 'https://api.openai.com/v1/chat/completions';
+const DEFAULT_OCR_API_URL = 'https://api.openai.com/v1/chat/completions';
+const resolveOCRApiUrl = () => {
+  const raw = String(process.env.OPENAI_API_URL || '').trim();
+  if (!raw) return DEFAULT_OCR_API_URL;
+
+  try {
+    const parsed = new URL(raw);
+    if (parsed.hostname.toLowerCase() === 'api.openai.com') {
+      return raw;
+    }
+    console.warn(`[OCR Server] OPENAI_API_URL inválida (${parsed.hostname}), usando ${DEFAULT_OCR_API_URL}`);
+    return DEFAULT_OCR_API_URL;
+  } catch {
+    console.warn(`[OCR Server] OPENAI_API_URL malformada (${raw}), usando ${DEFAULT_OCR_API_URL}`);
+    return DEFAULT_OCR_API_URL;
+  }
+};
+
+const OCR_API_URL = resolveOCRApiUrl();
 const OCR_MODEL   = process.env.OPENAI_MODEL   || 'gpt-4o-mini';
 
 /**
